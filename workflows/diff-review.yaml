@@ -1,0 +1,39 @@
+id: diff-review
+version: 0.1.0
+description: Review a git diff with independent Codex worker perspectives.
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+  - id: review
+    kind: codex-parallel
+    workers:
+      - id: correctness
+        perspective: correctness and regressions
+        prompt: |
+          Review the supplied git diff for behavior regressions, broken assumptions,
+          edge cases, and missing error handling. Do not suggest style-only changes.
+      - id: tests
+        perspective: tests and verification gaps
+        prompt: |
+          Review the supplied git diff for missing tests, weak assertions,
+          fixture gaps, and concrete verification commands.
+      - id: safety
+        perspective: security, permissions, data-loss, and rollback risk
+        prompt: |
+          Review the supplied git diff for security, permission mistakes,
+          data-loss risk, unexpected writes, and rollback gaps.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - workflow.json
+  - state.json
+  - events.jsonl
+  - workers/*.json
+  - result.md
+
