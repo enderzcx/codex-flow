@@ -160,5 +160,6 @@ npm pack --dry-run
 
 - [PRD](docs/PRD.md)
 - [Spec](docs/SPEC.md)
+- [Full plan](docs/FULL_PLAN.md)
 - [Skill plan](docs/SKILL_PLAN.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)
