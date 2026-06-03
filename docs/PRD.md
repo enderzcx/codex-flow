@@ -28,6 +28,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Persist run state, events, worker outputs, and final results.
 - Support foreground and background runs.
 - Show readable status during long runs, including current work, worker progress, fallback count, and artifact paths.
+- Provide a live-refresh CLI view for background runs.
 - Keep the public MVP free of private adapters or third-party model routing.
 
 ## Non-Goals
@@ -38,6 +39,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - No generated workflow scripts.
 - No broad workflow marketplace in MVP.
 - No exact parity with Claude Dynamic Workflows.
+- No mandatory Codex Desktop integration in MVP.
 
 ## MVP User Stories
 
@@ -48,6 +50,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 5. As a cautious engineer, I can verify the runner did not mutate my repo.
 6. As a tool maintainer, I can mock worker failure and verify failed runs are recorded correctly.
 7. As a user returning to a background run, I can understand the current state without reading raw JSON first.
+8. As a user watching a long run, I can run `cwf watch <run-id>` and see the status refresh until the run finishes.
 
 ## Success Criteria
 
@@ -58,6 +61,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - `cwf run ... --background` returns quickly and completes in the background.
 - `cwf cancel <run-id>` cancels an in-progress background run.
 - `cwf status <run-id>` shows current work, phase durations, worker progress, fallback count, and artifact paths.
+- `cwf watch <run-id>` refreshes status and exits automatically when the run finishes.
 - Run artifacts are persisted under `~/.codex-workflows/runs/<run-id>/`.
 - Read-only review does not modify the target repo diff.
 - Mocked all-worker failure records failed state, events, and worker JSON.
@@ -65,3 +69,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 ## Public Positioning
 
 Codex Flow is a thin Codex-native workflow runner. It is not an orchestration framework, not a multi-model router, and not an enterprise queue. The MVP is intentionally small so the run contract is easy to understand and verify.
+
+## Future: Codex Desktop Handoff
+
+Codex's experimental app-server protocol appears to support Desktop-visible thread lifecycle events. A later release should explore guarded Desktop handoff so a workflow can create follow-up Codex threads from its result, while keeping the CLI run store and `cwf watch` as the stable baseline.

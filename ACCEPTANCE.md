@@ -29,6 +29,9 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Status command explains the run in human terms.
   - Evidence: `cwf status <run-id>` includes `Now:`, phase durations, worker progress, fallback count, artifact paths, and result/log paths.
 
+- [ ] Watch command live-refreshes run status.
+  - Evidence: `cwf watch <run-id> --once` prints the status frame, and `cwf watch <run-id>` exits automatically for completed/failed/cancelled runs.
+
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
 
@@ -63,6 +66,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 ## Explicit Non-Goals For MVP
 
 - Native Codex Desktop task panel.
+- Codex app-server Desktop handoff. This is planned for a later guarded integration.
 - Auto-trigger from the word `workflow`.
 - Generated JavaScript workflow scripts.
 - Non-Codex model adapters.

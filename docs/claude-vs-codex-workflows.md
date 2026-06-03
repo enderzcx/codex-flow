@@ -29,7 +29,7 @@ What can be similar:
 
 What will be different in the MVP:
 
-- Progress is shown through `cwf status <run-id>`, not a native Codex background task pane.
+- Progress is shown through `cwf status <run-id>` or `cwf watch <run-id>`, not a native Codex background task pane.
 - Runs are explicit commands, not triggered by highlighted prompt words.
 - Workflows are saved as specs, not arbitrary generated JavaScript.
 - Resume/cancel may be coarse at first.
@@ -45,7 +45,7 @@ What will be different in the MVP:
 | Worker | Claude subagents | Codex SDK threads |
 | State | workflow script variables and runtime tracking | run folder with `state.json`, `events.jsonl`, worker outputs |
 | Script/spec | Claude-written JavaScript script | checked-in YAML/JSON spec first |
-| Monitoring | `/workflows` UI and task panel | `cwf status`, log files |
+| Monitoring | `/workflows` UI and task panel | `cwf status`, `cwf watch`, log files |
 | Output | final report in session | final report printed and saved |
 | Permissions | Claude tool allowlist + workflow behavior | Codex sandbox/approval settings per worker |
 | Reuse | saved workflow command under `.claude/workflows` or `~/.claude/workflows` | saved workflow specs under project/global workflow folders |
@@ -83,3 +83,12 @@ Do not:
 - Add private model adapters to the public version.
 - Claim exact parity with Claude Dynamic Workflows.
 
+## Planned Codex Desktop Integration
+
+Codex Desktop already has an experimental app-server protocol with thread lifecycle methods and notifications. That looks like the substrate behind Desktop-visible background thread spawning.
+
+For `codex-workflows`, this should be a later guarded integration, not part of the stable core yet:
+
+- stable core: `cwf run`, `cwf status`, `cwf watch`, `cwf result`
+- future Desktop handoff: create visible follow-up Codex threads from a workflow result
+- fallback: generate a local prompt/session handoff when app-server is unavailable

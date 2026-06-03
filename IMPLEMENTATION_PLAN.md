@@ -106,6 +106,7 @@ Commands:
 cwf --help
 cwf run workflows/diff-review.yaml --target <repo>
 cwf status <run-id>
+cwf watch <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -114,6 +115,7 @@ Behavior:
 
 - `run` creates a run folder and returns a run id.
 - `status` reads `state.json`.
+- `watch` refreshes the status view until the run reaches a terminal state.
 - `result` prints `result.md`.
 - `cancel` marks pending workers cancelled. It does not need perfect process interruption in MVP if workers already finished.
 
@@ -278,6 +280,17 @@ Acceptance:
 
 Write `skills/codex-workflows/SKILL.md`.
 
+### Future Slice: Codex Desktop Handoff
+
+This is not part of the MVP acceptance path.
+
+Explore the experimental Codex app-server protocol for Desktop-visible thread creation:
+
+- confirm `thread/start`, `thread/list`, and thread status notifications against the installed Codex version
+- add a guarded handoff command after core `diff-review` is stable
+- record created thread ids in the run store
+- keep CLI-only fallback behavior when app-server is unavailable
+
 Acceptance:
 
 - skill describes when to use `cwf`
@@ -337,4 +350,3 @@ Manual evidence:
 ## Ready To Implement
 
 No more product brainstorming is needed for the MVP. Implementation can start once the next goal says to build this plan.
-

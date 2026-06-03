@@ -53,11 +53,14 @@ Run in the background:
 ```bash
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
+cwf watch <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
 
 `cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, result, and log files.
+
+`cwf watch <run-id>` refreshes the same status view until the run reaches `completed`, `failed`, or `cancelled`. Use `--interval <ms>` to tune the refresh rate, or `--once` for one non-clearing snapshot.
 
 Run artifacts are stored under:
 
@@ -78,7 +81,7 @@ Run artifacts are stored under:
 
 ```bash
 cwf run workflows/diff-review.yaml --target fixtures/diff-review --background
-cwf status run_...
+cwf watch run_...
 cwf result run_...
 ```
 
@@ -127,6 +130,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
 - Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
+- Codex Desktop app-server handoff is planned, but not part of the stable CLI core yet.
 
 ## Verification
 

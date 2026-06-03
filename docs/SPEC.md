@@ -8,6 +8,7 @@ cwf validate <workflow.yaml>
 cwf dry-run <workflow.yaml>
 cwf run <workflow.yaml> --target <repo> [--background]
 cwf status <run-id>
+cwf watch <run-id> [--interval <ms>] [--once]
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -91,6 +92,16 @@ Statuses:
 If `result.md` is not ready, status prints `Result: not ready yet`.
 
 `cwf result <run-id>` must print a useful error when the report is missing and point users back to `cwf status <run-id>`.
+
+## Watch Output Contract
+
+`cwf watch <run-id>` is the stable public live progress view. It must:
+
+- render the same information as `cwf status <run-id>`
+- refresh until the run reaches `completed`, `failed`, or `cancelled`
+- exit automatically for terminal statuses
+- support `--interval <ms>` with a minimum effective interval
+- support `--once` for one non-clearing snapshot
 
 ## Worker Contract
 
@@ -178,6 +189,18 @@ Final sections:
 - marks pending/running phases and workers as `cancelled`
 - ignores completed/failed/cancelled runs
 
+## Planned App-Server Handoff
+
+The Codex Desktop/app-server protocol exposes experimental thread operations such as `thread/start`, `thread/list`, `thread/started`, and status-change notifications. Future `cwf` versions may use this to create Desktop-visible follow-up threads from a completed workflow run.
+
+Planned contract:
+
+- app-server integration is optional and guarded by an explicit flag or command
+- normal `diff-review` must still work without Codex Desktop running
+- created thread ids are recorded in the run folder
+- failures fall back to a local prompt/session handoff instead of failing the workflow result
+- experimental protocol behavior is documented and tested separately from core run-store behavior
+
 ## Safety Invariants
 
 - Default worker sandbox is read-only.
@@ -191,3 +214,4 @@ Final sections:
 - Background runs are process-based, not daemon-backed.
 - No retry/rate-limit manager yet.
 - No workflow plugin system yet.
+- No stable Codex Desktop app-server handoff yet.

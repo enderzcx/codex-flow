@@ -4,6 +4,7 @@ import { closeSync, openSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
+import { setTimeout as sleep } from "node:timers/promises";
 import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { RunStore } from "./run-store.js";
@@ -15,6 +16,8 @@ type ParsedArgs = {
   target?: string;
   runId?: string;
   background?: boolean;
+  once?: boolean;
+  intervalMs?: number;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -90,6 +93,15 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (args.command === "watch") {
+    if (!args.runId) {
+      throw new Error("Usage: cwf watch <run-id> [--interval <ms>] [--once]");
+    }
+    const store = RunStore.fromRunId(args.runId);
+    await watchRun(store, { intervalMs: args.intervalMs ?? 2000, once: Boolean(args.once) });
+    return;
+  }
+
   if (args.command === "result") {
     if (!args.runId) {
       throw new Error("Usage: cwf result <run-id>");
@@ -157,8 +169,17 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
       }
     }
-  } else if (command === "status" || command === "result" || command === "cancel") {
+  } else if (command === "status" || command === "result" || command === "cancel" || command === "watch") {
     parsed.runId = first;
+    for (let index = 0; index < rest.length; index += 1) {
+      const token = rest[index];
+      if (token === "--once") {
+        parsed.once = true;
+      } else if (token === "--interval") {
+        parsed.intervalMs = parseInterval(rest[index + 1]);
+        index += 1;
+      }
+    }
   }
 
   return parsed;
@@ -172,13 +193,14 @@ Usage:
   cwf validate <workflow.yaml>
   cwf run <workflow.yaml> --target <repo> [--background]
   cwf status <run-id>
+  cwf watch <run-id> [--interval <ms>] [--once]
   cwf result <run-id>
   cwf cancel <run-id>
 
 Common flow:
   cwf validate workflows/diff-review.yaml
   cwf run workflows/diff-review.yaml --target . --background
-  cwf status <run-id>
+  cwf watch <run-id>
   cwf result <run-id>
 
 Current workflow:
@@ -188,6 +210,39 @@ Current workflow:
 
 function printHelp(): void {
   console.log(formatHelp());
+}
+
+type WatchOptions = {
+  intervalMs: number;
+  once: boolean;
+};
+
+async function watchRun(store: RunStore, options: WatchOptions): Promise<void> {
+  const intervalMs = Math.max(250, options.intervalMs);
+  while (true) {
+    const state = await store.readState();
+    const workerResults = await readWorkerResults(store.runDir);
+    const frame = formatWatchFrame(state, workerResults, intervalMs);
+    if (process.stdout.isTTY && !options.once) {
+      process.stdout.write("\x1b[2J\x1b[H");
+    }
+    process.stdout.write(`${frame}\n`);
+
+    if (options.once || isTerminalStatus(state.status)) {
+      return;
+    }
+    await sleep(intervalMs);
+  }
+}
+
+export function formatWatchFrame(state: RunState, workerResults: WorkerResult[] = [], intervalMs = 2000, now = Date.now()): string {
+  const lines = [
+    `cwf watch ${state.id}`,
+    `Auto-refresh: ${intervalMs}ms; press Ctrl-C to stop. Finished runs exit automatically.`,
+    "",
+    formatStatus(state, workerResults, now),
+  ];
+  return lines.join("\n");
 }
 
 async function printStatus(store: RunStore, state: RunState): Promise<void> {
@@ -293,6 +348,21 @@ function formatDuration(startedAt?: string, completedAt?: string, now = Date.now
   }
   const seconds = Math.max(0, Math.round((end - start) / 1000));
   return ` (${seconds}s)`;
+}
+
+function isTerminalStatus(status: RunState["status"]): boolean {
+  return status === "completed" || status === "failed" || status === "cancelled";
+}
+
+function parseInterval(value?: string): number {
+  if (!value) {
+    throw new Error("Missing value after --interval");
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid --interval value: ${value}`);
+  }
+  return Math.round(parsed);
 }
 
 async function startBackgroundRun(store: RunStore, specPath: string, target: string): Promise<void> {

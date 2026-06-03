@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatHelp, formatStatus } from "../src/cli.js";
+import { formatHelp, formatStatus, formatWatchFrame } from "../src/cli.js";
 import type { RunState, WorkerResult } from "../src/types.js";
 
 describe("CLI output formatting", () => {
@@ -9,6 +9,7 @@ describe("CLI output formatting", () => {
     expect(help).toContain("cwf validate <workflow.yaml>");
     expect(help).toContain("cwf run workflows/diff-review.yaml --target . --background");
     expect(help).toContain("cwf status <run-id>");
+    expect(help).toContain("cwf watch <run-id>");
   });
 
   it("explains active work and artifact paths in status output", () => {
@@ -74,6 +75,18 @@ describe("CLI output formatting", () => {
 
     expect(output).toContain("Now: done; open the result report");
     expect(output).toContain("- Result: /tmp/cwf/result.md");
+  });
+
+  it("renders a live watch frame around status output", () => {
+    const state = createState({
+      workers: [{ id: "correctness", status: "running", started_at: "2026-01-01T00:00:01.000Z" }],
+    });
+
+    const output = formatWatchFrame(state, [], 500, Date.parse("2026-01-01T00:00:03.000Z"));
+
+    expect(output).toContain("cwf watch run_test");
+    expect(output).toContain("Auto-refresh: 500ms");
+    expect(output).toContain("Now: reviewing diff with correctness");
   });
 });
 

@@ -12,7 +12,7 @@ Build a public Codex-native workflow runner that can run repeatable phased workf
 ## Not Building
 
 - No third-party model routing or private adapters.
-- No native Codex Desktop background pane.
+- No native Codex Desktop background pane in the MVP.
 - No automatic `workflow` keyword trigger.
 - No generated JavaScript workflow scripts.
 - No broad agent marketplace.
@@ -27,6 +27,7 @@ Recommended commands:
 ```bash
 cwf run workflows/diff-review.yaml --target <repo>
 cwf status <run-id>
+cwf watch <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -97,9 +98,44 @@ CLI
 5. Start with `diff-review`.
    - Reason: high value, easy to validate, does not require UI, browser, or private adapters.
 
+## Current State
+
+Local version is `0.2.0`, not `2.0.0`.
+
+Implemented in `0.2.0`:
+
+- `diff-review`
+- foreground and background runs
+- `status`, `result`, and `cancel`
+- `watch` live-refresh status view
+- persistent run store under `~/.codex-workflows/runs/<run-id>/`
+
+## Post-MVP Roadmap
+
+### 0.3: Codex Desktop / App-Server Handoff
+
+Goal: make workflow-created follow-up work visible in Codex Desktop instead of only in `cwf` run folders.
+
+Planned capabilities:
+
+- Discover and validate the experimental Codex app-server protocol before use.
+- Add a guarded command such as `cwf handoff --app <run-id>` or `cwf spawn-thread --app`.
+- Use app-server `thread/start` / `turn/start` where available to create Codex Desktop-visible threads.
+- Preserve the stable local fallback: generate a prompt and run `codex -C <repo> ...` when app-server is unavailable.
+- Store created thread ids in the run folder for later `status`, `result`, or resume hints.
+- Keep `cwf watch` as the public stable progress view until app-server behavior is proven.
+
+Non-goals for 0.3:
+
+- No dependency on a running Desktop app for normal `diff-review`.
+- No private model routing.
+- No claim of full Claude Dynamic Workflows parity.
+
 ## Fragile Assumption
 
 This plan assumes the Codex SDK is available and stable enough for local worker threads. If the SDK changes or is unavailable, the fallback is to wrap `codex exec` JSONL events behind the same adapter interface.
+
+The app-server handoff plan assumes Codex's experimental Desktop protocol remains available. If it changes, `cwf` must fall back to local session creation and keep app integration optional.
 
 ## Implementation Order
 
