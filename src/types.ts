@@ -1,4 +1,4 @@
-export type PhaseStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
+export type PhaseStatus = "pending" | "running" | "waiting" | "approved" | "rejected" | "completed" | "failed" | "cancelled";
 
 export type WorkerStatus = "pending" | "running" | "completed" | "failed" | "cancelled";
 
@@ -10,22 +10,32 @@ export type WorkflowPhase =
   | {
       id: string;
       kind: "command";
+      writes?: boolean;
     }
   | {
       id: string;
       kind: "codex-parallel";
       workers: WorkflowWorker[];
+      writes?: boolean;
+    }
+  | {
+      id: string;
+      kind: "gate";
+      prompt: string;
+      requires_approval: true;
     }
   | {
       id: string;
       kind: "reducer";
       reducer: "diff-review";
+      writes?: boolean;
     };
 
 export type WorkflowWorker = {
   id: string;
   perspective: string;
   prompt: string;
+  writes?: boolean;
 };
 
 export type WorkflowSpec = {
@@ -49,6 +59,8 @@ export type PhaseState = {
   started_at?: string;
   completed_at?: string;
   error?: string;
+  prompt?: string;
+  decision_reason?: string;
 };
 
 export type WorkerState = {
@@ -68,6 +80,7 @@ export type RunState = {
   failure_policy: FailurePolicy;
   phases: PhaseState[];
   workers: WorkerState[];
+  gate_decisions: GateDecision[];
   created_at: string;
   updated_at: string;
   result_path?: string;
@@ -75,6 +88,13 @@ export type RunState = {
   background_pid?: number;
   error?: string;
   failure_summary?: FailureSummary;
+};
+
+export type GateDecision = {
+  gate_id: string;
+  decision: "approved" | "rejected";
+  reason?: string;
+  decided_at: string;
 };
 
 export type FailurePolicy = {
@@ -120,6 +140,7 @@ export type DiffContext = {
   package_metadata?: string;
   diff: string;
   diff_hash: string;
+  tracked_diff_hash?: string;
   truncated: boolean;
 };
 

@@ -6,7 +6,7 @@ A lightweight, Codex-native workflow runner for multi-agent code review.
 
 Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The MVP ships one workflow, `diff-review`, which starts three Codex workers in parallel and aggregates their findings into structured JSON and a readable Markdown report.
 
-It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, and revisited later.
+It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
 This is an early public release. It is intentionally narrow: one workflow, CLI-first, filesystem-backed state, readable status, and read-only review by default.
 
@@ -57,6 +57,9 @@ cwf watch <run-id>
 cwf latest --target <repo>
 cwf list --target <repo>
 cwf show <run-id>
+cwf approve <run-id> <gate-id>
+cwf reject <run-id> <gate-id> --reason <text>
+cwf resume <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -67,6 +70,8 @@ cwf cancel <run-id>
 
 `cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
 
+Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. This is a safety primitive only; the public package still ships no production write-capable workflow.
+
 Run artifacts are stored under:
 
 ```text
@@ -75,6 +80,7 @@ Run artifacts are stored under:
   workflow.json
   state.json
   events.jsonl
+  context.json
   run.log
   workers/
     correctness.json
@@ -149,6 +155,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
 - Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
 - Discovery is local and rebuildable; it is not a workflow registry.
+- Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
 - Codex Desktop app-server handoff is planned, but not part of the stable CLI core yet.
 
 ## Verification
@@ -166,6 +173,7 @@ The MVP has been smoke-tested on:
 - cancellation
 - mocked Codex SDK worker failure
 - run discovery, latest lookup, index rebuild, and show formatting
+- gate pause, approve/resume, reject, and write-without-gate validation
 - workflow validation and human-readable status formatting
 
 ## Docs

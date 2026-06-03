@@ -44,6 +44,9 @@ cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
 cwf latest --target <repo>
 cwf show <run-id>
+cwf approve <run-id> <gate-id>
+cwf reject <run-id> <gate-id> --reason <text>
+cwf resume <run-id>
 cwf result <run-id>
 ```
 
@@ -66,6 +69,8 @@ During running:
 
 - use `cwf status <run-id>` instead of waiting blindly
 - read the `Now:` line first; it is the plain-language summary of current work
+- if status is `waiting`, use the printed approve/reject commands; do not edit `state.json`
+- after approval, use `cwf resume <run-id>` so completed phases are skipped
 - check fallback count before trusting structured findings blindly
 - inspect `events.jsonl` when status looks stale
 - cancel only when the user asks or when the run clearly cannot complete
@@ -83,6 +88,7 @@ After running:
 - point to `result.md`
 - mention worker failures or raw fallback if any
 - mention failure summary and next step for failed runs
+- mention gate decisions for waiting/approved/rejected runs
 - verify the target diff hash did not change when read-only review was expected
 
 ## Completion Evidence
@@ -95,6 +101,7 @@ The skill should ask Codex to report:
 - result path
 - whether fallback occurred
 - failure policy and summary when status is `failed`
+- gate id, gate status, and decision reason when relevant
 - whether the target diff changed
 - short human summary of what the run did, not only raw artifact paths
 

@@ -21,6 +21,7 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
 
   const phasesRaw = expectArray(spec.phases, "phases");
   const phases = phasesRaw.map((phase, index) => validatePhase(phase, `phases[${index}]`));
+  validateWriteGates(phases);
   const phaseIds = phases.map((phase) => phase.id);
   for (const required of ["collect", "review", "reduce"]) {
     if (!phaseIds.includes(required)) {
@@ -52,7 +53,7 @@ function validatePhase(value: unknown, path: string): WorkflowPhase {
   const kind = expectString(phase.kind, `${path}.kind`);
 
   if (kind === "command") {
-    return { id, kind };
+    return { id, kind, writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
   }
 
   if (kind === "codex-parallel") {
@@ -62,22 +63,50 @@ function validatePhase(value: unknown, path: string): WorkflowPhase {
         id: expectString(workerRecord.id, `${path}.workers[${index}].id`),
         perspective: expectString(workerRecord.perspective, `${path}.workers[${index}].perspective`),
         prompt: expectString(workerRecord.prompt, `${path}.workers[${index}].prompt`),
+        writes: expectOptionalBoolean(workerRecord.writes, `${path}.workers[${index}].writes`),
       };
     });
     if (workers.length === 0) {
       throw new Error(`${path}.workers must not be empty`);
     }
-    return { id, kind, workers };
+    return { id, kind, workers, writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
+  }
+
+  if (kind === "gate") {
+    if (phase.requires_approval !== true) {
+      throw new Error(`${path}.requires_approval must be true`);
+    }
+    return {
+      id,
+      kind,
+      prompt: expectString(phase.prompt, `${path}.prompt`),
+      requires_approval: true,
+    };
   }
 
   if (kind === "reducer") {
     if (phase.reducer !== "diff-review") {
       throw new Error(`${path}.reducer must be diff-review`);
     }
-    return { id, kind, reducer: "diff-review" };
+    return { id, kind, reducer: "diff-review", writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
   }
 
-  throw new Error(`${path}.kind must be command, codex-parallel, or reducer`);
+  throw new Error(`${path}.kind must be command, codex-parallel, gate, or reducer`);
+}
+
+function validateWriteGates(phases: WorkflowPhase[]): void {
+  let hasPriorGate = false;
+  for (const phase of phases) {
+    if (phase.kind === "gate") {
+      hasPriorGate = true;
+      continue;
+    }
+    const phaseWrites = "writes" in phase && phase.writes === true;
+    const workerWrites = phase.kind === "codex-parallel" && phase.workers.some((worker) => worker.writes === true);
+    if ((phaseWrites || workerWrites) && !hasPriorGate) {
+      throw new Error(`phase ${phase.id} has writes:true but no prior gate phase`);
+    }
+  }
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {
@@ -106,4 +135,14 @@ function expectNumber(value: unknown, path: string): number {
     throw new Error(`${path} must be a finite number`);
   }
   return value;
+}
+
+function expectOptionalBoolean(value: unknown, path: string): true | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value !== true) {
+    throw new Error(`${path} must be true when present`);
+  }
+  return true;
 }

@@ -32,6 +32,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Let users list, show, and reopen the latest run without remembering run ids.
 - Rebuild discovery data from run folders when the local index is missing, stale, or corrupt.
 - Record default failure policy metadata and summarize failures in human-readable terms.
+- Pause gated workflows before risky phases.
+- Persist approvals and rejections, then resume only pending phases after approval.
+- Reject write-capable specs that do not include a prior gate.
 - Keep the public MVP free of private adapters or third-party model routing.
 
 ## Non-Goals
@@ -41,6 +44,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - No UI.
 - No generated workflow scripts.
 - No broad workflow marketplace in MVP.
+- No production write-capable workflow in this release.
 - No exact parity with Claude Dynamic Workflows.
 - No mandatory Codex Desktop integration in MVP.
 
@@ -56,6 +60,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 8. As a user watching a long run, I can run `cwf watch <run-id>` and see the status refresh until the run finishes.
 9. As a user who forgot a run id, I can run `cwf list`, `cwf latest`, or `cwf show <run-id>` to find and inspect the run.
 10. As a user debugging a failed run, I can read the failed phase, failed workers, policy, and suggested next step without opening raw JSON first.
+11. As a cautious user, I can require approval before later phases continue.
+12. As a user reviewing a gated run, I can approve and resume, or reject with a reason and stop cleanly.
+13. As a workflow author, I get a validation error if a phase or worker declares `writes:true` before a gate.
 
 ## Success Criteria
 
@@ -70,11 +77,14 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - `cwf list [--limit <n>] [--status <status>] [--target <path>]` lists recent runs.
 - `cwf latest [--target <path>]` shows the newest run overall or for a target.
 - `cwf show <run-id>` prints the same human-readable run detail as status plus discovery commands.
+- `cwf approve`, `cwf reject`, and `cwf resume` support gated workflow pauses.
 - `~/.codex-workflows/index.json` is rebuilt from run folders when missing, stale, or corrupt.
 - Run artifacts are persisted under `~/.codex-workflows/runs/<run-id>/`.
 - Read-only review does not modify the target repo diff.
 - Mocked all-worker failure records failed state, events, and worker JSON.
 - Failed runs include default failure policy metadata and a readable failure summary.
+- Gate fixtures can pause, approve/resume, reject, and prove completed phases do not rerun.
+- Write-capable specs without a prior gate fail validation.
 
 ## Public Positioning
 

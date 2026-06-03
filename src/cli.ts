@@ -9,7 +9,7 @@ import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { describeFailurePolicy, latestRun, listRuns, normalizeRunState, showRun } from "./run-index.js";
 import { RunStore } from "./run-store.js";
-import type { PhaseStatus, RunIndexEntry, RunState, WorkerResult } from "./types.js";
+import type { PhaseState, PhaseStatus, RunIndexEntry, RunState, WorkerResult } from "./types.js";
 
 type ParsedArgs = {
   command?: string;
@@ -21,6 +21,8 @@ type ParsedArgs = {
   intervalMs?: number;
   limit?: number;
   status?: PhaseStatus;
+  gateId?: string;
+  reason?: string;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -133,6 +135,42 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (args.command === "approve") {
+    if (!args.runId || !args.gateId) {
+      throw new Error("Usage: cwf approve <run-id> <gate-id>");
+    }
+    const store = RunStore.fromRunId(args.runId);
+    await store.approveGate(args.gateId);
+    console.log(`Approved gate: ${args.gateId}`);
+    console.log(`Resume: cwf resume ${args.runId}`);
+    return;
+  }
+
+  if (args.command === "reject") {
+    if (!args.runId || !args.gateId) {
+      throw new Error("Usage: cwf reject <run-id> <gate-id> [--reason <text>]");
+    }
+    const store = RunStore.fromRunId(args.runId);
+    await store.rejectGate(args.gateId, args.reason);
+    console.log(`Rejected gate: ${args.gateId}`);
+    console.log(`Status: cwf status ${args.runId}`);
+    return;
+  }
+
+  if (args.command === "resume") {
+    if (!args.runId) {
+      throw new Error("Usage: cwf resume <run-id>");
+    }
+    const store = RunStore.fromRunId(args.runId);
+    const spec = await store.readWorkflow();
+    const state = await store.readState();
+    await executeWorkflow({ spec, specPath: `${store.runDir}/workflow.json`, target: state.target, store, resume: true });
+    const nextState = await store.readState();
+    const workerResults = await readWorkerResults(store.runDir);
+    console.log(formatStatus(nextState, workerResults));
+    return;
+  }
+
   if (args.command === "result") {
     if (!args.runId) {
       throw new Error("Usage: cwf result <run-id>");
@@ -200,7 +238,7 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
       }
     }
-  } else if (command === "status" || command === "result" || command === "cancel" || command === "watch") {
+  } else if (command === "status" || command === "result" || command === "cancel" || command === "watch" || command === "resume") {
     parsed.runId = first;
     for (let index = 0; index < rest.length; index += 1) {
       const token = rest[index];
@@ -208,6 +246,16 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.once = true;
       } else if (token === "--interval") {
         parsed.intervalMs = parseInterval(rest[index + 1]);
+        index += 1;
+      }
+    }
+  } else if (command === "approve" || command === "reject") {
+    parsed.runId = first;
+    parsed.gateId = second;
+    for (let index = 0; index < rest.length; index += 1) {
+      const token = rest[index];
+      if (token === "--reason") {
+        parsed.reason = rest[index + 1];
         index += 1;
       }
     }
@@ -245,6 +293,9 @@ Usage:
   cwf list [--limit <n>] [--status <status>] [--target <repo>]
   cwf latest [--target <repo>]
   cwf show <run-id>
+  cwf approve <run-id> <gate-id>
+  cwf reject <run-id> <gate-id> [--reason <text>]
+  cwf resume <run-id>
   cwf result <run-id>
   cwf cancel <run-id>
 
@@ -307,6 +358,7 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
   const fallbackCount = workerResults.filter((result) => result.raw_fallback).length;
   const completedWorkers = state.workers.filter((worker) => worker.status === "completed").length;
   const activePhase = state.phases.find((phase) => phase.status === "running")?.id;
+  const activeGate = findActiveGate(state);
   const lines: string[] = [];
 
   lines.push(`Run ID: ${state.id}`);
@@ -317,6 +369,15 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
   lines.push(`Failure policy: ${describeFailurePolicy(state.failure_policy)}`);
   if (state.failure_summary) {
     lines.push(`Failure summary: ${formatFailureSummary(state)}`);
+  }
+  if (activeGate) {
+    lines.push(`Gate: ${formatGateSummary(state, activeGate)}`);
+    if (activeGate.status === "waiting") {
+      lines.push(`Approve: cwf approve ${state.id} ${activeGate.id}`);
+      lines.push(`Reject: cwf reject ${state.id} ${activeGate.id} --reason <text>`);
+    } else if (activeGate.status === "approved" && state.status === "approved") {
+      lines.push(`Resume: cwf resume ${state.id}`);
+    }
   }
   lines.push(`Workers: ${completedWorkers}/${state.workers.length} completed, ${fallbackCount} fallback`);
   if (activePhase) {
@@ -399,6 +460,16 @@ async function readWorkerResults(runDir: string): Promise<WorkerResult[]> {
 }
 
 function describeCurrentWork(state: RunState): string {
+  const activeGate = findActiveGate(state);
+  if (state.status === "waiting" && activeGate) {
+    return `waiting at gate ${activeGate.id}; approve or reject before resume`;
+  }
+  if (state.status === "approved" && activeGate) {
+    return `gate ${activeGate.id} approved; run cwf resume ${state.id}`;
+  }
+  if (state.status === "rejected" && activeGate) {
+    return `rejected at gate ${activeGate.id}${activeGate.decision_reason ? `: ${activeGate.decision_reason}` : ""}`;
+  }
   if (state.status === "completed") {
     return "done; open the result report";
   }
@@ -442,7 +513,7 @@ function formatDuration(startedAt?: string, completedAt?: string, now = Date.now
 }
 
 function isTerminalStatus(status: RunState["status"]): boolean {
-  return status === "completed" || status === "failed" || status === "cancelled";
+  return status === "completed" || status === "failed" || status === "cancelled" || status === "rejected";
 }
 
 function parseInterval(value?: string): number {
@@ -468,7 +539,7 @@ function parseLimit(value?: string): number {
 }
 
 function parseStatus(value?: string): PhaseStatus {
-  const statuses: PhaseStatus[] = ["pending", "running", "completed", "failed", "cancelled"];
+  const statuses: PhaseStatus[] = ["pending", "running", "waiting", "approved", "rejected", "completed", "failed", "cancelled"];
   if (!value || !statuses.includes(value as PhaseStatus)) {
     throw new Error(`Invalid --status value: ${value ?? ""}`);
   }
@@ -485,6 +556,24 @@ function withSentencePunctuation(value: string): string {
 
 function shellArg(value: string): string {
   return /^[A-Za-z0-9_./:@-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+function findActiveGate(state: RunState): PhaseState | undefined {
+  return state.phases.find((phase) => phase.status === "waiting" || phase.status === "approved" || phase.status === "rejected");
+}
+
+function formatGateSummary(state: RunState, gate: PhaseState): string {
+  const decision = state.gate_decisions.find((item) => item.gate_id === gate.id);
+  if (gate.status === "waiting") {
+    return `${gate.id} is waiting${gate.prompt ? ` - ${gate.prompt}` : ""}`;
+  }
+  if (gate.status === "approved") {
+    return `${gate.id} approved${decision?.decided_at ? ` at ${decision.decided_at}` : ""}`;
+  }
+  if (gate.status === "rejected") {
+    return `${gate.id} rejected${decision?.reason ? ` - ${decision.reason}` : ""}`;
+  }
+  return `${gate.id}: ${gate.status}`;
 }
 
 async function startBackgroundRun(store: RunStore, specPath: string, target: string): Promise<void> {

@@ -1,0 +1,27 @@
+id: diff-review
+version: 0.4.0-invalid-fixture
+description: Invalid fixture proving writes:true requires a prior gate.
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+    writes: true
+  - id: review
+    kind: codex-parallel
+    workers:
+      - id: correctness
+        perspective: correctness
+        prompt: Review correctness.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - workflow.json
+  - state.json
+  - events.jsonl
+  - workers/*.json
+  - result.md

@@ -136,6 +136,56 @@ describe("CLI output formatting", () => {
     expect(output).toContain("Discovery:");
     expect(output).toContain("cwf latest --target /tmp/repo");
   });
+
+  it("explains waiting gates and the approval commands", () => {
+    const output = formatRunShow(
+      createState({
+        status: "waiting",
+        phases: [
+          { id: "collect", status: "completed" },
+          { id: "approve-review", status: "waiting", prompt: "Review before continuing." },
+          { id: "review", status: "pending" },
+        ],
+      }),
+    );
+
+    expect(output).toContain("Now: waiting at gate approve-review; approve or reject before resume");
+    expect(output).toContain("Gate: approve-review is waiting - Review before continuing.");
+    expect(output).toContain("Approve: cwf approve run_test approve-review");
+    expect(output).toContain("Reject: cwf reject run_test approve-review --reason <text>");
+  });
+
+  it("explains approved gates and rejected gates", () => {
+    const approved = formatStatus(
+      createState({
+        status: "approved",
+        phases: [
+          { id: "collect", status: "completed" },
+          { id: "approve-review", status: "approved" },
+          { id: "review", status: "pending" },
+        ],
+        gate_decisions: [{ gate_id: "approve-review", decision: "approved", decided_at: "2026-01-01T00:00:02.000Z" }],
+      }),
+    );
+    const rejected = formatStatus(
+      createState({
+        status: "rejected",
+        phases: [
+          { id: "collect", status: "completed" },
+          { id: "approve-review", status: "rejected", decision_reason: "not safe" },
+          { id: "review", status: "pending" },
+        ],
+        gate_decisions: [
+          { gate_id: "approve-review", decision: "rejected", reason: "not safe", decided_at: "2026-01-01T00:00:02.000Z" },
+        ],
+      }),
+    );
+
+    expect(approved).toContain("Now: gate approve-review approved; run cwf resume run_test");
+    expect(approved).toContain("Resume: cwf resume run_test");
+    expect(rejected).toContain("Now: rejected at gate approve-review: not safe");
+    expect(rejected).toContain("Gate: approve-review rejected - not safe");
+  });
 });
 
 function createState(overrides: Partial<RunState> = {}): RunState {
@@ -146,6 +196,7 @@ function createState(overrides: Partial<RunState> = {}): RunState {
     target: "/tmp/repo",
     run_dir: "/tmp/cwf",
     failure_policy: DEFAULT_FAILURE_POLICY,
+    gate_decisions: [],
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     phases: [],

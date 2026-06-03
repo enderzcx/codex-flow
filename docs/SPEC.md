@@ -12,6 +12,9 @@ cwf watch <run-id> [--interval <ms>] [--once]
 cwf list [--limit <n>] [--status <status>] [--target <repo>]
 cwf latest [--target <repo>]
 cwf show <run-id>
+cwf approve <run-id> <gate-id>
+cwf reject <run-id> <gate-id> [--reason <text>]
+cwf resume <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -42,6 +45,7 @@ Each run writes:
   workflow.json
   state.json
   events.jsonl
+  context.json
   run.log
   workers/
     correctness.json
@@ -78,6 +82,7 @@ Index entries contain:
 - `failure_policy`
 - `phases`
 - `workers`
+- `gate_decisions`
 - `created_at`
 - `updated_at`
 - optional `result_path`
@@ -103,9 +108,24 @@ Statuses:
 
 - `pending`
 - `running`
+- `waiting`
+- `approved`
+- `rejected`
 - `completed`
 - `failed`
 - `cancelled`
+
+Gate decisions:
+
+```json
+{
+  "gate_id": "approve-review",
+  "decision": "approved",
+  "decided_at": "ISO"
+}
+```
+
+Rejected decisions may include `reason`.
 
 ## Status Output Contract
 
@@ -118,6 +138,8 @@ Statuses:
 - target path
 - failure policy summary
 - failure summary for failed runs
+- waiting/approved/rejected gate summary when present
+- approve/reject/resume commands when a gate needs user action
 - completed worker count
 - raw fallback count
 - active phase when a phase is running
@@ -138,12 +160,35 @@ If `result.md` is not ready, status prints `Result: not ready yet`.
 
 `cwf show <run-id>` prints status-style run detail plus discovery commands that help users list similar runs or open the latest run for that target.
 
+## Gate And Resume Contract
+
+Gate phase shape:
+
+```yaml
+- id: approve-write
+  kind: gate
+  prompt: Review the planned file changes before Codex writes.
+  requires_approval: true
+```
+
+Write-capable phases and workers declare `writes: true`. Validation fails if any phase or worker has `writes: true` before a prior gate phase. Read-only `diff-review` does not require gates.
+
+Execution rules:
+
+- A pending gate changes the run to `waiting` and stops execution.
+- `cwf approve <run-id> <gate-id>` changes the gate to `approved` and records a `gate.approved` event.
+- `cwf reject <run-id> <gate-id> [--reason <text>]` changes the run to `rejected`, records the reason, and records a `gate.rejected` event.
+- `cwf resume <run-id>` continues only phases that are still pending after an approved gate.
+- Completed phases do not rerun on resume.
+- Rejected runs cannot resume.
+- Gate decisions are persisted in `state.json` under `gate_decisions` and in `events.jsonl`.
+
 ## Watch Output Contract
 
 `cwf watch <run-id>` is the stable public live progress view. It must:
 
 - render the same information as `cwf status <run-id>`
-- refresh until the run reaches `completed`, `failed`, or `cancelled`
+- refresh until the run reaches `completed`, `failed`, `cancelled`, or `rejected`
 - exit automatically for terminal statuses
 - support `--interval <ms>` with a minimum effective interval
 - support `--once` for one non-clearing snapshot
@@ -253,6 +298,8 @@ Planned contract:
 - If the diff changes during review, the run fails.
 - If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, and show output.
 - If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
+- Write-capable phases or workers must be preceded by a gate.
+- Gates only pause and resume workflow phases; this release does not ship a production write-capable workflow.
 - Public MVP has no private adapters or third-party model routing.
 
 ## Known Limitations

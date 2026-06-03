@@ -111,6 +111,7 @@ function createState(overrides: Partial<RunState> = {}): RunState {
     target: resolve("/tmp/repo"),
     run_dir: "/tmp/cwf/run_test",
     failure_policy: DEFAULT_FAILURE_POLICY,
+    gate_decisions: [],
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     phases: [

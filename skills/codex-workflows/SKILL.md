@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.3.0"
+  version: "0.4.0"
 ---
 
 # codex-workflows
@@ -40,6 +40,9 @@ cwf watch <run-id>
 cwf latest --target <repo>
 cwf list --limit 5
 cwf show <run-id>
+cwf approve <run-id> <gate-id>
+cwf reject <run-id> <gate-id> --reason <text>
+cwf resume <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -51,6 +54,8 @@ Use `--background` for large diffs. The command returns a run id immediately, wh
 `cwf status <run-id>` is the first thing to read during a long run. Start with the `Now:` line, then check worker progress, fallback count, and artifact paths. If `Result: not ready yet`, keep polling status instead of reading raw state first.
 
 If the run id is unknown, use `cwf latest --target <repo>` or `cwf list`. Discovery uses `~/.codex-workflows/index.json`, and the CLI rebuilds it from run folders when the index is missing, stale, or corrupt.
+
+If status is `waiting`, read the printed gate line and use `cwf approve` or `cwf reject`. After approval, use `cwf resume`; do not manually edit state. Completed phases are skipped on resume and gate decisions are saved in `state.json` plus `events.jsonl`.
 
 For failed runs, read the failure summary in `cwf status` or `cwf show` before opening raw JSON. It names the failed phase, failed workers when known, the default failure policy, and the next artifact or connectivity check.
 

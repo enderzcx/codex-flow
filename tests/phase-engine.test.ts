@@ -84,6 +84,112 @@ describe("executeWorkflow", () => {
     expect(events).toContain("All Codex SDK workers failed");
     expect(correctness).toContain("mock Codex SDK unreachable");
   });
+
+  it("pauses at a gate and explains the pending approval", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const gated = createGatedSpec();
+    const store = await RunStore.create(gated, target, runsRoot);
+
+    await executeWorkflow({
+      spec: gated,
+      specPath: "fixtures/workflows/gated-diff-review.yaml",
+      target,
+      store,
+      workerRunner: successfulRunner,
+    });
+
+    const state = await store.readState();
+    const events = await readFile(join(store.runDir, "events.jsonl"), "utf8");
+
+    expect(state.status).toBe("waiting");
+    expect(state.phases.find((phase) => phase.id === "collect")?.status).toBe("completed");
+    expect(state.phases.find((phase) => phase.id === "approve-review")?.status).toBe("waiting");
+    expect(state.phases.find((phase) => phase.id === "review")?.status).toBe("pending");
+    expect(events).toContain("gate.waiting");
+  });
+
+  it("approves and resumes without rerunning completed phases", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const gated = createGatedSpec();
+    const store = await RunStore.create(gated, target, runsRoot);
+
+    await executeWorkflow({
+      spec: gated,
+      specPath: "fixtures/workflows/gated-diff-review.yaml",
+      target,
+      store,
+      workerRunner: successfulRunner,
+    });
+    await store.approveGate("approve-review");
+    await executeWorkflow({
+      spec: gated,
+      specPath: "fixtures/workflows/gated-diff-review.yaml",
+      target,
+      store,
+      workerRunner: successfulRunner,
+      resume: true,
+    });
+
+    const state = await store.readState();
+    const events = await readFile(join(store.runDir, "events.jsonl"), "utf8");
+
+    expect(state.status).toBe("completed");
+    expect(state.gate_decisions).toEqual([
+      expect.objectContaining({ gate_id: "approve-review", decision: "approved" }),
+    ]);
+    expect(state.phases.map((phase) => [phase.id, phase.status])).toEqual([
+      ["collect", "completed"],
+      ["approve-review", "approved"],
+      ["review", "completed"],
+      ["reduce", "completed"],
+    ]);
+    const eventTypes = events.trim().split(/\r?\n/).map((line) => (JSON.parse(line) as { type: string }).type);
+    expect(eventTypes.filter((type) => type === "collect.context")).toHaveLength(1);
+    expect(events).toContain("gate.approved");
+    expect(events).toContain("run.completed");
+  });
+
+  it("rejects a waiting gate and blocks resume", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const gated = createGatedSpec();
+    const store = await RunStore.create(gated, target, runsRoot);
+
+    await executeWorkflow({
+      spec: gated,
+      specPath: "fixtures/workflows/gated-diff-review.yaml",
+      target,
+      store,
+      workerRunner: successfulRunner,
+    });
+    await store.rejectGate("approve-review", "not safe");
+
+    await expect(
+      executeWorkflow({
+        spec: gated,
+        specPath: "fixtures/workflows/gated-diff-review.yaml",
+        target,
+        store,
+        workerRunner: successfulRunner,
+        resume: true,
+      }),
+    ).rejects.toThrow("was rejected and cannot be resumed");
+
+    const state = await store.readState();
+    const events = await readFile(join(store.runDir, "events.jsonl"), "utf8");
+
+    expect(state.status).toBe("rejected");
+    expect(state.phases.find((phase) => phase.id === "approve-review")?.status).toBe("rejected");
+    expect(state.gate_decisions).toEqual([
+      expect.objectContaining({ gate_id: "approve-review", decision: "rejected", reason: "not safe" }),
+    ]);
+    expect(events).toContain("gate.rejected");
+  });
 });
 
 async function createGitRepoWithDiff(): Promise<string> {
@@ -104,3 +210,38 @@ async function createGitRepoWithDiff(): Promise<string> {
 async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
 }
+
+function createGatedSpec(): WorkflowSpec {
+  return {
+    ...spec,
+    version: "0.4.0-fixture",
+    phases: [
+      { id: "collect", kind: "command" },
+      { id: "approve-review", kind: "gate", prompt: "Review the collected diff before continuing.", requires_approval: true },
+      ...spec.phases.slice(1),
+    ],
+  };
+}
+
+const successfulRunner: WorkerRunner = async (worker) => ({
+  worker_id: worker.id,
+  status: "completed",
+  started_at: "2026-01-01T00:00:00.000Z",
+  completed_at: "2026-01-01T00:00:01.000Z",
+  duration_ms: 1000,
+  prompt: `mock ${worker.id}`,
+  raw: JSON.stringify({
+    worker_id: worker.id,
+    summary: "ok",
+    findings: [],
+    verification: [],
+    confidence: "high",
+  }),
+  result: {
+    worker_id: worker.id,
+    summary: "ok",
+    findings: [],
+    verification: [],
+    confidence: "high",
+  },
+});

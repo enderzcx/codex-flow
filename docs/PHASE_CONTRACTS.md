@@ -32,12 +32,17 @@ Already shipped:
 - `cwf list`
 - `cwf show`
 - `cwf latest`
+- `cwf approve`
+- `cwf reject`
+- `cwf resume`
 - `cwf result`
 - `cwf cancel`
 - one workflow: `diff-review`
 - run store under `~/.codex-workflows/runs/<run-id>/`
 - run index under `~/.codex-workflows/index.json`
 - default failure policy metadata and readable failure summaries
+- gate phase kind and persisted gate decisions
+- validation that `writes:true` phases/workers require a prior gate
 - readable status/watch output
 - English and Chinese README
 
@@ -194,6 +199,8 @@ Before Codex Flow supports write-capable workflows or long multi-stage runs, use
 - Make write-capable phases impossible without a prior gate.
 - Avoid adding production write workflows in this phase.
 
+Status: implemented in v0.4.0.
+
 ### SPEC
 
 New commands:
@@ -228,6 +235,7 @@ Resume rules:
 - Rejected gates stop the run.
 - Gate decisions are written to `state.json` and `events.jsonl`.
 - `cwf show` explains why a run is waiting and how to approve/reject.
+- `context.json` preserves collected diff context so resume does not need to rerun completed collection.
 
 Validation rules:
 

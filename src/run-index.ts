@@ -115,6 +115,7 @@ export function normalizeRunState(state: RunState): RunState {
   return {
     ...state,
     failure_policy: state.failure_policy ?? DEFAULT_FAILURE_POLICY,
+    gate_decisions: state.gate_decisions ?? [],
     failure_summary: state.failure_summary ?? (state.status === "failed" ? buildFailureSummary(state, state.error) : undefined),
   };
 }

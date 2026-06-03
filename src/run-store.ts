@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import {
   buildFailureSummary,
@@ -7,7 +7,17 @@ import {
   RUNS_ROOT,
   upsertRunIndexEntry,
 } from "./run-index.js";
-import type { PhaseState, PhaseStatus, RunState, WorkerResult, WorkerState, WorkerStatus, WorkflowSpec } from "./types.js";
+import type {
+  DiffContext,
+  GateDecision,
+  PhaseState,
+  PhaseStatus,
+  RunState,
+  WorkerResult,
+  WorkerState,
+  WorkerStatus,
+  WorkflowSpec,
+} from "./types.js";
 
 export class RunStore {
   readonly runId: string;
@@ -37,6 +47,7 @@ export class RunStore {
       workers: spec.phases.flatMap<WorkerState>((phase) =>
         phase.kind === "codex-parallel" ? phase.workers.map((worker) => ({ id: worker.id, status: "pending" })) : [],
       ),
+      gate_decisions: [],
       created_at: now,
       updated_at: now,
     };
@@ -95,6 +106,58 @@ export class RunStore {
     await this.appendEvent("worker.updated", { worker: id, status, error });
   }
 
+  async waitAtGate(id: string, prompt: string): Promise<RunState> {
+    const state = await this.mutateState((draft) => {
+      const phase = findPhase(draft, id);
+      applyStatusTimestamps(phase, "waiting");
+      phase.status = "waiting";
+      phase.prompt = prompt;
+      draft.status = "waiting";
+    });
+    await this.appendEvent("gate.waiting", { gate: id, prompt });
+    return state;
+  }
+
+  async approveGate(id: string): Promise<RunState> {
+    const decidedAt = isoNow();
+    const decision: GateDecision = { gate_id: id, decision: "approved", decided_at: decidedAt };
+    const state = await this.mutateState((draft) => {
+      const phase = findPhase(draft, id);
+      if (phase.status !== "waiting" && phase.status !== "approved") {
+        throw new Error(`Gate ${id} is ${phase.status}; only waiting gates can be approved.`);
+      }
+      phase.status = "approved";
+      phase.completed_at = decidedAt;
+      phase.error = undefined;
+      phase.decision_reason = undefined;
+      draft.status = "approved";
+      draft.error = undefined;
+      draft.gate_decisions = [...(draft.gate_decisions ?? []).filter((item) => item.gate_id !== id), decision];
+    });
+    await this.appendEvent("gate.approved", { gate: id });
+    return state;
+  }
+
+  async rejectGate(id: string, reason?: string): Promise<RunState> {
+    const decidedAt = isoNow();
+    const decision: GateDecision = { gate_id: id, decision: "rejected", reason, decided_at: decidedAt };
+    const state = await this.mutateState((draft) => {
+      const phase = findPhase(draft, id);
+      if (phase.status !== "waiting" && phase.status !== "rejected") {
+        throw new Error(`Gate ${id} is ${phase.status}; only waiting gates can be rejected.`);
+      }
+      phase.status = "rejected";
+      phase.completed_at = decidedAt;
+      phase.error = reason;
+      phase.decision_reason = reason;
+      draft.status = "rejected";
+      draft.error = reason ? `Gate ${id} rejected: ${reason}` : `Gate ${id} rejected.`;
+      draft.gate_decisions = [...(draft.gate_decisions ?? []).filter((item) => item.gate_id !== id), decision];
+    });
+    await this.appendEvent("gate.rejected", { gate: id, reason });
+    return state;
+  }
+
   async writeWorkerResult(result: WorkerResult): Promise<void> {
     await this.writeJson(join("workers", `${result.worker_id}.json`), result);
     await this.appendEvent("worker.result", {
@@ -103,6 +166,32 @@ export class RunStore {
       raw_fallback: Boolean(result.raw_fallback),
       finding_count: result.result?.findings.length ?? 0,
     });
+  }
+
+  async readWorkerResults(): Promise<WorkerResult[]> {
+    try {
+      const files = await readdir(join(this.runDir, "workers"));
+      return Promise.all(
+        files
+          .filter((file) => file.endsWith(".json"))
+          .map(async (file) => JSON.parse(await readFile(join(this.runDir, "workers", file), "utf8")) as WorkerResult),
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  async writeContext(context: DiffContext): Promise<void> {
+    await this.writeJson("context.json", context);
+    await this.appendEvent("collect.context_saved", { diff_hash: context.diff_hash });
+  }
+
+  async readContext(): Promise<DiffContext> {
+    return JSON.parse(await readFile(join(this.runDir, "context.json"), "utf8")) as DiffContext;
+  }
+
+  async readWorkflow(): Promise<WorkflowSpec> {
+    return JSON.parse(await readFile(join(this.runDir, "workflow.json"), "utf8")) as WorkflowSpec;
   }
 
   async writeResult(markdown: string): Promise<void> {
@@ -130,7 +219,7 @@ export class RunStore {
       }
       draft.status = "cancelled";
       for (const phase of draft.phases) {
-        if (phase.status === "pending" || phase.status === "running") {
+        if (phase.status === "pending" || phase.status === "running" || phase.status === "waiting" || phase.status === "approved") {
           phase.status = "cancelled";
         }
       }
@@ -185,10 +274,10 @@ function createRunId(): string {
 }
 
 function applyStatusTimestamps(item: PhaseState | WorkerState, status: PhaseStatus | WorkerStatus): void {
-  if (status === "running" && !item.started_at) {
+  if ((status === "running" || status === "waiting") && !item.started_at) {
     item.started_at = isoNow();
   }
-  if ((status === "completed" || status === "failed" || status === "cancelled") && !item.completed_at) {
+  if ((status === "completed" || status === "failed" || status === "cancelled" || status === "approved" || status === "rejected") && !item.completed_at) {
     item.completed_at = isoNow();
   }
 }
@@ -197,13 +286,30 @@ function deriveRunStatus(phases: PhaseState[]): PhaseStatus {
   if (phases.some((phase) => phase.status === "failed")) {
     return "failed";
   }
-  if (phases.every((phase) => phase.status === "completed")) {
+  if (phases.some((phase) => phase.status === "rejected")) {
+    return "rejected";
+  }
+  if (phases.some((phase) => phase.status === "waiting")) {
+    return "waiting";
+  }
+  if (phases.some((phase) => phase.status === "running")) {
+    return "running";
+  }
+  if (phases.every((phase) => phase.status === "completed" || phase.status === "approved")) {
     return "completed";
   }
   if (phases.some((phase) => phase.status === "cancelled")) {
     return "cancelled";
   }
   return "running";
+}
+
+function findPhase(state: RunState, id: string): PhaseState {
+  const phase = state.phases.find((item) => item.id === id);
+  if (!phase) {
+    throw new Error(`Unknown phase: ${id}`);
+  }
+  return phase;
 }
 
 function isoNow(): string {

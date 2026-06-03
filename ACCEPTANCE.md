@@ -38,6 +38,18 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Discovery index is rebuildable.
   - Evidence: tests cover missing, stale, and corrupt `~/.codex-workflows/index.json` rebuilding from `~/.codex-workflows/runs/*/state.json`.
 
+- [ ] Gate phase pauses workflow execution.
+  - Evidence: `cwf run fixtures/workflows/gated-diff-review.yaml --target <repo>` reaches `Status: waiting` and prints approve/reject commands.
+
+- [ ] Approved gates can resume without rerunning completed phases.
+  - Evidence: `cwf approve <run-id> <gate-id>`, then `cwf resume <run-id>` completes and `events.jsonl` contains one `collect.context` event.
+
+- [ ] Rejected gates stop cleanly.
+  - Evidence: `cwf reject <run-id> <gate-id> --reason <text>` changes status to `rejected`, records `gate.rejected`, and `cwf resume <run-id>` fails.
+
+- [ ] Write-capable workflow specs require a prior gate.
+  - Evidence: `cwf validate fixtures/workflows/write-without-gate.yaml` fails with a `writes:true` gate error.
+
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
 
@@ -79,6 +91,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - Non-Codex model adapters.
 - Automatic code modification workflows.
 - Workflow registry.
+- Production write-capable workflow.
 - Publishing to npm.
 
 ## Stop Conditions

@@ -274,13 +274,15 @@ Acceptance:
 
 Goal: make long or risky workflows resumable and safe before any write-capable workflow exists.
 
+Status: implemented.
+
 Deliverables:
 
 - `gate` phase
 - `approve`
 - `reject`
 - `resume`
-- resumable state
+- resumable state with persisted gate decisions
 - completed phases are not rerun by default
 - write-capable phases require a prior gate
 
@@ -445,12 +447,11 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v0.4:
+The next useful implementation slice is v0.5:
 
-1. Add explicit gates.
-2. Add approve/reject/resume commands.
-3. Preserve read-only `diff-review` as the stable default.
-4. Require gates before any future write-capable phase.
-5. Keep workflow registry work deferred to v0.5.
+1. Add workflow search paths.
+2. Add workflow listing/showing/validation commands.
+3. Keep `diff-review` path-based execution behavior working.
+4. Preserve v0.4 gate validation before any write-capable workflow is accepted.
 
-Why this next: discovery is now in place, so the next reliability gap is safe pause/resume before any write-capable workflow exists.
+Why this next: discovery and gates are now in place, so the remaining engine gap is reusable workflow discovery without turning examples into core runtime special cases.
