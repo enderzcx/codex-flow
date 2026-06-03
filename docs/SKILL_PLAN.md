@@ -132,5 +132,9 @@ The skill should ask Codex to report:
 Only after v1.0 release readiness is stable:
 
 - CI release smoke wrapper
+- Desktop handoff prompt support
+- GitHub PR review output
 - migration plan workflow
 - generated workflow spec suggestions
+
+See [POST_V1_PLAN.md](POST_V1_PLAN.md) for post-v1 PRDs, specs, acceptance criteria, and goal prompts.

@@ -224,6 +224,7 @@ The v1.0 release has been smoke-tested on:
 - [Spec](docs/SPEC.md)
 - [Full plan](docs/FULL_PLAN.md)
 - [Phase contracts](docs/PHASE_CONTRACTS.md)
+- [Post-v1 plan](docs/POST_V1_PLAN.md)
 - [Skill plan](docs/SKILL_PLAN.md)
 - [Workflow catalog](docs/workflow-catalog.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)

@@ -403,6 +403,8 @@ These are valuable but not core v1.0:
 - GitHub PR writeback
 - non-Codex collaborator routing
 
+Detailed post-v1 PRDs, specs, acceptance criteria, and goal prompts live in [POST_V1_PLAN.md](POST_V1_PLAN.md).
+
 ## Product Rules
 
 ### Do
