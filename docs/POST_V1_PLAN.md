@@ -11,7 +11,7 @@ Plain English:
 
 - v1.0 proves the engine works.
 - v1.1 makes releases hard to break.
-- v1.2 explores Codex Desktop handoff without making Desktop required.
+- v1.2 adds Codex App thread integration: left-sidebar threads, result return, and native safety boundaries.
 - v1.3 turns results into GitHub PR review artifacts.
 - v1.4 lets Codex suggest workflow specs safely.
 - v1.5 introduces write-capable workflows behind gates.
@@ -21,6 +21,7 @@ Global rules:
 
 - Keep public core Codex-native unless a later phase explicitly defines an optional adapter boundary.
 - Do not make Codex Desktop required for CLI workflows.
+- Do not duplicate Codex subagent, sandbox, approval, skill, or plugin mechanisms.
 - Do not run generated workflow specs until they validate.
 - Do not run generated JavaScript in the public core.
 - Do not ship write-capable workflows without gates and dry-run evidence.
@@ -130,33 +131,40 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v1.2: Codex Desktop Handoff Experiment
+## v1.2: Codex App Thread Integration
 
 ### PRD
 
-Today `cwf` runs are visible through CLI and files, not the Codex Desktop left sidebar. Some users want workflow results or follow-up work to appear as Codex Desktop threads.
+Today `cwf` runs are visible through CLI and files, not the Codex Desktop left sidebar. That is not enough for a Codex-native workflow experience.
 
-v1.2 explores Desktop handoff as an optional integration, while preserving CLI as the stable source of truth.
+v1.2 makes Codex App integration real: a workflow can create a visible Codex thread, return its result to a Codex conversation, and prepare the path for write-capable work using Codex's own thread, worktree, sandbox, approval, and subagent model.
+
+The normal CLI engine must still work without Codex Desktop. Desktop mode is required only when the user asks for left-sidebar thread behavior.
+
+Reference: [CODEX_NATIVE_CAPABILITY_AUDIT.md](CODEX_NATIVE_CAPABILITY_AUDIT.md).
 
 ### Goals
 
-- Add an explicit Desktop handoff command or flag.
-- Create a follow-up prompt from a completed run.
-- If Codex Desktop app-server is available, try to create a visible follow-up thread.
-- If unavailable, write a local handoff prompt artifact instead of failing the workflow.
+- Add a Codex App Server capability probe.
+- Create a named, visible Codex thread for a completed workflow result.
+- Return workflow results to a Codex conversation through either a skill wrapper or an explicit thread id.
+- Keep CLI result artifacts as the durable source of truth.
+- Document how future write-capable workflows reuse Codex sandbox, approvals, permissions profiles, subagents, and worktrees.
+- Keep Desktop failure non-fatal for CLI-only users.
 
 ### SPEC
 
-New command:
+New commands:
 
 ```bash
-cwf handoff <run-id> [--desktop] [--print]
+cwf desktop check
+cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
 ```
 
 Optional run flag:
 
 ```bash
-cwf run diff-review --target . --background --handoff-prompt
+cwf run diff-review --target . --background --desktop-result
 ```
 
 Artifacts:
@@ -168,13 +176,16 @@ Artifacts:
 
 Behavior:
 
-- `cwf handoff <run-id> --print` prints a concise follow-up prompt.
-- `cwf handoff <run-id>` writes `handoff-prompt.md`.
-- `--desktop` attempts Codex Desktop app-server integration only when explicitly requested.
+- `cwf desktop check` verifies local `codex app-server` availability and schema support.
+- `cwf desktop result <run-id> --print` prints a concise result prompt.
+- `cwf desktop result <run-id> --new-thread` creates a visible Codex App thread with `thread/start`, sets a readable name, starts a turn with the workflow result, and records thread/turn ids.
+- `cwf desktop result <run-id> --thread <thread-id>` posts or steers the result into a known Codex thread.
+- `--desktop-result` attempts the same after a run completes.
 - Desktop failure records a warning and leaves `handoff-prompt.md`.
 - Normal workflow run/result must not depend on Desktop availability.
+- Do not guess the current Codex thread from `thread/list`; require an explicit thread id unless the host skill passes one.
 
-Desktop handoff prompt should include:
+Desktop result prompt should include:
 
 - run id
 - workflow id
@@ -184,59 +195,81 @@ Desktop handoff prompt should include:
 - artifact paths
 - suggested next action
 
+Native safety contract:
+
+- Read-only workflows keep `read-only` sandbox defaults.
+- Write-capable workflows must declare `capabilities.writes: true`, include a prior gate, and run write phases through Codex thread/worktree execution.
+- Approval policy, permissions profile, sandbox mode, and network access come from Codex, not from a custom bypass.
+- Future worker-sidebar behavior should use Codex subagents/threads, not custom process logs pretending to be agents.
+
 Out of scope:
 
-- making worker threads appear live in the sidebar
-- replacing `cwf watch`
-- requiring Codex Desktop
-- using private app-server APIs without a guarded fallback
+- making CLI-only usage require Codex Desktop
+- building a separate Desktop UI
+- silently posting into arbitrary Codex threads
+- replacing Codex subagent scheduling, approvals, sandbox, skills, or plugin packaging
+- enabling production write-capable workflows in this phase
 
 ### Acceptance
 
-- [ ] Handoff prompt can be generated for a completed run.
-  - Evidence: `cwf handoff <run-id>` creates `artifacts/handoff-prompt.md`
+- [ ] App-server capability check works.
+  - Evidence: `cwf desktop check` reports Codex CLI version, app-server schema support, and whether thread APIs are available
 
-- [ ] Handoff can print to stdout.
-  - Evidence: `cwf handoff <run-id> --print`
+- [ ] Result prompt can still be generated locally.
+  - Evidence: `cwf desktop result <run-id> --print` prints a concise result prompt and `cwf desktop result <run-id>` creates `artifacts/handoff-prompt.md`
 
-- [ ] Desktop attempt is explicit and non-fatal.
-  - Evidence: `cwf handoff <run-id> --desktop` falls back to local prompt when Desktop/app-server is unavailable
+- [ ] A visible Codex thread can be created in Desktop mode.
+  - Evidence: `cwf desktop result <run-id> --new-thread` creates a named thread, records `thread_id`, and `thread/list` can read it back
+
+- [ ] Result can return to a known Codex conversation.
+  - Evidence: `cwf desktop result <run-id> --thread <thread-id>` records a posted/steered turn id, or the Codex skill wrapper returns the same result in the active conversation
 
 - [ ] Existing CLI lifecycle remains unaffected.
   - Evidence: run, watch, result smoke still passes without Desktop
 
-- [ ] Docs clearly state that Desktop sidebar visibility is experimental.
-  - Evidence: README/SPEC mention guarded Desktop handoff
+- [ ] Safety boundaries reuse Codex primitives.
+  - Evidence: docs and tests show read-only default, gated writes, sandbox/approval/permissions pass-through, and no custom write bypass
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v1.2 Codex Desktop Handoff Experiment in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v1.2 Codex App Thread Integration in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Keep CLI run store as the source of truth.
 - Do not require Codex Desktop for normal workflows.
-- Do not promise live worker threads in the left sidebar.
-- Desktop integration must be explicit, guarded, and fallback-safe.
+- Desktop mode must create a real Codex thread visible through app-server thread/list and intended for Codex App left-sidebar visibility.
+- Do not duplicate Codex subagent scheduling, approvals, sandbox, skills, or plugin systems.
+- Do not guess the current Codex thread; use an explicit thread id or a host-provided thread id.
+- Desktop integration must be explicit, guarded, and fallback-safe for CLI-only users.
 
 Required:
-- Add cwf handoff <run-id> [--desktop] [--print].
+- Add docs/CODEX_NATIVE_CAPABILITY_AUDIT.md updates if implementation changes the contract.
+- Add cwf desktop check.
+- Add cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print].
 - Generate artifacts/handoff-prompt.md from a completed run.
-- Optionally write artifacts/desktop-handoff.json when --desktop is attempted.
-- If Desktop/app-server is unavailable, record a warning and still succeed with local handoff prompt.
+- Write artifacts/desktop-handoff.json when app-server integration is attempted.
+- Implement app-server initialize, thread/start, thread/name/set, turn/start, thread/list verification, and fallback handling.
+- Add optional --desktop-result to cwf run for completed runs.
+- Keep result output structured enough for a Codex skill wrapper to return it in the current conversation.
+- Document the write-capable workflow path through Codex sandbox/approval/worktree/subagent primitives, but do not enable production write workflows yet.
 - Update README, README.zh-CN, SPEC, PRD, SKILL_PLAN, POST_V1_PLAN.
-- Add tests for handoff prompt generation and Desktop fallback.
+- Add tests for result prompt generation, Desktop fallback, app-server message construction, explicit-thread posting, and no-current-thread guessing.
 
 Verification:
 - npm run check
 - npm pack --dry-run
 - completed run smoke
-- cwf handoff <run-id>
-- cwf handoff <run-id> --print
-- cwf handoff <run-id> --desktop fallback smoke when Desktop path is unavailable
+- cwf desktop check
+- cwf desktop result <run-id> --print
+- cwf desktop result <run-id> --new-thread
+- app-server thread/list confirms the created thread id
+- cwf desktop result <run-id> --thread <thread-id> when a test thread id is available
+- Desktop fallback smoke when app-server path is unavailable
+- existing run/watch/result smoke without Desktop
 
 Final response:
-- Explain exactly what appears in Codex Desktop, if anything.
+- Explain what appears in Codex Desktop left sidebar and what returns to the current Codex conversation.
 - Include fallback behavior, commands run, pass/fail, commit hash, and push status.
 ```
 

@@ -115,6 +115,8 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 
 Codex Flow is a thin Codex-native workflow runner. It is not an orchestration framework, not a multi-model router, and not an enterprise queue. The v1.0 public core is intentionally small so the run contract is easy to understand and verify.
 
-## Future: Codex Desktop Handoff
+## Future: Codex App Thread Integration
 
-Codex's experimental app-server protocol appears to support Desktop-visible thread lifecycle events. A later release should explore guarded Desktop handoff so a workflow can create follow-up Codex threads from its result, while keeping the CLI run store and `cwf watch` as the stable baseline.
+Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. A later release should add guarded Codex App integration so a workflow can create a named left-sidebar Codex thread, return results to a known Codex conversation, and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
+
+The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.

@@ -132,7 +132,7 @@ The skill should ask Codex to report:
 Only after v1.0 release readiness is stable:
 
 - CI release smoke wrapper
-- Desktop handoff prompt support
+- Codex App thread integration with left-sidebar result threads
 - GitHub PR review output
 - migration plan workflow
 - generated workflow spec suggestions

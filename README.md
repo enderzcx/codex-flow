@@ -191,7 +191,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Run discovery is local and rebuildable.
 - Workflow registry is local filesystem discovery only; there is no remote marketplace.
 - Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
-- Codex Desktop app-server handoff is planned, but not part of the stable CLI core yet.
+- Codex App thread integration is planned, but not part of the stable CLI core yet.
 
 ## Verification
 

@@ -383,16 +383,19 @@ Artifact entries contain `id`, `type`, `path`, and `description`. The default `d
 - marks pending/running phases and workers as `cancelled`
 - ignores completed/failed/cancelled runs
 
-## Planned App-Server Handoff
+## Planned Codex App Thread Integration
 
-The Codex Desktop/app-server protocol exposes experimental thread operations such as `thread/start`, `thread/list`, `thread/started`, and status-change notifications. Future `cwf` versions may use this to create Desktop-visible follow-up threads from a completed workflow run.
+The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Future `cwf` versions should use this to create named Codex App threads from completed workflow runs and to return results into a known Codex conversation.
 
 Planned contract:
 
-- app-server integration is optional and guarded by an explicit flag or command
+- app-server integration is optional for CLI-only users and guarded by an explicit flag or command
 - normal `diff-review` must still work without Codex Desktop running
-- created thread ids are recorded in the run folder
+- Desktop mode creates a real Codex thread intended for left-sidebar visibility
+- result posting requires a newly created thread or an explicit known thread id
+- created thread ids, turn ids, app-server version, and fallback status are recorded in the run folder
 - failures fall back to a local prompt/session handoff instead of failing the workflow result
+- future write-capable workflows reuse Codex sandbox, approvals, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses
 - experimental protocol behavior is documented and tested separately from core run-store behavior
 
 ## Safety Invariants
@@ -416,4 +419,4 @@ Planned contract:
 - No workflow plugin system yet.
 - Run discovery is a local index only.
 - Workflow registry is local filesystem discovery only; no remote marketplace.
-- No stable Codex Desktop app-server handoff yet.
+- No stable Codex App thread integration yet.

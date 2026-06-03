@@ -84,12 +84,14 @@ Do not:
 - Add private model adapters to the public version.
 - Claim exact parity with Claude Dynamic Workflows.
 
-## Planned Codex Desktop Integration
+## Planned Codex App Thread Integration
 
-Codex Desktop already has an experimental app-server protocol with thread lifecycle methods and notifications. That looks like the substrate behind Desktop-visible background thread spawning.
+Codex already has app-server thread lifecycle methods, turn events, review threads, skills, plugins, approvals, sandboxing, and subagent metadata. That is the substrate Codex Flow should reuse.
 
-For `codex-workflows`, this should be a later guarded integration, not part of the stable core yet:
+For `codex-workflows`, this should be a guarded integration on top of the stable CLI core:
 
 - stable core: `cwf run`, `cwf status`, `cwf watch`, `cwf result`
-- future Desktop handoff: create visible follow-up Codex threads from a workflow result
+- future Desktop mode: create named visible Codex threads from a workflow result
+- current conversation return: use a Codex skill wrapper or an explicit app-server thread id
+- write-capable workflows: reuse Codex worktrees, sandbox, approvals, permissions profiles, and subagents
 - fallback: generate a local prompt/session handoff when app-server is unavailable
