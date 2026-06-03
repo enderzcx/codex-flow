@@ -215,11 +215,13 @@ Includes:
 
 Goal: 用户不需要反复手动查。
 
+Status: in progress. `cwf watch` exists; run discovery still needs `list`, `show`, `latest`, and a run index.
+
 Deliverables:
 
-- `cwf watch <run-id>`
 - `cwf list`
 - `cwf show <run-id>`
+- `cwf latest [--target <path>]`
 - run index under `~/.codex-workflows/index.json`
 - status output includes last event summary
 
@@ -356,9 +358,10 @@ Acceptance:
 
 The next useful implementation slice is v0.3:
 
-1. Add `cwf watch <run-id>`.
-2. Add `cwf list`.
-3. Add a run index.
+1. Add `cwf list`.
+2. Add `cwf show <run-id>`.
+3. Add `cwf latest`.
+4. Add a run index.
 4. Keep `diff-review` as the only workflow.
 
 Why this first: it improves real user experience without expanding model behavior or workflow complexity. It makes background mode feel like a real workflow product instead of a hidden process.

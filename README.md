@@ -153,5 +153,6 @@ The MVP has been smoke-tested on:
 - [PRD](docs/PRD.md)
 - [Spec](docs/SPEC.md)
 - [Full plan](docs/FULL_PLAN.md)
+- [Phase contracts](docs/PHASE_CONTRACTS.md)
 - [Skill plan](docs/SKILL_PLAN.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)
