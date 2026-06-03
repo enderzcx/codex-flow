@@ -76,6 +76,8 @@ During running:
 - if status is `waiting`, use the printed approve/reject commands; do not edit `state.json`
 - after approval, use `cwf resume <run-id>` so completed phases are skipped
 - check fallback count before trusting structured findings blindly
+- inspect `artifacts/reduced-result.json` for machine-readable verdict, worker provenance, verification gaps, and degraded status
+- inspect `artifacts/manifest.json` when you need to reconstruct the run evidence
 - inspect `events.jsonl` when status looks stale
 - cancel only when the user asks or when the run clearly cannot complete
 
@@ -109,7 +111,10 @@ The skill should ask Codex to report:
 - final status
 - worker statuses
 - result path
+- artifact manifest path
 - whether fallback occurred
+- whether the reducer verdict is degraded
+- worker provenance when findings or failures matter
 - failure policy and summary when status is `failed`
 - gate id, gate status, and decision reason when relevant
 - whether the target diff changed

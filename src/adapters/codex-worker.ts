@@ -4,7 +4,7 @@ import type { DiffContext, WorkerResult, WorkflowWorker, WorkerOutput } from "..
 export const WORKER_OUTPUT_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["worker_id", "summary", "findings", "verification", "confidence"],
+  required: ["worker_id", "summary", "findings", "verification", "artifacts", "confidence"],
   properties: {
     worker_id: { type: "string" },
     summary: { type: "string" },
@@ -24,6 +24,10 @@ export const WORKER_OUTPUT_SCHEMA = {
       },
     },
     verification: {
+      type: "array",
+      items: { type: "string" },
+    },
+    artifacts: {
       type: "array",
       items: { type: "string" },
     },
@@ -71,13 +75,19 @@ export async function runCodexWorker(
     return {
       worker_id: worker.id,
       status: "completed",
+      confidence: parsed.output.confidence,
+      summary: parsed.output.summary,
+      findings: parsed.output.findings,
+      verification: parsed.output.verification,
+      artifacts: parsed.output.artifacts,
       started_at: startedAt,
       completed_at: new Date(completed).toISOString(),
       duration_ms: completed - started,
       prompt,
       raw,
-      result: parsed.output,
       raw_fallback: parsed.rawFallback,
+      fallback_reason: parsed.rawFallback ? "Worker returned malformed JSON; raw text was preserved as summary." : undefined,
+      retry_count: 0,
       usage: turn.usage,
     };
   } catch (error) {
@@ -85,11 +95,18 @@ export async function runCodexWorker(
     return {
       worker_id: worker.id,
       status: "failed",
+      confidence: "low",
+      summary: "Worker failed before returning a usable result.",
+      findings: [],
+      verification: [],
+      artifacts: [],
       started_at: startedAt,
       completed_at: new Date(completed).toISOString(),
       duration_ms: completed - started,
       prompt,
       raw: "",
+      raw_fallback: false,
+      retry_count: 0,
       error: error instanceof Error ? error.message : String(error),
     };
   }
@@ -106,6 +123,7 @@ export function parseWorkerOutput(workerId: string, raw: string): { output: Work
         summary: raw.trim() || "Worker returned malformed JSON.",
         findings: [],
         verification: [],
+        artifacts: [],
         confidence: "low",
       },
       rawFallback: true,
@@ -119,6 +137,7 @@ function normalizeWorkerOutput(workerId: string, output: WorkerOutput): WorkerOu
     summary: output.summary || "",
     findings: Array.isArray(output.findings) ? output.findings : [],
     verification: Array.isArray(output.verification) ? output.verification : [],
+    artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
     confidence: output.confidence || "medium",
   };
 }
@@ -138,6 +157,7 @@ Rules:
 - Prefer concrete findings with file/diff evidence.
 - Do not invent line numbers if the diff does not provide them.
 - Return JSON only. No Markdown, no prose outside JSON.
+- Include an artifacts array; use [] when you did not create or reference extra artifacts.
 - If there are no findings, return an empty findings array and explain briefly in summary.
 
 Target repo: ${context.target}

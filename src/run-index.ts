@@ -152,6 +152,7 @@ export function createRunIndexEntry(state: RunState): RunIndexEntry {
     created_at: normalized.created_at,
     updated_at: normalized.updated_at,
     result_path: normalized.result_path,
+    artifact_manifest_path: normalized.artifact_manifest_path,
     log_path: normalized.log_path,
     error: normalized.error,
     failure_summary: normalized.failure_summary,

@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.5.0"
+  version: "0.6.0"
 ---
 
 # codex-workflows
@@ -51,13 +51,15 @@ cwf result <run-id>
 cwf cancel <run-id>
 ```
 
-`diff-review` is read-only by default. It reviews a target git diff from independent Codex worker perspectives and reduces the findings into one saved Markdown result.
+`diff-review` is read-only by default. It reviews a target git diff from independent Codex worker perspectives and reduces the findings into a stable reduced JSON envelope plus one saved Markdown result.
 
 Prefer `cwf run diff-review --target <repo>` when the local workflow registry can resolve it. Direct path usage remains supported with `cwf run workflows/diff-review.yaml --target <repo>`.
 
 Use `--background` for large diffs. The command returns a run id immediately, while the child process writes status, events, worker outputs, and `run.log` under `~/.codex-workflows/runs/<run-id>/`.
 
 `cwf status <run-id>` is the first thing to read during a long run. Start with the `Now:` line, then check worker progress, fallback count, and artifact paths. If `Result: not ready yet`, keep polling status instead of reading raw state first.
+
+Completed runs include `artifacts/reduced-result.json` and `artifacts/manifest.json`. Use the reduced result when a machine-readable verdict, worker provenance, verification gaps, or degraded status matters. Use the manifest to reconstruct the run evidence.
 
 If the run id is unknown, use `cwf latest --target <repo>` or `cwf list`. Discovery uses `~/.codex-workflows/index.json`, and the CLI rebuilds it from run folders when the index is missing, stale, or corrupt.
 
@@ -72,4 +74,4 @@ Before claiming completion, verify against:
 - `/Users/sunny/Work/CODEX/codex-workflows/IMPLEMENTATION_PLAN.md`
 - `/Users/sunny/Work/CODEX/codex-workflows/ACCEPTANCE.md`
 
-Report in plain language what the workflow did, then include the exact commands run, what passed, what failed, whether fallback occurred, and where the final report lives.
+Report in plain language what the workflow did, then include the exact commands run, what passed, what failed, whether fallback occurred, whether the verdict degraded, and where the final report plus manifest live.

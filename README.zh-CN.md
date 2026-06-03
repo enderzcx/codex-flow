@@ -1,6 +1,6 @@
 # Codex Flow
 
-一个轻量的 Codex 原生工作流 runner，用来把一次代码审查拆成多个 Codex worker 并行做，再合成一份可追踪的报告。
+一个轻量的 Codex 原生工作流 runner，用来把一次代码审查拆成多个 Codex worker 并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
 
 它只依赖 OpenAI Codex SDK 和 CLI：不接第三方模型路由，不接私有 adapter，不把项目绑到某个个人环境。现在公开版先做一件事：`diff-review`，也就是让 `correctness`、`tests`、`safety` 三个视角同时审当前 git diff。
 
@@ -13,7 +13,7 @@
 - 跑很久时不知道它卡在哪一步。
 - worker 失败后不好复盘。
 
-Codex Flow 把这些东西落到磁盘：状态、事件、每个 worker 的 JSON、日志和最终 Markdown 报告都能查。
+Codex Flow 把这些东西落到磁盘：状态、事件、每个 worker 的标准 envelope、reduced-result JSON、artifact manifest、日志和最终 Markdown 报告都能查。
 
 ## 安装
 
@@ -91,7 +91,7 @@ cwf cancel <run-id>
 - 哪些 phase 完成了
 - 几个 worker 完成了
 - 有没有 raw fallback
-- 最终报告、日志、事件、worker JSON 放在哪里
+- 最终报告、reduced JSON、manifest、日志、事件、worker JSON 放在哪里
 
 想实时看进度，用：
 
@@ -130,7 +130,7 @@ Phases:
 - review: running (8s)
 - reduce: pending
 Workers:
-- correctness: completed (6s), findings=1
+- correctness: completed (6s), findings=1, artifacts=0
 - tests: running (7s)
 - safety: running (7s)
 Artifacts:
@@ -157,8 +157,15 @@ Artifacts:
     correctness.json
     tests.json
     safety.json
+  artifacts/
+    reduced-result.json
+    manifest.json
   result.md
 ```
+
+每个 worker JSON 都有同一套 envelope：status、confidence、summary、findings、verification、artifacts、retry_count、raw_fallback、时间、prompt、raw output，以及可选 error/usage。`artifacts/reduced-result.json` 保存 reducer 的稳定结果：verdict、summary、findings、verification_gaps、next_actions、worker_provenance 和 artifact 列表。`artifacts/manifest.json` 是这次 run 的证据清单，方便之后复盘。
+
+如果只有部分 worker 失败，Codex Flow 会按默认 failure policy 继续 reduce，但最终结果会把失败 worker 和降级证据写清楚。结构化输出坏掉时，raw fallback 也会出现在 status/result 里。
 
 最终报告可以直接看：
 
@@ -198,6 +205,9 @@ npm pack --dry-run
 - 前台和后台运行
 - cancel
 - Codex SDK worker 全失败 mock
+- 部分 worker 失败时 degraded 输出
+- malformed worker 输出 raw fallback 可见
+- artifact manifest / reduced-result envelope 生成
 - run discovery / latest / show / index rebuild
 - gate pause / approve resume / reject / write-without-gate validation
 - workflow registry list / show / validate / duplicate-id detection / id-or-path run

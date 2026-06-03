@@ -38,19 +38,19 @@ describe("CLI output formatting", () => {
       {
         worker_id: "correctness",
         status: "completed",
+        confidence: "high",
+        summary: "ok",
+        findings: [],
+        verification: [],
+        artifacts: [],
         started_at: "2026-01-01T00:00:01.000Z",
         completed_at: "2026-01-01T00:00:03.000Z",
         duration_ms: 2000,
         prompt: "review",
         raw: "{}",
         raw_fallback: true,
-        result: {
-          worker_id: "correctness",
-          summary: "ok",
-          findings: [],
-          verification: [],
-          confidence: "high",
-        },
+        fallback_reason: "malformed structured output",
+        retry_count: 0,
       },
     ];
 
@@ -61,7 +61,7 @@ describe("CLI output formatting", () => {
     expect(output).toContain("Workers: 1/3 completed, 1 fallback");
     expect(output).toContain("Active phase: review");
     expect(output).toContain("- tests: running (3s)");
-    expect(output).toContain("- correctness: completed (2s), fallback, findings=0");
+    expect(output).toContain("- correctness: completed (2s), raw_fallback=malformed structured output, findings=0, artifacts=0");
     expect(output).toContain("- Result: not ready yet");
     expect(output).toContain("- Log: /tmp/cwf/run.log");
     expect(output).toContain("PID: 12345");
@@ -77,12 +77,14 @@ describe("CLI output formatting", () => {
       ],
       workers: [{ id: "correctness", status: "completed" }],
       result_path: "/tmp/cwf/result.md",
+      artifact_manifest_path: "/tmp/cwf/artifacts/manifest.json",
     });
 
     const output = formatStatus(state);
 
     expect(output).toContain("Now: done; open the result report");
     expect(output).toContain("- Result: /tmp/cwf/result.md");
+    expect(output).toContain("- Manifest: /tmp/cwf/artifacts/manifest.json");
   });
 
   it("renders a live watch frame around status output", () => {

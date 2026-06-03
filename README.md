@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow runner for multi-agent code review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The MVP ships one workflow, `diff-review`, which starts three Codex workers in parallel and aggregates their findings into structured JSON and a readable Markdown report.
+Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The MVP ships one workflow, `diff-review`, which starts three Codex workers in parallel and aggregates their findings into a stable reduced JSON envelope plus a readable Markdown report.
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
@@ -18,7 +18,7 @@ This is an early public release. It is intentionally narrow: CLI-first, filesyst
 - `tests`: missing tests, weak assertions, verification gaps
 - `safety`: security, permissions, data loss, rollback risk
 
-The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, and writes a final report.
+The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
 
 ## Install
 
@@ -83,7 +83,7 @@ Workflow discovery searches these local paths in order:
 
 Duplicate workflow ids fail clearly instead of picking one silently.
 
-`cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, result, and log files.
+`cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, reduced JSON, manifest, result, and log files.
 
 `cwf watch <run-id>` refreshes the same status view until the run reaches `completed`, `failed`, or `cancelled`. Use `--interval <ms>` to tune the refresh rate, or `--once` for one non-clearing snapshot.
 
@@ -105,8 +105,13 @@ Run artifacts are stored under:
     correctness.json
     tests.json
     safety.json
+  artifacts/
+    reduced-result.json
+    manifest.json
   result.md
 ```
+
+Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
 
 ## Example
 
@@ -131,14 +136,15 @@ Phases:
 - review: completed (14s)
 - reduce: completed (0s)
 Workers:
-- correctness: completed (12s), findings=1
-- tests: completed (14s), findings=0
-- safety: completed (11s), findings=0
+- correctness: completed (12s), findings=1, artifacts=0
+- tests: completed (14s), findings=0, artifacts=0
+- safety: completed (11s), findings=0, artifacts=0
 Artifacts:
 - State: ~/.codex-workflows/runs/run_.../state.json
 - Events: ~/.codex-workflows/runs/run_.../events.jsonl
 - Workers: ~/.codex-workflows/runs/run_.../workers/*.json
 - Result: ~/.codex-workflows/runs/run_.../result.md
+- Manifest: ~/.codex-workflows/runs/run_.../artifacts/manifest.json
 ```
 
 Example discovery:
@@ -192,6 +198,9 @@ The MVP has been smoke-tested on:
 - foreground and background runs
 - cancellation
 - mocked Codex SDK worker failure
+- partial worker failure with degraded reducer output
+- malformed worker output fallback visibility
+- artifact manifest and reduced-result envelope generation
 - run discovery, latest lookup, index rebuild, and show formatting
 - gate pause, approve/resume, reject, and write-without-gate validation
 - workflow registry list/show/validate, duplicate-id detection, and id-or-path runs

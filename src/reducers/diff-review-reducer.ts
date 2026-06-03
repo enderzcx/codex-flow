@@ -1,4 +1,4 @@
-import type { ReducedFinding, ReducedResult, Severity, WorkerResult } from "../types.js";
+import type { ArtifactRef, ReducedFinding, ReducedResult, Severity, WorkerProvenance, WorkerResult } from "../types.js";
 
 const SEVERITY_RANK: Record<Severity, number> = {
   critical: 5,
@@ -8,24 +8,28 @@ const SEVERITY_RANK: Record<Severity, number> = {
   info: 1,
 };
 
-export function reduceDiffReview(workerResults: WorkerResult[], artifacts: string[]): ReducedResult {
+export function reduceDiffReview(workerResults: WorkerResult[], artifacts: ArtifactRef[]): ReducedResult {
   const findingsByKey = new Map<string, ReducedFinding>();
   const verificationGaps = new Set<string>();
-  const suggestedNextActions = new Set<string>();
+  const nextActions = new Set<string>();
+  const workerProvenance = workerResults.map(toWorkerProvenance);
 
   for (const result of workerResults) {
-    if (result.status !== "completed" || !result.result) {
+    if (result.status !== "completed") {
       verificationGaps.add(`Worker ${result.worker_id} did not complete: ${result.error || "unknown error"}`);
       continue;
     }
+    if (result.raw_fallback) {
+      verificationGaps.add(`Worker ${result.worker_id} used raw fallback: ${result.fallback_reason || "malformed structured output"}`);
+    }
 
-    for (const check of result.result.verification) {
+    for (const check of result.verification) {
       if (check.trim()) {
         verificationGaps.add(check.trim());
       }
     }
 
-    for (const finding of result.result.findings) {
+    for (const finding of result.findings) {
       if (isUnsupported(result, finding.evidence)) {
         continue;
       }
@@ -42,16 +46,16 @@ export function reduceDiffReview(workerResults: WorkerResult[], artifacts: strin
         if (finding.suggested_fix.length > existing.suggested_fix.length) {
           existing.suggested_fix = finding.suggested_fix;
         }
-        existing.confidence = mergeConfidence(existing.confidence, result.result.confidence);
+        existing.confidence = mergeConfidence(existing.confidence, result.confidence);
       } else {
         findingsByKey.set(key, {
           ...finding,
           worker_ids: [result.worker_id],
-          confidence: result.result.confidence,
+          confidence: result.confidence,
         });
       }
       if (finding.suggested_fix.trim()) {
-        suggestedNextActions.add(finding.suggested_fix.trim());
+        nextActions.add(finding.suggested_fix.trim());
       }
     }
   }
@@ -64,22 +68,29 @@ export function reduceDiffReview(workerResults: WorkerResult[], artifacts: strin
     return a.title.localeCompare(b.title);
   });
 
-  return {
-    verdict: findings.some((finding) => finding.severity === "critical" || finding.severity === "high")
-      ? "fail"
+  const degraded = workerResults.some((result) => result.status !== "completed" || result.raw_fallback);
+  const verdict = findings.some((finding) => finding.severity === "critical" || finding.severity === "high")
+    ? "fail"
+    : degraded
+      ? "degraded"
       : findings.length > 0
         ? "review"
-        : "pass",
+        : "pass";
+
+  return {
+    verdict,
+    summary: summarizeReduction(verdict, workerResults, findings.length),
     findings,
     verification_gaps: [...verificationGaps],
-    suggested_next_actions: [...suggestedNextActions],
+    next_actions: [...nextActions],
+    worker_provenance: workerProvenance,
     artifacts,
   };
 }
 
 function isUnsupported(result: WorkerResult, evidence: string): boolean {
   const normalizedEvidence = evidence.trim().toLowerCase();
-  return result.result?.confidence === "low" && (!normalizedEvidence || normalizedEvidence === "none" || normalizedEvidence === "n/a");
+  return result.confidence === "low" && (!normalizedEvidence || normalizedEvidence === "none" || normalizedEvidence === "n/a");
 }
 
 function findingKey(title: string, evidence: string): string {
@@ -100,3 +111,27 @@ function mergeConfidence(a: "high" | "medium" | "low", b: "high" | "medium" | "l
   return "low";
 }
 
+function toWorkerProvenance(result: WorkerResult): WorkerProvenance {
+  return {
+    worker_id: result.worker_id,
+    status: result.status,
+    confidence: result.confidence,
+    summary: result.summary,
+    finding_count: result.findings.length,
+    verification_count: result.verification.length,
+    artifact_count: result.artifacts.length,
+    raw_fallback: result.raw_fallback,
+    fallback_reason: result.fallback_reason,
+    error: result.error,
+  };
+}
+
+function summarizeReduction(verdict: ReducedResult["verdict"], workerResults: WorkerResult[], findingCount: number): string {
+  const failed = workerResults.filter((result) => result.status !== "completed").length;
+  const fallback = workerResults.filter((result) => result.raw_fallback).length;
+  const completed = workerResults.length - failed;
+  if (verdict === "degraded") {
+    return `Review completed with degraded evidence: ${completed}/${workerResults.length} workers completed, ${fallback} raw fallback, ${findingCount} supported findings.`;
+  }
+  return `Review completed: ${completed}/${workerResults.length} workers completed, ${fallback} raw fallback, ${findingCount} supported findings.`;
+}

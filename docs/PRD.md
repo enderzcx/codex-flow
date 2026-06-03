@@ -32,6 +32,8 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Let users list, show, and reopen the latest run without remembering run ids.
 - Rebuild discovery data from run folders when the local index is missing, stale, or corrupt.
 - Record default failure policy metadata and summarize failures in human-readable terms.
+- Persist standardized worker envelopes, a standardized reduced result envelope, and an artifact manifest for each completed run.
+- Make partial worker failures, degraded verdicts, and raw fallback visible in status and result output.
 - Pause gated workflows before risky phases.
 - Persist approvals and rejections, then resume only pending phases after approval.
 - Reject write-capable specs that do not include a prior gate.
@@ -71,6 +73,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 14. As a user, I can run `cwf workflows list` to see available local workflows.
 15. As a user, I can run `cwf workflows show diff-review` before running it.
 16. As a user, I can run either `cwf run diff-review --target <repo>` or `cwf run workflows/diff-review.yaml --target <repo>`.
+17. As a reviewer, I can trust the final output because it preserves worker provenance, raw fallback status, and the artifact evidence used to render the report.
 
 ## Success Criteria
 
@@ -92,6 +95,10 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Workflow schema includes `title`, `tags`, `inputs`, and `capabilities`.
 - `~/.codex-workflows/index.json` is rebuilt from run folders when missing, stale, or corrupt.
 - Run artifacts are persisted under `~/.codex-workflows/runs/<run-id>/`.
+- Completed runs include `artifacts/reduced-result.json` and `artifacts/manifest.json`.
+- Worker JSON uses a stable envelope with status, confidence, summary, findings, verification, artifacts, retry/fallback metadata, raw output, timing, and optional error/usage.
+- Reducer output uses a stable envelope with verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references.
+- Partial worker failure or raw fallback is visible as degraded evidence unless stronger supported findings require `fail`.
 - Read-only review does not modify the target repo diff.
 - Mocked all-worker failure records failed state, events, and worker JSON.
 - Failed runs include default failure policy metadata and a readable failure summary.

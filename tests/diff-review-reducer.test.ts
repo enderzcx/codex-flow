@@ -1,31 +1,47 @@
 import { describe, expect, it } from "vitest";
 import { reduceDiffReview } from "../src/reducers/diff-review-reducer.js";
-import type { WorkerResult } from "../src/types.js";
+import type { ArtifactRef, WorkerResult } from "../src/types.js";
+
+const artifacts: ArtifactRef[] = [
+  {
+    id: "result",
+    type: "result",
+    path: "result.md",
+    description: "Rendered result.",
+  },
+];
 
 function worker(worker_id: string, title: string, evidence: string, confidence: "high" | "medium" | "low" = "high"): WorkerResult {
   return {
     worker_id,
     status: "completed",
+    confidence,
+    summary: "summary",
+    findings: [
+      {
+        severity: "high",
+        title,
+        evidence,
+        reason: `reason from ${worker_id}`,
+        suggested_fix: `fix from ${worker_id}`,
+      },
+    ],
+    verification: [`verify ${worker_id}`],
+    artifacts: [],
     started_at: "2026-01-01T00:00:00.000Z",
     completed_at: "2026-01-01T00:00:01.000Z",
     duration_ms: 1000,
     prompt: "prompt",
     raw: "{}",
-    result: {
-      worker_id,
-      summary: "summary",
-      confidence,
-      verification: [`verify ${worker_id}`],
-      findings: [
-        {
-          severity: "high",
-          title,
-          evidence,
-          reason: `reason from ${worker_id}`,
-          suggested_fix: `fix from ${worker_id}`,
-        },
-      ],
-    },
+    raw_fallback: false,
+    retry_count: 0,
+  };
+}
+
+function cleanWorker(worker_id: string, confidence: "high" | "medium" | "low" = "high"): WorkerResult {
+  return {
+    ...worker(worker_id, "unused", "unused", confidence),
+    findings: [],
   };
 }
 
@@ -33,18 +49,50 @@ describe("reduceDiffReview", () => {
   it("deduplicates matching findings", () => {
     const result = reduceDiffReview(
       [worker("correctness", "Missing zero check", "src/calc.js"), worker("tests", "Missing zero check", "src/calc.js")],
-      ["result.md"],
+      artifacts,
     );
 
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]?.worker_ids).toEqual(["correctness", "tests"]);
+    expect(result.worker_provenance.map((item) => item.worker_id)).toEqual(["correctness", "tests"]);
   });
 
   it("drops low-confidence unsupported findings", () => {
-    const result = reduceDiffReview([worker("safety", "Speculative issue", "none", "low")], ["result.md"]);
+    const result = reduceDiffReview([worker("safety", "Speculative issue", "none", "low")], artifacts);
 
     expect(result.findings).toHaveLength(0);
     expect(result.verdict).toBe("pass");
   });
-});
 
+  it("marks partial worker failures as degraded and preserves provenance", () => {
+    const failed = {
+      ...cleanWorker("tests", "low"),
+      status: "failed" as const,
+      summary: "Codex worker failed",
+      verification: [],
+      error: "mock timeout",
+    };
+
+    const result = reduceDiffReview([cleanWorker("correctness", "medium"), failed], artifacts);
+
+    expect(result.verdict).toBe("degraded");
+    expect(result.verification_gaps).toContain("Worker tests did not complete: mock timeout");
+    expect(result.worker_provenance).toContainEqual(
+      expect.objectContaining({ worker_id: "tests", status: "failed", error: "mock timeout" }),
+    );
+  });
+
+  it("marks raw fallback output as degraded and visible", () => {
+    const fallback = {
+      ...cleanWorker("safety", "medium"),
+      raw_fallback: true,
+      fallback_reason: "malformed structured output",
+    };
+
+    const result = reduceDiffReview([fallback], artifacts);
+
+    expect(result.verdict).toBe("degraded");
+    expect(result.verification_gaps).toContain("Worker safety used raw fallback: malformed structured output");
+    expect(result.worker_provenance[0]).toEqual(expect.objectContaining({ raw_fallback: true, fallback_reason: "malformed structured output" }));
+  });
+});

@@ -441,10 +441,11 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
     lines.push("Workers:");
     for (const worker of state.workers) {
       const result = workerResults.find((item) => item.worker_id === worker.id);
-      const fallback = result?.raw_fallback ? ", fallback" : "";
-      const findings = result?.result ? `, findings=${result.result.findings.length}` : "";
+      const fallback = result?.raw_fallback ? `, raw_fallback${result.fallback_reason ? `=${result.fallback_reason}` : ""}` : "";
+      const findings = result ? `, findings=${result.findings.length}` : "";
+      const artifacts = result ? `, artifacts=${result.artifacts.length}` : "";
       lines.push(
-        `- ${worker.id}: ${worker.status}${formatDuration(worker.started_at, worker.completed_at, now)}${fallback}${findings}${worker.error ? ` (${worker.error})` : ""}`,
+        `- ${worker.id}: ${worker.status}${formatDuration(worker.started_at, worker.completed_at, now)}${fallback}${findings}${artifacts}${worker.error ? ` (${worker.error})` : ""}`,
       );
     }
   }
@@ -457,6 +458,9 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
     lines.push(`- Result: ${state.result_path}`);
   } else {
     lines.push(`- Result: not ready yet`);
+  }
+  if (state.artifact_manifest_path) {
+    lines.push(`- Manifest: ${state.artifact_manifest_path}`);
   }
   if (state.log_path) {
     lines.push(`- Log: ${state.log_path}`);

@@ -158,7 +158,6 @@ Every run writes a durable folder:
 
 Later versions add:
 
-- artifact manifest
 - resume metadata
 - parent/child run links
 - worker usage metadata when Codex exposes it
@@ -319,6 +318,8 @@ Acceptance:
 
 Goal: make the engine safe for more workflow types before adding a large workflow library.
 
+Status: implemented.
+
 Deliverables:
 
 - shared worker output envelope
@@ -449,12 +450,11 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v0.6:
+The next useful implementation slice is v0.7:
 
-1. Harden worker output envelopes.
-2. Add artifact manifest.
-3. Add retry/fallback fixtures.
-4. Make partial worker failure behavior explicit in result/status.
-5. Preserve worker provenance in reducer output.
+1. Add a small read-only example workflow pack.
+2. Keep examples outside core runtime special cases.
+3. Require fixture tests and at least one smoke per example.
+4. Document when to use and when not to use each example.
 
-Why this next: local registry is now in place, so the next reliability gap is making worker/reducer contracts strong enough for more workflow specs.
+Why this next: local registry plus hardened output contracts are now in place, so examples can prove usefulness without changing the public core.

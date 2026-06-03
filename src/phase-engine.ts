@@ -1,11 +1,11 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { collectDiffContext, currentDiffHash } from "./adapters/command-step.js";
 import { runCodexWorker, type RunCodexWorkerOptions } from "./adapters/codex-worker.js";
 import { reduceDiffReview } from "./reducers/diff-review-reducer.js";
 import { renderMarkdownResult } from "./renderers/markdown-result.js";
 import { buildFailureSummary } from "./run-index.js";
 import { RunStore } from "./run-store.js";
-import type { DiffContext, PhaseState, WorkerResult, WorkflowPhase, WorkflowSpec, WorkflowWorker } from "./types.js";
+import type { ArtifactManifest, ArtifactRef, DiffContext, PhaseState, WorkerResult, WorkflowPhase, WorkflowSpec, WorkflowWorker } from "./types.js";
 
 export type WorkerRunner = (
   worker: WorkflowWorker,
@@ -153,17 +153,87 @@ async function runReducerPhase(
 ): Promise<void> {
   await store.updatePhase(phase.id, "running");
   const workerResults = await store.readWorkerResults();
-  const artifacts = [
-    `${store.runDir}/workflow.json`,
-    `${store.runDir}/state.json`,
-    `${store.runDir}/events.jsonl`,
-    `${store.runDir}/workers/*.json`,
-    `${store.runDir}/result.md`,
-  ];
+  const state = await store.readState();
+  const artifacts = buildArtifactRefs(store, workerResults, state.log_path);
   const reduced = reduceDiffReview(workerResults, artifacts);
+  await store.writeReducedResult(reduced);
   const markdown = renderMarkdownResult(reduced, context, workerResults, store.runDir);
   await store.updatePhase(phase.id, "completed");
   await store.writeResult(markdown);
+  const workflow = await store.readWorkflow();
+  await store.writeArtifactManifest(buildArtifactManifest(store, workflow.id, artifacts));
+}
+
+function buildArtifactRefs(store: RunStore, workerResults: WorkerResult[], logPath?: string): ArtifactRef[] {
+  const artifacts: ArtifactRef[] = [
+    {
+      id: "workflow",
+      type: "workflow",
+      path: join(store.runDir, "workflow.json"),
+      description: "Validated workflow spec snapshot for this run.",
+    },
+    {
+      id: "state",
+      type: "state",
+      path: join(store.runDir, "state.json"),
+      description: "Mutable run state, phase status, worker status, and discovery metadata.",
+    },
+    {
+      id: "events",
+      type: "events",
+      path: join(store.runDir, "events.jsonl"),
+      description: "Append-only chronological event log.",
+    },
+    {
+      id: "context",
+      type: "context",
+      path: join(store.runDir, "context.json"),
+      description: "Collected git diff context reviewed by workers.",
+    },
+    ...workerResults.map<ArtifactRef>((worker) => ({
+      id: `worker:${worker.worker_id}`,
+      type: "worker",
+      path: join(store.runDir, "workers", `${worker.worker_id}.json`),
+      description: `Standard worker result envelope for ${worker.worker_id}.`,
+    })),
+    {
+      id: "reduced-result",
+      type: "generated",
+      path: join(store.runDir, "artifacts", "reduced-result.json"),
+      description: "Stable reduced result envelope used to render the final report.",
+    },
+    {
+      id: "result",
+      type: "result",
+      path: join(store.runDir, "result.md"),
+      description: "Human-readable reduced Markdown report.",
+    },
+    {
+      id: "manifest",
+      type: "manifest",
+      path: join(store.runDir, "artifacts", "manifest.json"),
+      description: "Rebuildable artifact manifest for this run.",
+    },
+  ];
+  if (logPath) {
+    artifacts.push({
+      id: "log",
+      type: "log",
+      path: logPath,
+      description: "Background process log for this run.",
+    });
+  }
+  return artifacts;
+}
+
+function buildArtifactManifest(store: RunStore, workflow: string, artifacts: ArtifactRef[]): ArtifactManifest {
+  return {
+    version: 1,
+    run_id: store.runId,
+    workflow,
+    generated_at: new Date().toISOString(),
+    artifacts,
+  };
 }
 
 async function loadContextForRun(store: RunStore, target: string): Promise<DiffContext> {

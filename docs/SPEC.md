@@ -61,7 +61,7 @@ Workflow metadata:
 
 ```yaml
 id: diff-review
-version: 0.5.0
+version: 0.6.0
 title: Diff Review
 description: Review a git diff with independent Codex worker perspectives.
 tags:
@@ -99,6 +99,9 @@ Each run writes:
     correctness.json
     tests.json
     safety.json
+  artifacts/
+    reduced-result.json
+    manifest.json
   result.md
 ```
 
@@ -114,6 +117,7 @@ Index entries contain:
 - `created_at`
 - `updated_at`
 - optional `result_path`
+- optional `artifact_manifest_path`
 - optional `log_path`
 - optional `error`
 - optional `failure_summary`
@@ -134,6 +138,7 @@ Index entries contain:
 - `created_at`
 - `updated_at`
 - optional `result_path`
+- optional `artifact_manifest_path`
 - optional `log_path`
 - optional `background_pid`
 - optional `error`
@@ -192,8 +197,8 @@ Rejected decisions may include `reason`.
 - raw fallback count
 - active phase when a phase is running
 - phase status and duration when timestamps exist
-- worker status, duration, fallback marker, and finding count when available
-- artifact paths for `state.json`, `events.jsonl`, `workers/*.json`, `result.md`, and `run.log`
+- worker status, duration, raw fallback marker, finding count, and artifact count when available
+- artifact paths for `state.json`, `events.jsonl`, `workers/*.json`, `result.md`, `artifacts/manifest.json`, and `run.log`
 - PID for active background runs
 
 If `result.md` is not ready, status prints `Result: not ready yet`.
@@ -243,11 +248,13 @@ Execution rules:
 
 ## Worker Contract
 
-Worker output:
+Worker result envelope persisted at `workers/<worker-id>.json`:
 
 ```json
 {
   "worker_id": "correctness",
+  "status": "completed",
+  "confidence": "high",
   "summary": "short summary",
   "findings": [
     {
@@ -259,11 +266,20 @@ Worker output:
     }
   ],
   "verification": ["command or manual check"],
-  "confidence": "high"
+  "artifacts": [],
+  "started_at": "ISO",
+  "completed_at": "ISO",
+  "duration_ms": 1000,
+  "prompt": "worker prompt",
+  "raw": "raw Codex output",
+  "raw_fallback": false,
+  "retry_count": 0,
+  "error": null,
+  "usage": null
 }
 ```
 
-If structured output fails, the worker result may be marked `raw_fallback`.
+If structured output fails, the worker result is normalized with `raw_fallback: true`, a low-confidence summary, empty findings, and a `fallback_reason`. If the worker process fails, status is `failed` and the error remains visible in state, events, status, show, and reducer provenance.
 
 ## Worker Perspectives
 
@@ -298,7 +314,23 @@ The reducer must:
 - rank by severity
 - drop low-confidence unsupported claims
 - keep contributing worker ids
+- keep worker provenance for all workers, including failed and raw-fallback workers
+- mark partial worker failure or raw fallback as degraded evidence unless stronger supported findings require `fail`
 - render final Markdown
+
+Reduced result envelope persisted at `artifacts/reduced-result.json`:
+
+```json
+{
+  "verdict": "pass|review|fail|degraded",
+  "summary": "string",
+  "findings": [],
+  "verification_gaps": [],
+  "next_actions": [],
+  "worker_provenance": [],
+  "artifacts": []
+}
+```
 
 Final sections:
 
@@ -309,6 +341,24 @@ Final sections:
 - Worker Summary
 - Artifacts
 
+## Artifact Manifest Contract
+
+Completed runs write:
+
+```text
+~/.codex-workflows/runs/<run-id>/artifacts/manifest.json
+```
+
+The manifest contains:
+
+- `version`
+- `run_id`
+- `workflow`
+- `generated_at`
+- `artifacts`
+
+Artifact entries contain `id`, `type`, `path`, and `description`. The default `diff-review` manifest includes workflow, state, events, context, every worker envelope, reduced result, final Markdown result, and the manifest itself. Background runs also include `run.log`.
+
 ## Background Mode
 
 `--background` behavior:
@@ -317,7 +367,7 @@ Final sections:
 2. Parent spawns a detached child process with hidden `cwf __run`.
 3. Parent records `background_pid` and `run.log`.
 4. Parent returns run id immediately.
-5. Child continues writing `state.json`, `events.jsonl`, worker outputs, and `result.md`.
+5. Child continues writing `state.json`, `events.jsonl`, worker outputs, `artifacts/reduced-result.json`, `artifacts/manifest.json`, and `result.md`.
 
 ## Cancellation
 
@@ -344,7 +394,8 @@ Planned contract:
 - Default worker sandbox is read-only.
 - The target repo's tracked diff hash is checked before and after worker review.
 - If the diff changes during review, the run fails.
-- If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, and show output.
+- If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, show output, reducer provenance, and the final report.
+- If a worker uses raw fallback, the reducer marks the evidence as degraded and records the fallback reason.
 - If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
 - Workflow ids discovered in local search paths must be unique.
 - Write-capable phases or workers must be preceded by a gate.

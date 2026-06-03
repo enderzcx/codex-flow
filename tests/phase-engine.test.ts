@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import { executeWorkflow, type WorkerRunner } from "../src/phase-engine.js";
 import { RunStore } from "../src/run-store.js";
-import type { WorkflowSpec } from "../src/types.js";
+import type { ArtifactManifest, WorkflowSpec } from "../src/types.js";
 
 const execFileAsync = promisify(execFile);
 const cleanup: string[] = [];
@@ -50,11 +50,18 @@ describe("executeWorkflow", () => {
     const failedRunner: WorkerRunner = async (worker) => ({
       worker_id: worker.id,
       status: "failed",
+      confidence: "low",
+      summary: "mock Codex SDK unreachable",
+      findings: [],
+      verification: [],
+      artifacts: [],
       started_at: "2026-01-01T00:00:00.000Z",
       completed_at: "2026-01-01T00:00:01.000Z",
       duration_ms: 1000,
       prompt: `mock ${worker.id}`,
       raw: "",
+      raw_fallback: false,
+      retry_count: 0,
       error: "mock Codex SDK unreachable",
     });
 
@@ -153,6 +160,35 @@ describe("executeWorkflow", () => {
     expect(events).toContain("run.completed");
   });
 
+  it("writes reduced result and artifact manifest for completed runs", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const store = await RunStore.create(spec, target, runsRoot);
+    await store.markBackground(12345, join(store.runDir, "run.log"));
+
+    await executeWorkflow({
+      spec,
+      specPath: "workflows/diff-review.yaml",
+      target,
+      store,
+      workerRunner: successfulRunner,
+    });
+
+    const state = await store.readState();
+    const manifest = JSON.parse(await readFile(join(store.runDir, "artifacts", "manifest.json"), "utf8")) as ArtifactManifest;
+    const reduced = await readFile(join(store.runDir, "artifacts", "reduced-result.json"), "utf8");
+
+    expect(state.status).toBe("completed");
+    expect(state.artifact_manifest_path).toBe(join(store.runDir, "artifacts", "manifest.json"));
+    expect(manifest).toEqual(expect.objectContaining({ version: 1, run_id: store.runId, workflow: "diff-review" }));
+    expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual(
+      expect.arrayContaining(["workflow", "state", "events", "context", "worker:correctness", "worker:tests", "worker:safety", "reduced-result", "result", "manifest", "log"]),
+    );
+    expect(reduced).toContain('"worker_provenance"');
+    expect(reduced).toContain('"artifacts"');
+  });
+
   it("rejects a waiting gate and blocks resume", async () => {
     const target = await createGitRepoWithDiff();
     const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
@@ -226,6 +262,11 @@ function createGatedSpec(): WorkflowSpec {
 const successfulRunner: WorkerRunner = async (worker) => ({
   worker_id: worker.id,
   status: "completed",
+  confidence: "high",
+  summary: "ok",
+  findings: [],
+  verification: [],
+  artifacts: [],
   started_at: "2026-01-01T00:00:00.000Z",
   completed_at: "2026-01-01T00:00:01.000Z",
   duration_ms: 1000,
@@ -235,13 +276,9 @@ const successfulRunner: WorkerRunner = async (worker) => ({
     summary: "ok",
     findings: [],
     verification: [],
+    artifacts: [],
     confidence: "high",
   }),
-  result: {
-    worker_id: worker.id,
-    summary: "ok",
-    findings: [],
-    verification: [],
-    confidence: "high",
-  },
+  raw_fallback: false,
+  retry_count: 0,
 });

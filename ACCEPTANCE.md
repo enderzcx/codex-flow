@@ -66,7 +66,16 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
 
 - [ ] Worker outputs are persisted.
-  - Evidence: `~/.codex-workflows/runs/<run-id>/workers/*.json` exists and includes prompt, output, status, and timing.
+  - Evidence: `~/.codex-workflows/runs/<run-id>/workers/*.json` exists and includes prompt, raw output, status, confidence, summary, findings, verification, artifacts, retry/fallback metadata, and timing.
+
+- [ ] Reduced output is persisted as a stable envelope.
+  - Evidence: `~/.codex-workflows/runs/<run-id>/artifacts/reduced-result.json` exists and includes verdict, summary, findings, verification gaps, next actions, worker provenance, and artifacts.
+
+- [ ] Artifact manifest reconstructs the run evidence.
+  - Evidence: `~/.codex-workflows/runs/<run-id>/artifacts/manifest.json` exists and includes workflow, state, events, context, worker outputs, reduced result, final result, and manifest entries.
+
+- [ ] Partial worker failure and malformed output are visible.
+  - Evidence: fixtures cover a failed worker continuing as degraded evidence and raw fallback appearing in status/result.
 
 - [ ] Run events are persisted as JSONL.
   - Evidence: `~/.codex-workflows/runs/<run-id>/events.jsonl` exists and has phase/worker events.
@@ -93,6 +102,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Workflow spec validation fails fast on invalid YAML/JSON.
 - [ ] Error output includes the failed phase and worker id.
 - [ ] Failed runs include default failure policy metadata and a human-readable failure summary.
+- [ ] Degraded reducer results preserve worker provenance and raw fallback details.
 
 ## Explicit Non-Goals For MVP
 

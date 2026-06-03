@@ -8,10 +8,12 @@ import {
   upsertRunIndexEntry,
 } from "./run-index.js";
 import type {
+  ArtifactManifest,
   DiffContext,
   GateDecision,
   PhaseState,
   PhaseStatus,
+  ReducedResult,
   RunState,
   WorkerResult,
   WorkerState,
@@ -163,8 +165,10 @@ export class RunStore {
     await this.appendEvent("worker.result", {
       worker: result.worker_id,
       status: result.status,
-      raw_fallback: Boolean(result.raw_fallback),
-      finding_count: result.result?.findings.length ?? 0,
+      raw_fallback: result.raw_fallback,
+      fallback_reason: result.fallback_reason,
+      finding_count: result.findings.length,
+      artifact_count: result.artifacts.length,
     });
   }
 
@@ -202,6 +206,24 @@ export class RunStore {
       state.status = "completed";
     });
     await this.appendEvent("run.result", { result_path: resultPath });
+  }
+
+  async writeReducedResult(result: ReducedResult): Promise<string> {
+    await mkdir(join(this.runDir, "artifacts"), { recursive: true });
+    const resultPath = join(this.runDir, "artifacts", "reduced-result.json");
+    await writeFile(resultPath, `${JSON.stringify(result, null, 2)}\n`);
+    await this.appendEvent("artifact.reduced_result", { path: resultPath, verdict: result.verdict });
+    return resultPath;
+  }
+
+  async writeArtifactManifest(manifest: ArtifactManifest): Promise<void> {
+    await mkdir(join(this.runDir, "artifacts"), { recursive: true });
+    const manifestPath = join(this.runDir, "artifacts", "manifest.json");
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+    await this.mutateState((state) => {
+      state.artifact_manifest_path = manifestPath;
+    });
+    await this.appendEvent("artifact.manifest", { path: manifestPath, artifact_count: manifest.artifacts.length });
   }
 
   async markBackground(pid: number, logPath: string): Promise<void> {

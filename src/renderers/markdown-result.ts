@@ -7,6 +7,7 @@ export function renderMarkdownResult(result: ReducedResult, context: DiffContext
   lines.push("## Verdict");
   lines.push("");
   lines.push(`- Verdict: ${result.verdict.toUpperCase()}`);
+  lines.push(`- Summary: ${result.summary}`);
   lines.push(`- Target: ${context.target}`);
   lines.push(`- Branch: ${context.branch}`);
   lines.push(`- Diff hash: ${context.diff_hash}`);
@@ -44,10 +45,10 @@ export function renderMarkdownResult(result: ReducedResult, context: DiffContext
   lines.push("");
   lines.push("## Suggested Next Actions");
   lines.push("");
-  if (result.suggested_next_actions.length === 0) {
+  if (result.next_actions.length === 0) {
     lines.push("No next actions reported.");
   } else {
-    for (const action of result.suggested_next_actions) {
+    for (const action of result.next_actions) {
       lines.push(`- ${action}`);
     }
   }
@@ -55,17 +56,25 @@ export function renderMarkdownResult(result: ReducedResult, context: DiffContext
   lines.push("");
   lines.push("## Worker Summary");
   lines.push("");
-  for (const worker of workerResults) {
-    lines.push(`- ${worker.worker_id}: ${worker.status}${worker.raw_fallback ? " (raw fallback)" : ""}`);
+  for (const worker of result.worker_provenance) {
+    const details = [
+      `status=${worker.status}`,
+      `confidence=${worker.confidence}`,
+      `findings=${worker.finding_count}`,
+      `verification=${worker.verification_count}`,
+      `artifacts=${worker.artifact_count}`,
+      worker.raw_fallback ? `raw_fallback=true${worker.fallback_reason ? ` (${worker.fallback_reason})` : ""}` : "raw_fallback=false",
+      worker.error ? `error=${worker.error}` : undefined,
+    ].filter(Boolean);
+    lines.push(`- ${worker.worker_id}: ${details.join(", ")}`);
   }
 
   lines.push("");
   lines.push("## Artifacts");
   lines.push("");
   for (const artifact of result.artifacts) {
-    lines.push(`- ${artifact}`);
+    lines.push(`- ${artifact.id} (${artifact.type}): ${artifact.path} - ${artifact.description}`);
   }
 
   return `${lines.join("\n")}\n`;
 }
-

@@ -98,6 +98,7 @@ export type RunState = {
   created_at: string;
   updated_at: string;
   result_path?: string;
+  artifact_manifest_path?: string;
   log_path?: string;
   background_pid?: number;
   error?: string;
@@ -135,6 +136,7 @@ export type RunIndexEntry = {
   created_at: string;
   updated_at: string;
   result_path?: string;
+  artifact_manifest_path?: string;
   log_path?: string;
   error?: string;
   failure_summary?: FailureSummary;
@@ -171,19 +173,26 @@ export type WorkerOutput = {
   summary: string;
   findings: Finding[];
   verification: string[];
+  artifacts: string[];
   confidence: Confidence;
 };
 
 export type WorkerResult = {
   worker_id: string;
   status: WorkerStatus;
+  confidence: Confidence;
+  summary: string;
+  findings: Finding[];
+  verification: string[];
+  artifacts: string[];
   started_at: string;
   completed_at: string;
   duration_ms: number;
   prompt: string;
   raw: string;
-  result?: WorkerOutput;
-  raw_fallback?: boolean;
+  raw_fallback: boolean;
+  fallback_reason?: string;
+  retry_count: number;
   error?: string;
   usage?: unknown;
 };
@@ -194,9 +203,39 @@ export type ReducedFinding = Finding & {
 };
 
 export type ReducedResult = {
-  verdict: "pass" | "review" | "fail";
+  verdict: "pass" | "review" | "fail" | "degraded";
+  summary: string;
   findings: ReducedFinding[];
   verification_gaps: string[];
-  suggested_next_actions: string[];
-  artifacts: string[];
+  next_actions: string[];
+  worker_provenance: WorkerProvenance[];
+  artifacts: ArtifactRef[];
+};
+
+export type WorkerProvenance = {
+  worker_id: string;
+  status: WorkerStatus;
+  confidence: Confidence;
+  summary: string;
+  finding_count: number;
+  verification_count: number;
+  artifact_count: number;
+  raw_fallback: boolean;
+  fallback_reason?: string;
+  error?: string;
+};
+
+export type ArtifactRef = {
+  id: string;
+  type: "workflow" | "state" | "events" | "context" | "worker" | "result" | "manifest" | "log" | "generated";
+  path: string;
+  description: string;
+};
+
+export type ArtifactManifest = {
+  version: 1;
+  run_id: string;
+  workflow: string;
+  generated_at: string;
+  artifacts: ArtifactRef[];
 };

@@ -48,6 +48,11 @@ Already shipped:
 - validation that `writes:true` phases/workers require a prior gate
 - local workflow registry search paths and duplicate-id detection
 - workflow metadata: title, tags, inputs, capabilities
+- standardized worker result envelope
+- standardized reduced result envelope in `artifacts/reduced-result.json`
+- artifact manifest in `artifacts/manifest.json`
+- degraded reducer verdicts for partial evidence
+- worker provenance in final output
 - readable status/watch output
 - English and Chinese README
 
@@ -452,6 +457,8 @@ v0.6 makes outputs predictable across workflows.
 - Make degraded/partial results explicit.
 - Test retry/fallback/partial worker failure behavior.
 
+Status: implemented in v0.6.0.
+
 ### SPEC
 
 Worker result envelope:
@@ -465,7 +472,15 @@ Worker result envelope:
   "findings": [],
   "verification": [],
   "artifacts": [],
+  "started_at": "ISO",
+  "completed_at": "ISO",
+  "duration_ms": 1000,
+  "prompt": "string",
+  "raw": "string",
   "raw_fallback": false,
+  "fallback_reason": null,
+  "retry_count": 0,
+  "error": null,
   "usage": null
 }
 ```
@@ -490,6 +505,12 @@ Artifact manifest:
 ~/.codex-workflows/runs/<run-id>/artifacts/manifest.json
 ```
 
+Reduced result JSON:
+
+```text
+~/.codex-workflows/runs/<run-id>/artifacts/reduced-result.json
+```
+
 Must record:
 
 - state path
@@ -498,6 +519,8 @@ Must record:
 - result path
 - input context paths
 - generated artifacts
+- reduced-result path
+- run log path when background mode created one
 
 Out of scope:
 
