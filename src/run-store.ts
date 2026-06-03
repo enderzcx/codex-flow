@@ -1,23 +1,29 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import {
+  buildFailureSummary,
+  DEFAULT_FAILURE_POLICY,
+  indexPathForRunsRoot,
+  RUNS_ROOT,
+  upsertRunIndexEntry,
+} from "./run-index.js";
 import type { PhaseState, PhaseStatus, RunState, WorkerResult, WorkerState, WorkerStatus, WorkflowSpec } from "./types.js";
-
-export const RUNS_ROOT = join(homedir(), ".codex-workflows", "runs");
 
 export class RunStore {
   readonly runId: string;
   readonly runDir: string;
+  readonly indexPath: string;
   private stateLock: Promise<void> = Promise.resolve();
 
-  constructor(runId: string, runDir = join(RUNS_ROOT, runId)) {
+  constructor(runId: string, runDir = join(RUNS_ROOT, runId), indexPath = indexPathForRunsRoot(RUNS_ROOT)) {
     this.runId = runId;
     this.runDir = runDir;
+    this.indexPath = indexPath;
   }
 
   static async create(spec: WorkflowSpec, target: string, runsRoot = RUNS_ROOT): Promise<RunStore> {
     const runId = createRunId();
-    const store = new RunStore(runId, join(runsRoot, runId));
+    const store = new RunStore(runId, join(runsRoot, runId), indexPathForRunsRoot(runsRoot));
     await mkdir(join(store.runDir, "workers"), { recursive: true });
     const now = isoNow();
     const state: RunState = {
@@ -26,6 +32,7 @@ export class RunStore {
       status: "running",
       target: resolve(target),
       run_dir: store.runDir,
+      failure_policy: DEFAULT_FAILURE_POLICY,
       phases: spec.phases.map<PhaseState>((phase) => ({ id: phase.id, status: "pending" })),
       workers: spec.phases.flatMap<WorkerState>((phase) =>
         phase.kind === "codex-parallel" ? phase.workers.map((worker) => ({ id: worker.id, status: "pending" })) : [],
@@ -50,6 +57,11 @@ export class RunStore {
   async writeState(state: RunState): Promise<void> {
     state.updated_at = isoNow();
     await this.writeJson("state.json", state);
+    try {
+      await upsertRunIndexEntry(state, this.indexPath);
+    } catch {
+      // Run folders are the source of truth; discovery can rebuild the index later.
+    }
   }
 
   async updatePhase(id: string, status: PhaseStatus, error?: string): Promise<void> {
@@ -64,6 +76,7 @@ export class RunStore {
       state.status = deriveRunStatus(state.phases);
       if (status === "failed") {
         state.error = error;
+        state.failure_summary = buildFailureSummary(state, error);
       }
     });
     await this.appendEvent("phase.updated", { phase: id, status, error });

@@ -73,6 +73,9 @@ describe("executeWorkflow", () => {
     const correctness = await readFile(join(store.runDir, "workers", "correctness.json"), "utf8");
 
     expect(state.status).toBe("failed");
+    expect(state.failure_policy.worker_failure).toBe("continue_if_any_worker_succeeds");
+    expect(state.failure_summary?.title).toBe("review phase failed");
+    expect(state.failure_summary?.failed_workers).toEqual(["correctness", "tests", "safety"]);
     expect(state.phases.find((phase) => phase.id === "collect")?.status).toBe("completed");
     expect(state.phases.find((phase) => phase.id === "review")?.status).toBe("failed");
     expect(state.phases.find((phase) => phase.id === "reduce")?.status).toBe("pending");
@@ -101,4 +104,3 @@ async function createGitRepoWithDiff(): Promise<string> {
 async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
 }
-

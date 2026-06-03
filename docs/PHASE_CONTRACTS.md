@@ -29,10 +29,15 @@ Already shipped:
 - `cwf run`
 - `cwf status`
 - `cwf watch`
+- `cwf list`
+- `cwf show`
+- `cwf latest`
 - `cwf result`
 - `cwf cancel`
 - one workflow: `diff-review`
 - run store under `~/.codex-workflows/runs/<run-id>/`
+- run index under `~/.codex-workflows/index.json`
+- default failure policy metadata and readable failure summaries
 - readable status/watch output
 - English and Chinese README
 
@@ -51,6 +56,8 @@ v0.3 makes Codex Flow easier to operate: find recent runs, inspect one run, open
 - Make failed/degraded runs easier to understand.
 - Define default failure policies.
 - Keep `diff-review` as the only workflow.
+
+Status: implemented in v0.3.0.
 
 ### SPEC
 
@@ -86,24 +93,22 @@ Index entry:
 
 Failure policy defaults:
 
-- command phase: `abort`
-- codex worker phase: `fallback` for malformed output, `abort` when all workers fail
-- reducer phase: `abort`
-- unknown phase error: `abort`
+- worker failures continue when at least one Codex worker succeeds
+- all-worker failure fails the run
+- target diff changes fail the run
+- unhandled errors fail the run
 
 Status/show should include:
 
-- last event summary
 - failed phase or worker
 - failure policy used
-- whether the run is resumable
 - artifact paths
 
 Index behavior:
 
 - `RunStore.create` records a new index entry.
 - State changes update the index best-effort.
-- If the index is missing or stale, `cwf list` rebuilds from `~/.codex-workflows/runs/*/state.json`.
+- If the index is missing, stale, or corrupt, `cwf list` rebuilds from `~/.codex-workflows/runs/*/state.json`.
 - If JSON index is corrupted, CLI should explain the repair path or rebuild automatically from run folders.
 
 Out of scope:
@@ -123,7 +128,7 @@ Out of scope:
   - Evidence: `cwf list --status running`, `cwf list --target <repo>`
 
 - [ ] A user can inspect a run without reading JSON.
-  - Evidence: `cwf show <run-id>` includes status, `Now:`, workers, artifacts, and last event
+  - Evidence: `cwf show <run-id>` includes status, `Now:`, workers, failure policy, failure summary when failed, and artifacts
 
 - [ ] A user can get the latest run.
   - Evidence: `cwf latest`, `cwf latest --target <repo>`
@@ -132,7 +137,7 @@ Out of scope:
   - Evidence: test deletes `index.json`, then `cwf list` rebuilds from run folders
 
 - [ ] Failure output is human-readable.
-  - Evidence: mocked failed worker run shows failed phase/worker/policy/last event
+  - Evidence: mocked failed worker run shows failed phase, failed workers, failure policy, and next step
 
 - [ ] Existing commands still work.
   - Evidence: `npm run check`, validate smoke, foreground smoke, background smoke, watch smoke, cancel smoke

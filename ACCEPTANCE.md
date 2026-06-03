@@ -32,6 +32,12 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Watch command live-refreshes run status.
   - Evidence: `cwf watch <run-id> --once` prints the status frame, and `cwf watch <run-id>` exits automatically for completed/failed/cancelled runs.
 
+- [ ] Run discovery commands find existing runs without manual folder lookup.
+  - Evidence: `cwf list --limit 5`, `cwf list --status <status>`, `cwf list --target <repo>`, `cwf latest --target <repo>`, and `cwf show <run-id>`.
+
+- [ ] Discovery index is rebuildable.
+  - Evidence: tests cover missing, stale, and corrupt `~/.codex-workflows/index.json` rebuilding from `~/.codex-workflows/runs/*/state.json`.
+
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
 
@@ -62,6 +68,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] `cwf status <run-id>` shows token usage when Codex SDK exposes it.
 - [ ] Workflow spec validation fails fast on invalid YAML/JSON.
 - [ ] Error output includes the failed phase and worker id.
+- [ ] Failed runs include default failure policy metadata and a human-readable failure summary.
 
 ## Explicit Non-Goals For MVP
 
@@ -71,6 +78,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - Generated JavaScript workflow scripts.
 - Non-Codex model adapters.
 - Automatic code modification workflows.
+- Workflow registry.
 - Publishing to npm.
 
 ## Stop Conditions

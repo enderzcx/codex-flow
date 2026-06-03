@@ -42,6 +42,8 @@ Do not use this skill for:
 cwf validate workflows/diff-review.yaml
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
+cwf latest --target <repo>
+cwf show <run-id>
 cwf result <run-id>
 ```
 
@@ -68,11 +70,19 @@ During running:
 - inspect `events.jsonl` when status looks stale
 - cancel only when the user asks or when the run clearly cannot complete
 
+When the run id is unknown:
+
+- use `cwf latest --target <repo>` for the most recent run on a repo
+- use `cwf list --limit <n>` for recent runs
+- use `cwf list --status failed` to find failed runs
+- trust discovery to rebuild `~/.codex-workflows/index.json` from run folders when needed
+
 After running:
 
 - summarize final findings
 - point to `result.md`
 - mention worker failures or raw fallback if any
+- mention failure summary and next step for failed runs
 - verify the target diff hash did not change when read-only review was expected
 
 ## Completion Evidence
@@ -84,6 +94,7 @@ The skill should ask Codex to report:
 - worker statuses
 - result path
 - whether fallback occurred
+- failure policy and summary when status is `failed`
 - whether the target diff changed
 - short human summary of what the run did, not only raw artifact paths
 

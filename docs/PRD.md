@@ -29,6 +29,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Support foreground and background runs.
 - Show readable status during long runs, including current work, worker progress, fallback count, and artifact paths.
 - Provide a live-refresh CLI view for background runs.
+- Let users list, show, and reopen the latest run without remembering run ids.
+- Rebuild discovery data from run folders when the local index is missing, stale, or corrupt.
+- Record default failure policy metadata and summarize failures in human-readable terms.
 - Keep the public MVP free of private adapters or third-party model routing.
 
 ## Non-Goals
@@ -51,6 +54,8 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 6. As a tool maintainer, I can mock worker failure and verify failed runs are recorded correctly.
 7. As a user returning to a background run, I can understand the current state without reading raw JSON first.
 8. As a user watching a long run, I can run `cwf watch <run-id>` and see the status refresh until the run finishes.
+9. As a user who forgot a run id, I can run `cwf list`, `cwf latest`, or `cwf show <run-id>` to find and inspect the run.
+10. As a user debugging a failed run, I can read the failed phase, failed workers, policy, and suggested next step without opening raw JSON first.
 
 ## Success Criteria
 
@@ -62,9 +67,14 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - `cwf cancel <run-id>` cancels an in-progress background run.
 - `cwf status <run-id>` shows current work, phase durations, worker progress, fallback count, and artifact paths.
 - `cwf watch <run-id>` refreshes status and exits automatically when the run finishes.
+- `cwf list [--limit <n>] [--status <status>] [--target <path>]` lists recent runs.
+- `cwf latest [--target <path>]` shows the newest run overall or for a target.
+- `cwf show <run-id>` prints the same human-readable run detail as status plus discovery commands.
+- `~/.codex-workflows/index.json` is rebuilt from run folders when missing, stale, or corrupt.
 - Run artifacts are persisted under `~/.codex-workflows/runs/<run-id>/`.
 - Read-only review does not modify the target repo diff.
 - Mocked all-worker failure records failed state, events, and worker JSON.
+- Failed runs include default failure policy metadata and a readable failure summary.
 
 ## Public Positioning
 

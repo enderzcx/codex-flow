@@ -158,7 +158,6 @@ Every run writes a durable folder:
 
 Later versions add:
 
-- run index
 - artifact manifest
 - resume metadata
 - parent/child run links
@@ -167,6 +166,15 @@ Later versions add:
 ### Failure Model
 
 Every phase needs predictable failure behavior.
+
+v0.3 stores a default failure policy in each run:
+
+- worker failures continue when at least one Codex worker succeeds
+- all-worker failure fails the run
+- target diff changes fail the run
+- unhandled errors fail the run
+
+Failed runs also store a readable failure summary with the failed phase, failed workers when known, and a next-step hint.
 
 Supported failure policies:
 
@@ -243,18 +251,17 @@ Includes:
 
 Goal: make background runs easy to find and failures easy to understand.
 
-Status: next slice. `watch` already exists; remaining work is discovery plus failure semantics.
+Status: implemented.
 
 Deliverables:
 
-- `cwf list`
+- `cwf list [--limit <n>] [--status <status>] [--target <path>]`
 - `cwf show <run-id>`
 - `cwf latest [--target <path>]`
-- run index or rebuildable run discovery
-- last event summary
+- run index at `~/.codex-workflows/index.json`
+- rebuild from run folders when the index is missing, stale, or corrupt
 - explicit phase failure policy defaults
-- clearer failed/degraded status output
-- timeout and retry metadata in state
+- human-readable failure summaries in `status`/`show`
 
 Acceptance:
 
@@ -425,7 +432,7 @@ These are valuable but not core v1.0:
   - Evidence: `cwf watch <run-id>`
 
 - [ ] A user can inspect failure causes.
-  - Evidence: failed run status/result includes phase, policy, error, last event
+  - Evidence: failed run status/show includes phase, policy, error, failed workers when known, and next step
 
 - [ ] A user can pause and resume gated work.
   - Evidence: gate fixture approve/reject/resume smoke
@@ -438,13 +445,12 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v0.3:
+The next useful implementation slice is v0.4:
 
-1. Add `cwf list`.
-2. Add `cwf show <run-id>`.
-3. Add `cwf latest`.
-4. Add rebuildable run discovery.
-5. Add explicit failure policy defaults and better failure summaries.
-6. Keep `diff-review` as the only workflow.
+1. Add explicit gates.
+2. Add approve/reject/resume commands.
+3. Preserve read-only `diff-review` as the stable default.
+4. Require gates before any future write-capable phase.
+5. Keep workflow registry work deferred to v0.5.
 
-Why this first: it improves real user experience and reliability without expanding the workflow surface.
+Why this next: discovery is now in place, so the next reliability gap is safe pause/resume before any write-capable workflow exists.

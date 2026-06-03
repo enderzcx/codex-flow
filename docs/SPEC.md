@@ -9,6 +9,9 @@ cwf dry-run <workflow.yaml>
 cwf run <workflow.yaml> --target <repo> [--background]
 cwf status <run-id>
 cwf watch <run-id> [--interval <ms>] [--once]
+cwf list [--limit <n>] [--status <status>] [--target <repo>]
+cwf latest [--target <repo>]
+cwf show <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -34,6 +37,7 @@ Required phases:
 Each run writes:
 
 ```text
+~/.codex-workflows/index.json
 ~/.codex-workflows/runs/<run-id>/
   workflow.json
   state.json
@@ -46,6 +50,22 @@ Each run writes:
   result.md
 ```
 
+`index.json` is a rebuildable discovery cache, not the source of truth. `cwf list`, `cwf latest`, and `cwf show` verify freshness before use. If the index is missing, stale, or corrupt, they rebuild it from `~/.codex-workflows/runs/*/state.json`.
+
+Index entries contain:
+
+- `id`
+- `workflow`
+- `status`
+- `target`
+- `run_dir`
+- `created_at`
+- `updated_at`
+- optional `result_path`
+- optional `log_path`
+- optional `error`
+- optional `failure_summary`
+
 ## State Contract
 
 `state.json` contains:
@@ -55,6 +75,7 @@ Each run writes:
 - `status`
 - `target`
 - `run_dir`
+- `failure_policy`
 - `phases`
 - `workers`
 - `created_at`
@@ -63,6 +84,20 @@ Each run writes:
 - optional `log_path`
 - optional `background_pid`
 - optional `error`
+- optional `failure_summary`
+
+Default `failure_policy`:
+
+```json
+{
+  "worker_failure": "continue_if_any_worker_succeeds",
+  "all_workers_failed": "fail_run",
+  "target_diff_changed": "fail_run",
+  "unhandled_error": "fail_run"
+}
+```
+
+`failure_summary` contains a readable title, detail, failed phase when known, failed workers, and a next-step hint.
 
 Statuses:
 
@@ -81,6 +116,8 @@ Statuses:
 - run status
 - plain-language current work
 - target path
+- failure policy summary
+- failure summary for failed runs
 - completed worker count
 - raw fallback count
 - active phase when a phase is running
@@ -92,6 +129,14 @@ Statuses:
 If `result.md` is not ready, status prints `Result: not ready yet`.
 
 `cwf result <run-id>` must print a useful error when the report is missing and point users back to `cwf status <run-id>`.
+
+## Discovery Output Contract
+
+`cwf list [--limit <n>] [--status <status>] [--target <repo>]` prints recent runs, newest first. Default limit is 20. `--target` resolves the path before filtering.
+
+`cwf latest [--target <repo>]` prints the newest run detail, using the same format as `cwf show`.
+
+`cwf show <run-id>` prints status-style run detail plus discovery commands that help users list similar runs or open the latest run for that target.
 
 ## Watch Output Contract
 
@@ -206,6 +251,8 @@ Planned contract:
 - Default worker sandbox is read-only.
 - The target repo's tracked diff hash is checked before and after worker review.
 - If the diff changes during review, the run fails.
+- If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, and show output.
+- If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
 - Public MVP has no private adapters or third-party model routing.
 
 ## Known Limitations
@@ -214,4 +261,5 @@ Planned contract:
 - Background runs are process-based, not daemon-backed.
 - No retry/rate-limit manager yet.
 - No workflow plugin system yet.
+- Discovery is a run index only, not a workflow registry.
 - No stable Codex Desktop app-server handoff yet.

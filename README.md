@@ -54,6 +54,9 @@ Run in the background:
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
 cwf watch <run-id>
+cwf latest --target <repo>
+cwf list --target <repo>
+cwf show <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
@@ -62,9 +65,12 @@ cwf cancel <run-id>
 
 `cwf watch <run-id>` refreshes the same status view until the run reaches `completed`, `failed`, or `cancelled`. Use `--interval <ms>` to tune the refresh rate, or `--once` for one non-clearing snapshot.
 
+`cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
+
 Run artifacts are stored under:
 
 ```text
+~/.codex-workflows/index.json
 ~/.codex-workflows/runs/<run-id>/
   workflow.json
   state.json
@@ -93,6 +99,7 @@ Workflow: diff-review
 Status: completed
 Now: done; open the result report
 Target: /path/to/repo
+Failure policy: worker failures are tolerated when at least one Codex worker succeeds; all-worker failure, target diff changes, and unhandled errors fail the run.
 Workers: 3/3 completed, 0 fallback
 Phases:
 - collect: completed (1s)
@@ -108,6 +115,17 @@ Artifacts:
 - Workers: ~/.codex-workflows/runs/run_.../workers/*.json
 - Result: ~/.codex-workflows/runs/run_.../result.md
 ```
+
+Example discovery:
+
+```bash
+cwf list --limit 5
+cwf list --status failed
+cwf latest --target fixtures/diff-review
+cwf show run_...
+```
+
+Failed runs include a readable failure summary in `status` and `show`, including the failed phase, failed workers when known, and the next artifact or connectivity check to inspect.
 
 ## How It Differs From Claude Dynamic Workflows
 
@@ -130,6 +148,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
 - Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
+- Discovery is local and rebuildable; it is not a workflow registry.
 - Codex Desktop app-server handoff is planned, but not part of the stable CLI core yet.
 
 ## Verification
@@ -146,6 +165,7 @@ The MVP has been smoke-tested on:
 - foreground and background runs
 - cancellation
 - mocked Codex SDK worker failure
+- run discovery, latest lookup, index rebuild, and show formatting
 - workflow validation and human-readable status formatting
 
 ## Docs

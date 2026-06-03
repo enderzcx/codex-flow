@@ -65,6 +65,7 @@ export type RunState = {
   status: PhaseStatus;
   target: string;
   run_dir: string;
+  failure_policy: FailurePolicy;
   phases: PhaseState[];
   workers: WorkerState[];
   created_at: string;
@@ -73,6 +74,42 @@ export type RunState = {
   log_path?: string;
   background_pid?: number;
   error?: string;
+  failure_summary?: FailureSummary;
+};
+
+export type FailurePolicy = {
+  worker_failure: "continue_if_any_worker_succeeds";
+  all_workers_failed: "fail_run";
+  target_diff_changed: "fail_run";
+  unhandled_error: "fail_run";
+};
+
+export type FailureSummary = {
+  title: string;
+  detail: string;
+  failed_phase?: string;
+  failed_workers: string[];
+  next_step: string;
+};
+
+export type RunIndexEntry = {
+  id: string;
+  workflow: string;
+  status: PhaseStatus;
+  target: string;
+  run_dir: string;
+  created_at: string;
+  updated_at: string;
+  result_path?: string;
+  log_path?: string;
+  error?: string;
+  failure_summary?: FailureSummary;
+};
+
+export type RunIndex = {
+  version: 1;
+  generated_at: string;
+  runs: RunIndexEntry[];
 };
 
 export type DiffContext = {

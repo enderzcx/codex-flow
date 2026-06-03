@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatHelp, formatStatus, formatWatchFrame } from "../src/cli.js";
+import { DEFAULT_FAILURE_POLICY } from "../src/run-index.js";
+import { formatHelp, formatRunList, formatRunShow, formatStatus, formatWatchFrame } from "../src/cli.js";
 import type { RunState, WorkerResult } from "../src/types.js";
 
 describe("CLI output formatting", () => {
@@ -10,6 +11,9 @@ describe("CLI output formatting", () => {
     expect(help).toContain("cwf run workflows/diff-review.yaml --target . --background");
     expect(help).toContain("cwf status <run-id>");
     expect(help).toContain("cwf watch <run-id>");
+    expect(help).toContain("cwf list [--limit <n>] [--status <status>] [--target <repo>]");
+    expect(help).toContain("cwf latest [--target <repo>]");
+    expect(help).toContain("cwf show <run-id>");
   });
 
   it("explains active work and artifact paths in status output", () => {
@@ -50,6 +54,7 @@ describe("CLI output formatting", () => {
     const output = formatStatus(state, workerResults, Date.parse("2026-01-01T00:00:05.000Z"));
 
     expect(output).toContain("Now: reviewing diff with tests");
+    expect(output).toContain("Failure policy: worker failures are tolerated");
     expect(output).toContain("Workers: 1/3 completed, 1 fallback");
     expect(output).toContain("Active phase: review");
     expect(output).toContain("- tests: running (3s)");
@@ -88,6 +93,49 @@ describe("CLI output formatting", () => {
     expect(output).toContain("Auto-refresh: 500ms");
     expect(output).toContain("Now: reviewing diff with correctness");
   });
+
+  it("formats discovered run lists", () => {
+    const output = formatRunList([
+      {
+        id: "run_20260101000000_a",
+        workflow: "diff-review",
+        status: "completed",
+        target: "/tmp/repo",
+        run_dir: "/tmp/runs/run_20260101000000_a",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:01.000Z",
+      },
+    ]);
+
+    expect(output).toContain("Run ID");
+    expect(output).toContain("run_20260101000000_a");
+    expect(output).toContain("completed");
+    expect(output).toContain("/tmp/repo");
+  });
+
+  it("shows failure summaries in run detail output", () => {
+    const state = createState({
+      status: "failed",
+      error: "All Codex SDK workers failed; verify Codex SDK connectivity before changing architecture.",
+      phases: [
+        { id: "collect", status: "completed" },
+        { id: "review", status: "failed", error: "All Codex SDK workers failed; verify Codex SDK connectivity before changing architecture." },
+        { id: "reduce", status: "pending" },
+      ],
+      workers: [
+        { id: "correctness", status: "failed", error: "mock failure" },
+        { id: "tests", status: "failed", error: "mock failure" },
+      ],
+    });
+
+    const output = formatRunShow(state);
+
+    expect(output).toContain("Failure summary: review phase failed");
+    expect(output).toContain("Failed workers: correctness, tests");
+    expect(output).toContain("Check Codex SDK connectivity");
+    expect(output).toContain("Discovery:");
+    expect(output).toContain("cwf latest --target /tmp/repo");
+  });
 });
 
 function createState(overrides: Partial<RunState> = {}): RunState {
@@ -97,6 +145,7 @@ function createState(overrides: Partial<RunState> = {}): RunState {
     status: "running",
     target: "/tmp/repo",
     run_dir: "/tmp/cwf",
+    failure_policy: DEFAULT_FAILURE_POLICY,
     created_at: "2026-01-01T00:00:00.000Z",
     updated_at: "2026-01-01T00:00:00.000Z",
     phases: [],

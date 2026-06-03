@@ -3,6 +3,7 @@ import { collectDiffContext, currentDiffHash } from "./adapters/command-step.js"
 import { runCodexWorker, type RunCodexWorkerOptions } from "./adapters/codex-worker.js";
 import { reduceDiffReview } from "./reducers/diff-review-reducer.js";
 import { renderMarkdownResult } from "./renderers/markdown-result.js";
+import { buildFailureSummary } from "./run-index.js";
 import { RunStore } from "./run-store.js";
 import type { DiffContext, WorkerResult, WorkflowSpec, WorkflowWorker } from "./types.js";
 
@@ -99,6 +100,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
     const state = await store.readState();
     state.status = "failed";
     state.error = error instanceof Error ? error.message : String(error);
+    state.failure_summary = buildFailureSummary(state, state.error);
     await store.writeState(state);
     await store.appendEvent("run.failed", { error: state.error });
     throw error;
