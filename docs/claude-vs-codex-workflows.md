@@ -41,12 +41,12 @@ What will be different in the public Codex Flow engine:
 | Layer | Claude Dynamic Workflows | Codex Flow public engine |
 |---|---|---|
 | Trigger | `workflow` keyword, saved commands, `/deep-research`, `ultracode` | explicit `cwf run <workflow>` or Codex skill call |
-| Runtime | Claude Code native workflow runtime | external Node/TS runner |
-| Worker | Claude subagents | Codex SDK threads |
+| Runtime | Claude Code native workflow runtime | CWF run-store/reducer plus Codex-native bridge |
+| Worker | Claude subagents | Codex worker agents executed as threads/subagents where available; SDK headless fallback in v1.0 |
 | State | workflow script variables and runtime tracking | run folder with `state.json`, `events.jsonl`, worker outputs |
 | Script/spec | Claude-written JavaScript script | constrained YAML/JSON spec first |
 | Monitoring | `/workflows` UI and task panel | `cwf status`, `cwf watch`, log files |
-| Output | final report in session | final report printed and saved |
+| Output | final report in session | final report saved, returned through skill wrapper, or posted to explicit Codex thread |
 | Permissions | Claude tool allowlist + workflow behavior | Codex sandbox/approval settings per worker |
 | Reuse | saved workflow command under `.claude/workflows` or `~/.claude/workflows` | saved workflow specs under project/global workflow folders |
 
@@ -62,7 +62,19 @@ The principle is the same:
 
 The difference is where the runtime lives.
 
-Claude's runtime is built into Claude Code. `codex-workflows` runtime would live as a public CLI/SDK layer that calls Codex SDK.
+Claude's runtime is built into Claude Code. `codex-workflows` runtime lives as a public workflow layer that owns specs, run state, gates, artifacts, and reducers while reusing Codex threads, subagents, approvals, sandboxing, and worktrees where available.
+
+## Agent vs Thread Mapping
+
+Claude's subagent is both a delegated role and an isolated execution context from the user's point of view.
+
+For Codex Flow, keep the terms separate:
+
+- **worker agent**: the role/config declared by the workflow.
+- **worker thread**: the concrete Codex conversation/subagent instance that runs that role.
+- **coordinator thread**: the user-visible supervisor surface that receives the workflow result.
+
+This lets Codex Flow use Codex-native subagents when available without making the workflow spec depend on one UI or one transport.
 
 ## Product Implication
 
@@ -84,14 +96,15 @@ Do not:
 - Add private model adapters to the public version.
 - Claim exact parity with Claude Dynamic Workflows.
 
-## Planned Codex App Thread Integration
+## Planned Native Codex Runtime Bridge
 
 Codex already has app-server thread lifecycle methods, turn events, review threads, skills, plugins, approvals, sandboxing, and subagent metadata. That is the substrate Codex Flow should reuse.
 
 For `codex-workflows`, this should be a guarded integration on top of the stable CLI core:
 
 - stable core: `cwf run`, `cwf status`, `cwf watch`, `cwf result`
-- future Desktop mode: create named visible Codex threads from a workflow result
+- native bridge: create named visible Codex coordinator threads from a workflow result
+- worker agent threads: run workers as Codex threads/subagents where available
 - current conversation return: use a Codex skill wrapper or an explicit app-server thread id
 - write-capable workflows: reuse Codex worktrees, sandbox, approvals, permissions profiles, and subagents
 - fallback: generate a local prompt/session handoff when app-server is unavailable

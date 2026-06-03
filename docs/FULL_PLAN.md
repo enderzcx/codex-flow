@@ -7,19 +7,19 @@ archive_at: 2026-07-03
 
 ## Plain Summary
 
-Codex Flow should become a Codex-native workflow engine for inspectable, resumable, multi-worker engineering workflows.
+Codex Flow should become a Codex-native workflow layer for inspectable, resumable, multi-agent engineering workflows.
 
 The full product is not "Claude Dynamic Workflows, copied line by line." It should match the useful effect:
 
 - one command starts a complex task
 - the task is split into phases
-- focused Codex workers run in parallel or sequence
+- focused Codex worker agents run in parallel or sequence
 - progress and failures are visible outside the chat
 - intermediate evidence is saved
 - unsafe steps can pause for approval
 - a reducer turns worker output into one actionable result
 
-The important word is **engine**. Codex Flow should first become a reliable workflow runtime, then grow a workflow registry and example workflow packs.
+The important phrase is **thin workflow layer**. Codex Flow owns the repeatable workflow contract and evidence trail, while Codex owns threads, subagents, sandbox, approvals, permissions, and worktrees.
 
 ## What "Dynamic" Means
 
@@ -103,13 +103,17 @@ User / Codex skill
   -> Workflow Validator
   -> Run Store
   -> Failure Model
-  -> Phase Engine
-      -> command
-      -> codex-parallel
-      -> codex-sequential
-      -> reducer
-      -> gate
-      -> handoff
+  -> Coordinator
+      -> optional Codex App coordinator thread
+      -> Phase Engine
+          -> command
+          -> codex-parallel
+          -> codex-sequential
+          -> native worker agent thread
+          -> detached native review thread
+          -> reducer
+          -> gate
+          -> result return
   -> Status / Watch / List / Show / Result
 ```
 
@@ -199,6 +203,13 @@ Supported phase kinds over time:
 ### Worker Model
 
 Workers are Codex-only in the public core.
+
+The workflow spec describes a worker agent role. The runtime chooses an execution adapter:
+
+- SDK headless worker for v1.0 CLI stability
+- Codex App thread for Desktop-visible work
+- Codex subagent when native subagent tools are available
+- detached Codex review thread for review-shaped workflows
 
 Each worker declares:
 
@@ -457,11 +468,14 @@ Detailed post-v1 PRDs, specs, acceptance criteria, and goal prompts live in [POS
 
 ## Next Best Slice
 
-The next useful implementation slice is post-v1.0 release operations:
+The next useful implementation slice is the native runtime bridge:
 
-1. Decide whether and where to publish the package.
-2. Add CI release checks around the documented command smoke suite.
-3. Explore a second reducer contract only if a non-review workflow needs it.
-4. Keep Codex App thread integration and write-capable workflows behind explicit future gates.
+1. Keep the stable CLI run store unchanged.
+2. Add app-server coordinator thread creation and result return.
+3. Record native runtime metadata in artifacts.
+4. Then map workers to native agent threads/subagents.
+5. Only after that, add write-capable workflows behind Codex-native gates.
 
-Why this next: the stable CLI core is ready; the next work is distribution discipline, not more runtime scope.
+Exact v1.x numbering lives in [POST_V1_PLAN.md](POST_V1_PLAN.md).
+
+Why this next: v1.0 proved the engine. The next gap is user-visible Codex-native collaboration, not more example workflows.

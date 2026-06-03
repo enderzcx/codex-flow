@@ -2,23 +2,28 @@
 
 ## Summary
 
-Codex Flow is a Codex-native workflow runner for repeatable multi-worker engineering review. The public pack focuses on read-only review workflows.
+Codex Flow is a Codex-native workflow layer for repeatable multi-agent engineering work.
+
+v1.0 is the stable CLI engine: read-only workflows, filesystem run store, worker envelopes, gates, and reducer output.
+
+Post-v1 should move closer to Codex's native product model: a coordinator thread starts workflow work, worker agents run in their own threads, results return to a Codex conversation, and write-capable work uses Codex's own sandbox, approvals, permissions, and worktrees.
 
 ## Problem
 
-Codex is strong in a single session, but large diffs benefit from parallel independent review perspectives. Today that orchestration is usually ad hoc:
+Codex is strong in a single session, but complex engineering work benefits from repeatable phases, independent worker contexts, and a durable evidence trail. Today that orchestration is usually ad hoc:
 
 - prompts are copied by hand
 - intermediate results disappear into chat context
 - review perspectives are not repeatable
 - long runs provide little progress visibility
 - failures are hard to inspect after the fact
+- Desktop-visible Codex threads, subagents, and approval controls exist, but there is no small public workflow contract that ties them to reusable specs, run artifacts, and reducer output
 
 ## Target Users
 
-- Engineers using OpenAI Codex CLI or SDK.
+- Engineers using OpenAI Codex CLI, SDK, or App.
 - Maintainers who want repeatable branch or PR review without another LLM stack.
-- Builders interested in dynamic workflow patterns but wanting to stay Codex-native.
+- Builders interested in dynamic workflow patterns who want to stay Codex-native instead of building a separate agent platform.
 
 ## Goals
 
@@ -43,12 +48,16 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Ship read-only example workflows for repo audit, implementation-plan review, research cross-check, and release review.
 - Document when to use and when not to use each bundled workflow.
 - Keep the public v1.0 core free of private adapters or third-party model routing.
+- Define the post-v1 native runtime bridge: coordinator thread, worker agent threads, result return, and Codex safety inheritance.
+- Keep Codex Flow-owned pieces limited to workflow specs, run-store evidence, gates, artifact manifests, and reducers.
 
 ## Non-Goals
 
 - No automatic code modification.
 - No non-Codex model routing.
 - No UI.
+- No custom subagent scheduler that duplicates Codex's own subagent mechanism.
+- No custom sandbox or approval system that bypasses Codex permissions.
 - No generated workflow scripts.
 - No broad workflow marketplace in v1.0.
 - No production write-capable workflow in this release.
@@ -77,6 +86,10 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 16. As a user, I can run either `cwf run diff-review --target <repo>` or `cwf run workflows/diff-review.yaml --target <repo>`.
 17. As a reviewer, I can trust the final output because it preserves worker provenance, raw fallback status, and the artifact evidence used to render the report.
 18. As a user, I can choose `repo-audit`, `implementation-plan`, `research-crosscheck`, or `release-review` from the catalog when my review goal is broader than a code diff review.
+19. As a Codex App user, I can ask a workflow to create a visible supervisor thread instead of hiding all progress in a detached CLI process.
+20. As a Codex user in an active conversation, I can get the workflow result back in this conversation through the Codex skill wrapper.
+21. As a workflow author, I can describe worker roles while Codex Flow decides whether the current runtime uses SDK headless workers, app-server threads, or Codex subagents.
+22. As a cautious user, I can allow write-capable workflows only when they pass a workflow gate and then run through Codex's own sandbox, approval, and worktree/thread boundaries.
 
 ## Success Criteria
 
@@ -110,13 +123,21 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - `cwf workflows validate` validates all bundled workflows.
 - Each bundled example workflow has fixture coverage and at least one real smoke.
 - Workflow catalog documents when to use and when not to use each bundled workflow.
+- Post-v1 native mode can create a named Codex App supervisor thread and record its thread id.
+- Post-v1 result return works through the skill wrapper or an explicit app-server thread id; it must not guess the current thread from a thread list.
+- Post-v1 worker execution treats "agent" as the role/config and "thread" as the run instance.
+- Post-v1 write-capable phases run only after a gate and inherit Codex sandbox/approval/permissions behavior.
 
 ## Public Positioning
 
-Codex Flow is a thin Codex-native workflow runner. It is not an orchestration framework, not a multi-model router, and not an enterprise queue. The v1.0 public core is intentionally small so the run contract is easy to understand and verify.
+Codex Flow is a thin Codex-native workflow layer. It is not a multi-model router, not an enterprise queue, and not a replacement for Codex subagents, threads, worktrees, approvals, or plugins.
+
+The public core owns the workflow contract and evidence trail: specs, state, events, worker envelopes, gates, reducer output, and artifact manifests.
+
+Codex owns the agent execution boundary: threads, subagents, sandbox, approvals, permissions, and file writes.
 
 ## Future: Codex App Thread Integration
 
-Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. A later release should add guarded Codex App integration so a workflow can create a named left-sidebar Codex thread, return results to a known Codex conversation, and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
+Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. A later release should add a native runtime bridge so a workflow can create a named left-sidebar coordinator thread, run worker agents as Codex threads/subagents, return results to a known Codex conversation, and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
 
 The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.

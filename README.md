@@ -1,10 +1,12 @@
 # Codex Flow
 
-A lightweight, Codex-native workflow runner for multi-agent code review.
+A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The public pack ships read-only workflows that start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The v1.0 public pack ships read-only CLI workflows that start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report.
+
+The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
@@ -191,7 +193,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Run discovery is local and rebuildable.
 - Workflow registry is local filesystem discovery only; there is no remote marketplace.
 - Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
-- Codex App thread integration is planned, but not part of the stable CLI core yet.
+- Codex App coordinator threads, worker agent threads, and result return are planned, but not part of the stable CLI core yet.
 
 ## Verification
 
@@ -225,6 +227,7 @@ The v1.0 release has been smoke-tested on:
 - [Full plan](docs/FULL_PLAN.md)
 - [Phase contracts](docs/PHASE_CONTRACTS.md)
 - [Post-v1 plan](docs/POST_V1_PLAN.md)
+- [Codex native capability audit](docs/CODEX_NATIVE_CAPABILITY_AUDIT.md)
 - [Skill plan](docs/SKILL_PLAN.md)
 - [Workflow catalog](docs/workflow-catalog.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)

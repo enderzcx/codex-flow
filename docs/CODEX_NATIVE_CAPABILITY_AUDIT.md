@@ -12,15 +12,16 @@ Plain Chinese summary:
 
 - Codex Flow should not build its own hidden agent platform.
 - Codex already has App Server threads, turns, approvals, sandboxing, skills, plugins, and subagents.
-- For Desktop users, workflow work should appear as Codex threads in the left sidebar.
+- For Desktop users, workflow coordination should appear as a Codex thread in the left sidebar.
 - Results should come back to the Codex conversation through a known thread id or through the Codex skill wrapper.
 - Write-capable workflows should run through Codex's own sandbox, approval, and worktree/thread model, not through a custom file editor.
+- In CWF terms, an agent is a role/config and a thread is the concrete execution instance.
 
 ## What Exists Now
 
 | Need | Codex-native capability | Evidence checked | Codex Flow decision |
 |---|---|---|---|
-| Visible left-sidebar work | App Server `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`; generated schema includes `thread/started` and `thread/status/changed` notifications | Official manual plus local `codex app-server generate-ts --experimental`; read-only `thread/list` smoke passed | Build an app-server adapter instead of inventing a sidebar/task UI |
+| Visible left-sidebar work | App Server `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`; generated schema includes `thread/started` and `thread/status/changed` notifications | Official manual plus local `codex app-server generate-ts --experimental`; read-only `thread/list` smoke passed | Build an app-server coordinator-thread adapter instead of inventing a sidebar/task UI |
 | Result back into Codex | App Server can start/steer turns and inject items into a known thread with `thread/inject_items`; Codex skill calls can also read `cwf result` and answer in the current conversation | Generated schema includes `thread/inject_items`; current session can return CLI output through normal Codex response | Support both: structured CLI result for skill return, and explicit app-server post to a known thread id |
 | Parallel subagents | Codex subagents are enabled by default, surfaced in Codex app and CLI, and inherit sandbox/approval controls | Official Subagents manual; current tool surface exposes `spawn_agent`, `wait_agent`, `send_input`, `close_agent` | Prefer Codex subagents/threads for future worker execution instead of only SDK headless workers |
 | Code/file edits | Codex App, CLI, SDK, and app-server support workspace-write/full-access sandbox modes, approval policy, permissions profiles, worktrees, file-change events, and diff updates | Official approvals/sandbox/app-server schema; schema includes file-change notifications and sandbox/permissions params | Write-capable workflows must run as Codex threads/worktrees with approvals, not as raw `fs.writeFile` workflow steps |
@@ -39,23 +40,35 @@ Codex Flow v1.0 uses `@openai/codex-sdk` to start read-only SDK threads for work
 So the next integration should be additive:
 
 1. Keep the v1.0 CLI run store as the durable evidence trail.
-2. Add a Codex App Server adapter for Desktop-visible threads.
-3. Add a Codex skill wrapper that runs `cwf`, reads the result, and returns the human summary in the current Codex conversation.
-4. Add write-capable workflows only through Codex thread/worktree execution with explicit gates.
+2. Add a Codex App Server adapter for Desktop-visible coordinator threads.
+3. Add worker adapters that can map workflow workers to Codex worker agent threads/subagents.
+4. Add a Codex skill wrapper that runs `cwf`, reads the result, and returns the human summary in the current Codex conversation.
+5. Add write-capable workflows only through Codex thread/worktree execution with explicit gates.
 
 ## Required Architecture Direction
 
-### Desktop Thread Mode
+### Coordinator Thread Mode
 
 When a user asks for Desktop integration, `cwf` should:
 
 1. probe `codex app-server` compatibility;
-2. create a visible supervisor thread with `thread/start`;
+2. create a visible coordinator thread with `thread/start`;
 3. set a readable name, for example `Codex Flow: diff-review <run-id>`;
 4. start a turn that contains the run result, artifact paths, and next action;
 5. record `thread_id`, `turn_id`, app-server version, and fallback status in the run folder.
 
-Per-worker live sidebar threads are desirable, but they should use Codex-native subagent/thread behavior. Do not fake them with custom process logs.
+### Worker Agent Thread Mode
+
+Per-worker live sidebar threads should use Codex-native subagent/thread behavior. Do not fake them with custom process logs.
+
+Runtime adapters should normalize all worker outputs into the same envelope:
+
+- `codex-sdk-headless`: current v1.0 fallback.
+- `codex-app-thread`: app-server worker thread.
+- `codex-subagent`: native subagent worker.
+- `codex-review-detached`: app-server detached review thread.
+
+Reducer logic must not depend on the adapter.
 
 ### Current Conversation Return
 
@@ -103,5 +116,6 @@ User-created workflows must be YAML/JSON specs that pass validation before execu
 - A controlled `thread/start` smoke creates a named thread and records its id.
 - A `turn/start` smoke posts a result summary and reaches `turn/completed`.
 - `cwf desktop result <run-id>` records thread/turn metadata.
+- Worker agent thread metadata can be recorded without changing reducer behavior.
 - If app-server is unavailable, `cwf` keeps the local result and reports a clear fallback.
 - Existing `cwf run/status/watch/result` continues to pass without Desktop.

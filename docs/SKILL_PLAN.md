@@ -8,6 +8,8 @@
 
 Teach Codex when and how to use the local `cwf` runner for repeatable Codex-native workflows.
 
+The skill is the main path for returning workflow results to the current Codex conversation: run `cwf`, read the result artifact, and summarize it in the active thread.
+
 ## Current Skill Path
 
 ```text
@@ -132,7 +134,8 @@ The skill should ask Codex to report:
 Only after v1.0 release readiness is stable:
 
 - CI release smoke wrapper
-- Codex App thread integration with left-sidebar result threads
+- native runtime bridge with coordinator threads and result return
+- worker agent thread integration
 - GitHub PR review output
 - migration plan workflow
 - generated workflow spec suggestions
