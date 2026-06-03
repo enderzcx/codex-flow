@@ -9,11 +9,22 @@ import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { describeFailurePolicy, latestRun, listRuns, normalizeRunState, showRun } from "./run-index.js";
 import { RunStore } from "./run-store.js";
+import {
+  formatWorkflowList,
+  formatWorkflowShow,
+  listWorkflowEntries,
+  resolveWorkflowReference,
+  showWorkflow,
+  validateWorkflowRegistry,
+  workflowSearchPaths,
+} from "./workflow-registry.js";
 import type { PhaseState, PhaseStatus, RunIndexEntry, RunState, WorkerResult } from "./types.js";
 
 type ParsedArgs = {
   command?: string;
   workflowPath?: string;
+  workflowSubcommand?: string;
+  workflowRef?: string;
   target?: string;
   runId?: string;
   background?: boolean;
@@ -34,16 +45,14 @@ async function main(argv: string[]): Promise<void> {
 
   if (args.command === "run") {
     if (!args.workflowPath) {
-      throw new Error("Please tell me which workflow to run. Example: cwf run workflows/diff-review.yaml --target .");
+      throw new Error("Please tell me which workflow to run. Example: cwf run diff-review --target .");
     }
     if (!args.target) {
-      throw new Error("Please pass --target <repo>. Example: cwf run workflows/diff-review.yaml --target .");
+      throw new Error("Please pass --target <repo>. Example: cwf run diff-review --target .");
     }
-    const specPath = resolve(args.workflowPath);
     const target = resolve(args.target);
-    await assertPathExists(specPath, "workflow spec");
     await assertPathExists(target, "target repo");
-    const spec = await loadWorkflowSpec(specPath);
+    const { spec, path: specPath } = await resolveWorkflowReference(args.workflowPath);
     if (args.background) {
       const store = await RunStore.create(spec, target);
       await startBackgroundRun(store, specPath, target);
@@ -63,17 +72,37 @@ async function main(argv: string[]): Promise<void> {
     if (!args.workflowPath) {
       throw new Error("Please tell me which workflow to validate. Example: cwf validate workflows/diff-review.yaml");
     }
-    const specPath = resolve(args.workflowPath);
-    await assertPathExists(specPath, "workflow spec");
-    const spec = await loadWorkflowSpec(specPath);
-    console.log(`Workflow OK: ${spec.id}@${spec.version}`);
-    console.log(`Phases: ${spec.phases.map((phase) => phase.id).join(" -> ")}`);
-    const reviewPhase = spec.phases.find((phase) => phase.kind === "codex-parallel");
-    if (reviewPhase?.kind === "codex-parallel") {
-      console.log(`Workers: ${reviewPhase.workers.map((worker) => worker.id).join(", ")}`);
-    }
-    console.log("No Codex workers were started.");
+    const { spec, path: specPath } = await resolveWorkflowReference(args.workflowPath);
+    printWorkflowValidation(spec, specPath);
     return;
+  }
+
+  if (args.command === "workflows") {
+    if (args.workflowSubcommand === "list") {
+      console.log(formatWorkflowList(await listWorkflowEntries()));
+      return;
+    }
+    if (args.workflowSubcommand === "show") {
+      if (!args.workflowRef) {
+        throw new Error("Usage: cwf workflows show <workflow-id-or-path>");
+      }
+      console.log(formatWorkflowShow(await showWorkflow(args.workflowRef)));
+      return;
+    }
+    if (args.workflowSubcommand === "validate") {
+      if (args.workflowRef) {
+        const { spec, path: specPath } = await resolveWorkflowReference(args.workflowRef);
+        printWorkflowValidation(spec, specPath);
+        return;
+      }
+      const entries = await validateWorkflowRegistry();
+      console.log(`Workflow registry OK: ${entries.length} workflow${entries.length === 1 ? "" : "s"}`);
+      for (const path of workflowSearchPaths()) {
+        console.log(`Search path: ${path}`);
+      }
+      return;
+    }
+    throw new Error("Usage: cwf workflows <list|show|validate> [workflow-id-or-path]");
   }
 
   if (args.command === "__run") {
@@ -228,6 +257,9 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
   } else if (command === "validate" || command === "dry-run") {
     parsed.workflowPath = first;
+  } else if (command === "workflows") {
+    parsed.workflowSubcommand = first;
+    parsed.workflowRef = second;
   } else if (command === "__run") {
     parsed.runId = first;
     parsed.workflowPath = second;
@@ -287,7 +319,10 @@ export function formatHelp(): string {
 Usage:
   cwf --help
   cwf validate <workflow.yaml>
-  cwf run <workflow.yaml> --target <repo> [--background]
+  cwf workflows list
+  cwf workflows show <workflow-id-or-path>
+  cwf workflows validate [workflow-id-or-path]
+  cwf run <workflow-id-or-path> --target <repo> [--background]
   cwf status <run-id>
   cwf watch <run-id> [--interval <ms>] [--once]
   cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -301,14 +336,27 @@ Usage:
 
 Common flow:
   cwf validate workflows/diff-review.yaml
-  cwf run workflows/diff-review.yaml --target . --background
+  cwf workflows list
+  cwf run diff-review --target . --background
   cwf watch <run-id>
   cwf latest
   cwf result <run-id>
 
 Current workflow:
-  workflows/diff-review.yaml
+  diff-review (or workflows/diff-review.yaml)
 `;
+}
+
+function printWorkflowValidation(spec: Awaited<ReturnType<typeof loadWorkflowSpec>>, specPath: string): void {
+  console.log(`Workflow OK: ${spec.id}@${spec.version}`);
+  console.log(`Title: ${spec.title}`);
+  console.log(`Path: ${specPath}`);
+  console.log(`Phases: ${spec.phases.map((phase) => phase.id).join(" -> ")}`);
+  const reviewPhase = spec.phases.find((phase) => phase.kind === "codex-parallel");
+  if (reviewPhase?.kind === "codex-parallel") {
+    console.log(`Workers: ${reviewPhase.workers.map((worker) => worker.id).join(", ")}`);
+  }
+  console.log("No Codex workers were started.");
 }
 
 function printHelp(): void {

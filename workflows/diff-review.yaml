@@ -1,6 +1,17 @@
 id: diff-review
-version: 0.2.0
+version: 0.5.0
+title: Diff Review
 description: Review a git diff with independent Codex worker perspectives.
+tags:
+  - review
+  - read-only
+capabilities:
+  writes: false
+inputs:
+  target:
+    type: path
+    required: true
+    description: Git repository with a tracked diff to review.
 requires:
   target: git-repo
 defaults:

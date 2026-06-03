@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.4.0"
+  version: "0.5.0"
 ---
 
 # codex-workflows
@@ -33,6 +33,10 @@ Only `diff-review` is in scope for the MVP.
 
 ```bash
 cwf validate workflows/diff-review.yaml
+cwf workflows list
+cwf workflows show diff-review
+cwf workflows validate
+cwf run diff-review --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
@@ -48,6 +52,8 @@ cwf cancel <run-id>
 ```
 
 `diff-review` is read-only by default. It reviews a target git diff from independent Codex worker perspectives and reduces the findings into one saved Markdown result.
+
+Prefer `cwf run diff-review --target <repo>` when the local workflow registry can resolve it. Direct path usage remains supported with `cwf run workflows/diff-review.yaml --target <repo>`.
 
 Use `--background` for large diffs. The command returns a run id immediately, while the child process writes status, events, worker outputs, and `run.log` under `~/.codex-workflows/runs/<run-id>/`.
 

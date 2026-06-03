@@ -35,6 +35,9 @@ Already shipped:
 - `cwf approve`
 - `cwf reject`
 - `cwf resume`
+- `cwf workflows list`
+- `cwf workflows show`
+- `cwf workflows validate`
 - `cwf result`
 - `cwf cancel`
 - one workflow: `diff-review`
@@ -43,6 +46,8 @@ Already shipped:
 - default failure policy metadata and readable failure summaries
 - gate phase kind and persisted gate decisions
 - validation that `writes:true` phases/workers require a prior gate
+- local workflow registry search paths and duplicate-id detection
+- workflow metadata: title, tags, inputs, capabilities
 - readable status/watch output
 - English and Chinese README
 
@@ -320,6 +325,8 @@ v0.5 makes workflows reusable specs, while keeping execution constrained and aud
 - Keep specs declarative.
 - Keep `diff-review` as the first registry workflow.
 - Do not add generated scripts or marketplace.
+
+Status: implemented in v0.5.0.
 
 ### SPEC
 

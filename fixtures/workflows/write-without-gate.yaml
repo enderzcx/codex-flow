@@ -1,6 +1,16 @@
 id: diff-review
 version: 0.4.0-invalid-fixture
+title: Invalid Write Without Gate Fixture
 description: Invalid fixture proving writes:true requires a prior gate.
+tags:
+  - invalid
+  - gate-fixture
+capabilities:
+  writes: true
+inputs:
+  target:
+    type: path
+    required: true
 requires:
   target: git-repo
 defaults:

@@ -35,6 +35,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Pause gated workflows before risky phases.
 - Persist approvals and rejections, then resume only pending phases after approval.
 - Reject write-capable specs that do not include a prior gate.
+- Discover local workflows from project and user search paths.
+- Inspect and validate local workflow specs before running.
+- Run workflows by id or direct path.
 - Keep the public MVP free of private adapters or third-party model routing.
 
 ## Non-Goals
@@ -45,6 +48,8 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - No generated workflow scripts.
 - No broad workflow marketplace in MVP.
 - No production write-capable workflow in this release.
+- No remote workflow marketplace.
+- No generated JavaScript workflows.
 - No exact parity with Claude Dynamic Workflows.
 - No mandatory Codex Desktop integration in MVP.
 
@@ -63,6 +68,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 11. As a cautious user, I can require approval before later phases continue.
 12. As a user reviewing a gated run, I can approve and resume, or reject with a reason and stop cleanly.
 13. As a workflow author, I get a validation error if a phase or worker declares `writes:true` before a gate.
+14. As a user, I can run `cwf workflows list` to see available local workflows.
+15. As a user, I can run `cwf workflows show diff-review` before running it.
+16. As a user, I can run either `cwf run diff-review --target <repo>` or `cwf run workflows/diff-review.yaml --target <repo>`.
 
 ## Success Criteria
 
@@ -78,6 +86,10 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - `cwf latest [--target <path>]` shows the newest run overall or for a target.
 - `cwf show <run-id>` prints the same human-readable run detail as status plus discovery commands.
 - `cwf approve`, `cwf reject`, and `cwf resume` support gated workflow pauses.
+- `cwf workflows list/show/validate` discovers local workflow specs.
+- `cwf run <workflow-id-or-path> --target <repo>` works for `diff-review` by id and path.
+- Duplicate workflow ids fail with conflicting paths.
+- Workflow schema includes `title`, `tags`, `inputs`, and `capabilities`.
 - `~/.codex-workflows/index.json` is rebuilt from run folders when missing, stale, or corrupt.
 - Run artifacts are persisted under `~/.codex-workflows/runs/<run-id>/`.
 - Read-only review does not modify the target repo diff.

@@ -297,6 +297,8 @@ Acceptance:
 
 Goal: make workflows reusable by id and discoverable from project/global folders.
 
+Status: implemented.
+
 Deliverables:
 
 - workflow search paths
@@ -447,11 +449,12 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v0.5:
+The next useful implementation slice is v0.6:
 
-1. Add workflow search paths.
-2. Add workflow listing/showing/validation commands.
-3. Keep `diff-review` path-based execution behavior working.
-4. Preserve v0.4 gate validation before any write-capable workflow is accepted.
+1. Harden worker output envelopes.
+2. Add artifact manifest.
+3. Add retry/fallback fixtures.
+4. Make partial worker failure behavior explicit in result/status.
+5. Preserve worker provenance in reducer output.
 
-Why this next: discovery and gates are now in place, so the remaining engine gap is reusable workflow discovery without turning examples into core runtime special cases.
+Why this next: local registry is now in place, so the next reliability gap is making worker/reducer contracts strong enough for more workflow specs.

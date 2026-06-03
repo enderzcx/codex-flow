@@ -40,7 +40,10 @@ Do not use this skill for:
 
 ```bash
 cwf validate workflows/diff-review.yaml
-cwf run workflows/diff-review.yaml --target <repo> --background
+cwf workflows list
+cwf workflows show diff-review
+cwf workflows validate
+cwf run diff-review --target <repo> --background
 cwf status <run-id>
 cwf latest --target <repo>
 cwf show <run-id>
@@ -62,7 +65,8 @@ Before running:
 
 - confirm the target is a git repo
 - note whether the diff includes untracked files
-- run `cwf validate workflows/diff-review.yaml` before starting workers
+- run `cwf workflows validate` or `cwf validate <workflow-id-or-path>` before starting workers
+- prefer workflow ids like `diff-review` when the registry can resolve them
 - prefer background mode for large diffs
 
 During running:
@@ -81,6 +85,12 @@ When the run id is unknown:
 - use `cwf list --limit <n>` for recent runs
 - use `cwf list --status failed` to find failed runs
 - trust discovery to rebuild `~/.codex-workflows/index.json` from run folders when needed
+
+When the workflow is unknown:
+
+- use `cwf workflows list`
+- inspect metadata with `cwf workflows show <workflow-id-or-path>`
+- treat duplicate workflow id errors as blocking until one duplicate spec is removed or renamed
 
 After running:
 

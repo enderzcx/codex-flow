@@ -1,13 +1,14 @@
-import type { WorkflowPhase, WorkflowSpec } from "./types.js";
+import type { WorkflowCapabilities, WorkflowInput, WorkflowPhase, WorkflowSpec } from "./types.js";
 
 export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   const spec = asRecord(value, "workflow");
-  expectString(spec.id, "id");
-  if (spec.id !== "diff-review") {
-    throw new Error("id must be diff-review for the MVP");
-  }
-
+  const id = expectString(spec.id, "id");
   const version = expectString(spec.version, "version");
+  const title = expectString(spec.title, "title");
+  const tags = expectArray(spec.tags, "tags").map((tag, index) => expectString(tag, `tags[${index}]`));
+  const inputs = validateInputs(spec.inputs);
+  validateTargetInput(inputs);
+  const capabilities = validateCapabilities(spec.capabilities);
   const requires = asRecord(spec.requires, "requires");
   if (requires.target !== "git-repo") {
     throw new Error("requires.target must be git-repo");
@@ -34,9 +35,13 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   );
 
   return {
-    id: "diff-review",
+    id,
     version,
+    title,
     description: typeof spec.description === "string" ? spec.description : undefined,
+    tags,
+    inputs,
+    capabilities,
     requires: { target: "git-repo" },
     defaults: {
       sandbox: "read-only",
@@ -45,6 +50,40 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
     phases,
     artifacts,
   };
+}
+
+function validateInputs(value: unknown): Record<string, WorkflowInput> {
+  const inputs = asRecord(value, "inputs");
+  const normalized: Record<string, WorkflowInput> = {};
+  for (const [name, rawInput] of Object.entries(inputs)) {
+    const input = asRecord(rawInput, `inputs.${name}`);
+    normalized[name] = {
+      type: expectString(input.type, `inputs.${name}.type`),
+      required: expectBoolean(input.required, `inputs.${name}.required`),
+      description: typeof input.description === "string" ? input.description : undefined,
+    };
+  }
+  return normalized;
+}
+
+function validateCapabilities(value: unknown): WorkflowCapabilities {
+  const capabilities = asRecord(value, "capabilities");
+  return {
+    writes: expectBoolean(capabilities.writes, "capabilities.writes"),
+  };
+}
+
+function validateTargetInput(inputs: Record<string, WorkflowInput>): void {
+  const target = inputs.target;
+  if (!target) {
+    throw new Error("inputs.target is required");
+  }
+  if (target.type !== "path") {
+    throw new Error("inputs.target.type must be path");
+  }
+  if (target.required !== true) {
+    throw new Error("inputs.target.required must be true");
+  }
 }
 
 function validatePhase(value: unknown, path: string): WorkflowPhase {
@@ -133,6 +172,13 @@ function expectString(value: unknown, path: string): string {
 function expectNumber(value: unknown, path: string): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`${path} must be a finite number`);
+  }
+  return value;
+}
+
+function expectBoolean(value: unknown, path: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`${path} must be a boolean`);
   }
   return value;
 }

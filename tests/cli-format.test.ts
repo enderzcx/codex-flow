@@ -8,7 +8,10 @@ describe("CLI output formatting", () => {
     const help = formatHelp();
 
     expect(help).toContain("cwf validate <workflow.yaml>");
-    expect(help).toContain("cwf run workflows/diff-review.yaml --target . --background");
+    expect(help).toContain("cwf workflows list");
+    expect(help).toContain("cwf workflows show <workflow-id-or-path>");
+    expect(help).toContain("cwf run <workflow-id-or-path> --target <repo> [--background]");
+    expect(help).toContain("cwf run diff-review --target . --background");
     expect(help).toContain("cwf status <run-id>");
     expect(help).toContain("cwf watch <run-id>");
     expect(help).toContain("cwf list [--limit <n>] [--status <status>] [--target <repo>]");

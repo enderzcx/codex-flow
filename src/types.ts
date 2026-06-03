@@ -38,10 +38,24 @@ export type WorkflowWorker = {
   writes?: boolean;
 };
 
-export type WorkflowSpec = {
-  id: "diff-review";
-  version: string;
+export type WorkflowInput = {
+  type: string;
+  required: boolean;
   description?: string;
+};
+
+export type WorkflowCapabilities = {
+  writes: boolean;
+};
+
+export type WorkflowSpec = {
+  id: string;
+  version: string;
+  title: string;
+  description?: string;
+  tags: string[];
+  inputs: Record<string, WorkflowInput>;
+  capabilities: WorkflowCapabilities;
   requires: {
     target: "git-repo";
   };

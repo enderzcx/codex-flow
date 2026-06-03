@@ -4,9 +4,12 @@
 
 ```bash
 cwf --help
-cwf validate <workflow.yaml>
-cwf dry-run <workflow.yaml>
-cwf run <workflow.yaml> --target <repo> [--background]
+cwf validate <workflow-id-or-path>
+cwf dry-run <workflow-id-or-path>
+cwf workflows list
+cwf workflows show <workflow-id-or-path>
+cwf workflows validate [workflow-id-or-path]
+cwf run <workflow-id-or-path> --target <repo> [--background]
 cwf status <run-id>
 cwf watch <run-id> [--interval <ms>] [--once]
 cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -19,7 +22,26 @@ cwf result <run-id>
 cwf cancel <run-id>
 ```
 
-`validate` and `dry-run` are aliases. They load and validate the workflow spec, then print the workflow id, version, phase order, worker ids, and a confirmation that no Codex workers were started.
+`validate` and `dry-run` are aliases. They load and validate the workflow spec by id or path, then print the workflow id, version, phase order, worker ids, and a confirmation that no Codex workers were started.
+
+## Workflow Registry
+
+Workflow discovery searches local files in this order:
+
+```text
+./.codex-flow/workflows/
+./workflows/
+~/.codex-flow/workflows/
+```
+
+Only `.yaml` and `.yml` files in those directories are considered. Duplicate workflow ids fail validation and resolution with a message listing every conflicting path.
+
+Registry commands:
+
+- `cwf workflows list` prints workflow id, version, title, and path.
+- `cwf workflows show <workflow-id-or-path>` prints metadata, capabilities, inputs, and path.
+- `cwf workflows validate [workflow-id-or-path]` validates either one workflow or the full local registry.
+- `cwf run <workflow-id-or-path> --target <repo>` accepts either a discovered workflow id or a direct file path.
 
 ## Workflow
 
@@ -34,6 +56,32 @@ Required phases:
 1. `collect`
 2. `review`
 3. `reduce`
+
+Workflow metadata:
+
+```yaml
+id: diff-review
+version: 0.5.0
+title: Diff Review
+description: Review a git diff with independent Codex worker perspectives.
+tags:
+  - review
+  - read-only
+capabilities:
+  writes: false
+inputs:
+  target:
+    type: path
+    required: true
+```
+
+Required metadata fields:
+
+- `title`
+- `tags`
+- `capabilities.writes`
+- `inputs.<name>.type`
+- `inputs.<name>.required`
 
 ## Run Store
 
@@ -298,6 +346,7 @@ Planned contract:
 - If the diff changes during review, the run fails.
 - If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, and show output.
 - If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
+- Workflow ids discovered in local search paths must be unique.
 - Write-capable phases or workers must be preceded by a gate.
 - Gates only pause and resume workflow phases; this release does not ship a production write-capable workflow.
 - Public MVP has no private adapters or third-party model routing.
@@ -308,5 +357,6 @@ Planned contract:
 - Background runs are process-based, not daemon-backed.
 - No retry/rate-limit manager yet.
 - No workflow plugin system yet.
-- Discovery is a run index only, not a workflow registry.
+- Run discovery is a local index only.
+- Workflow registry is local filesystem discovery only; no remote marketplace.
 - No stable Codex Desktop app-server handoff yet.

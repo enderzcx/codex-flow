@@ -20,6 +20,18 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Workflow validation works before workers start.
   - Evidence: `cwf validate workflows/diff-review.yaml` prints workflow id, phases, worker ids, and `No Codex workers were started.`
 
+- [ ] Workflow registry discovery works.
+  - Evidence: `cwf workflows list`, `cwf workflows show diff-review`, and `cwf workflows validate`.
+
+- [ ] Workflows can run by id or direct path.
+  - Evidence: `cwf run diff-review --target <fixture-or-real-repo>` and `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo>`.
+
+- [ ] Duplicate workflow ids fail clearly.
+  - Evidence: tests create duplicate ids in registry search paths and assert the conflicting paths are reported.
+
+- [ ] Workflow metadata is required and visible.
+  - Evidence: schema tests cover `title`, `tags`, `inputs`, `capabilities`, and `cwf workflows show diff-review` prints them.
+
 - [ ] `diff-review` workflow runs on a git repo and returns a run id.
   - Evidence: `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo>`
 
@@ -90,7 +102,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - Generated JavaScript workflow scripts.
 - Non-Codex model adapters.
 - Automatic code modification workflows.
-- Workflow registry.
+- Remote workflow marketplace.
 - Production write-capable workflow.
 - Publishing to npm.
 

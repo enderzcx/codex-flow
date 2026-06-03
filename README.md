@@ -8,7 +8,7 @@ Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK a
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
-This is an early public release. It is intentionally narrow: one workflow, CLI-first, filesystem-backed state, readable status, and read-only review by default.
+This is an early public release. It is intentionally narrow: CLI-first, filesystem-backed state, readable status, local workflow discovery, and read-only review by default.
 
 ## What It Does
 
@@ -40,11 +40,20 @@ Validate the workflow before starting workers:
 
 ```bash
 cwf validate workflows/diff-review.yaml
+cwf workflows validate
 ```
 
-Run in the foreground:
+Discover and inspect workflows:
 
 ```bash
+cwf workflows list
+cwf workflows show diff-review
+```
+
+Run by workflow id or path:
+
+```bash
+cwf run diff-review --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 ```
 
@@ -63,6 +72,16 @@ cwf resume <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
+
+Workflow discovery searches these local paths in order:
+
+```text
+./.codex-flow/workflows/
+./workflows/
+~/.codex-flow/workflows/
+```
+
+Duplicate workflow ids fail clearly instead of picking one silently.
 
 `cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, result, and log files.
 
@@ -154,7 +173,8 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
 - Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
-- Discovery is local and rebuildable; it is not a workflow registry.
+- Run discovery is local and rebuildable.
+- Workflow registry is local filesystem discovery only; there is no remote marketplace.
 - Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
 - Codex Desktop app-server handoff is planned, but not part of the stable CLI core yet.
 
@@ -174,6 +194,7 @@ The MVP has been smoke-tested on:
 - mocked Codex SDK worker failure
 - run discovery, latest lookup, index rebuild, and show formatting
 - gate pause, approve/resume, reject, and write-without-gate validation
+- workflow registry list/show/validate, duplicate-id detection, and id-or-path runs
 - workflow validation and human-readable status formatting
 
 ## Docs

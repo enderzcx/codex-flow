@@ -4,6 +4,12 @@ import { validateWorkflowSpec } from "../src/workflow-schema.js";
 const validSpec = {
   id: "diff-review",
   version: "0.1.0",
+  title: "Diff Review",
+  tags: ["review", "read-only"],
+  inputs: {
+    target: { type: "path", required: true },
+  },
+  capabilities: { writes: false },
   requires: { target: "git-repo" },
   defaults: { sandbox: "read-only", timeout_ms: 300000 },
   phases: [
