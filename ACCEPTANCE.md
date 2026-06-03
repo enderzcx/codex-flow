@@ -21,10 +21,16 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
   - Evidence: `cwf validate workflows/diff-review.yaml` prints workflow id, phases, worker ids, and `No Codex workers were started.`
 
 - [ ] Workflow registry discovery works.
-  - Evidence: `cwf workflows list`, `cwf workflows show diff-review`, and `cwf workflows validate`.
+  - Evidence: `cwf workflows list`, `cwf workflows show diff-review`, `cwf workflows show repo-audit`, and `cwf workflows validate`.
 
 - [ ] Workflows can run by id or direct path.
   - Evidence: `cwf run diff-review --target <fixture-or-real-repo>` and `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo>`.
+
+- [ ] Bundled example workflows are discoverable and read-only.
+  - Evidence: `cwf workflows list` includes `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`; specs have `capabilities.writes: false`.
+
+- [ ] Workflow catalog explains when to use and when not to use each bundled workflow.
+  - Evidence: `docs/workflow-catalog.md` includes entries for all bundled workflows.
 
 - [ ] Duplicate workflow ids fail clearly.
   - Evidence: tests create duplicate ids in registry search paths and assert the conflicting paths are reported.
@@ -95,6 +101,9 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] The project clearly explains how it differs from Claude Dynamic Workflows.
   - Evidence: `docs/claude-vs-codex-workflows.md` includes effect, components, and principle differences.
 
+- [ ] Example workflows preserve the shared worker/reducer evidence contract.
+  - Evidence: fixture tests and smokes confirm reduced results include worker provenance, verification gaps, and artifact references.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.
@@ -124,4 +133,4 @@ Stop implementation and report instead of expanding scope if any of these happen
 - `diff-review` requires target repo mutation to work.
 - The runner needs a new backend service.
 - The implementation starts depending on private local files or keys.
-- More than one workflow is being implemented before `diff-review` passes smoke.
+- More workflows are being implemented before `diff-review` and the shared contracts pass smoke.

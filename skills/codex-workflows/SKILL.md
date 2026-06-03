@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.6.0"
+  version: "0.7.0"
 ---
 
 # codex-workflows
@@ -27,16 +27,21 @@ This public skill is Codex-native:
 - Generic project management.
 - Model routing or private collaborator delegation.
 
-## Current Workflow
+## Current Workflows
 
-Only `diff-review` is in scope for the MVP.
+The bundled workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`.
 
 ```bash
 cwf validate workflows/diff-review.yaml
 cwf workflows list
 cwf workflows show diff-review
+cwf workflows show repo-audit
 cwf workflows validate
 cwf run diff-review --target <repo>
+cwf run repo-audit --target <repo>
+cwf run implementation-plan --target <repo>
+cwf run research-crosscheck --target <repo>
+cwf run release-review --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
@@ -51,7 +56,9 @@ cwf result <run-id>
 cwf cancel <run-id>
 ```
 
-`diff-review` is read-only by default. It reviews a target git diff from independent Codex worker perspectives and reduces the findings into a stable reduced JSON envelope plus one saved Markdown result.
+All bundled workflows are read-only by default. They review a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result.
+
+Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, and `release-review` for ship readiness.
 
 Prefer `cwf run diff-review --target <repo>` when the local workflow registry can resolve it. Direct path usage remains supported with `cwf run workflows/diff-review.yaml --target <repo>`.
 

@@ -203,6 +203,7 @@ export type ReducedFinding = Finding & {
 };
 
 export type ReducedResult = {
+  workflow: string;
   verdict: "pass" | "review" | "fail" | "degraded";
   summary: string;
   findings: ReducedFinding[];

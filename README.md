@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow runner for multi-agent code review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The MVP ships one workflow, `diff-review`, which starts three Codex workers in parallel and aggregates their findings into a stable reduced JSON envelope plus a readable Markdown report.
+Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The public pack ships read-only workflows that start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report.
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
@@ -12,11 +12,13 @@ This is an early public release. It is intentionally narrow: CLI-first, filesyst
 
 ## What It Does
 
-`diff-review` reviews the current tracked git diff from three independent perspectives:
+The default catalog includes:
 
-- `correctness`: behavior regressions, broken assumptions, edge cases
-- `tests`: missing tests, weak assertions, verification gaps
-- `safety`: security, permissions, data loss, rollback risk
+- `diff-review`: correctness, tests, and safety review for a tracked git diff
+- `repo-audit`: maintainability, project hygiene, and release-risk audit
+- `implementation-plan`: scope, sequencing, and verification review for plan or implementation diffs
+- `research-crosscheck`: source fidelity and unsupported-claim review for research or documentation diffs
+- `release-review`: ship readiness, rollout, rollback, and regression review
 
 The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
 
@@ -48,12 +50,17 @@ Discover and inspect workflows:
 ```bash
 cwf workflows list
 cwf workflows show diff-review
+cwf workflows show repo-audit
 ```
 
 Run by workflow id or path:
 
 ```bash
 cwf run diff-review --target <repo>
+cwf run repo-audit --target <repo>
+cwf run implementation-plan --target <repo>
+cwf run research-crosscheck --target <repo>
+cwf run release-review --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 ```
 
@@ -89,7 +96,7 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 `cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
 
-Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. This is a safety primitive only; the public package still ships no production write-capable workflow.
+Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. This is a safety primitive only; the public package ships read-only workflows and no production write-capable workflow.
 
 Run artifacts are stored under:
 
@@ -113,13 +120,15 @@ Run artifacts are stored under:
 
 Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
 
-## Example
+## Examples
 
 ```bash
 cwf run workflows/diff-review.yaml --target fixtures/diff-review --background
 cwf watch run_...
 cwf result run_...
 ```
+
+See [Workflow catalog](docs/workflow-catalog.md) for when to use and when not to use each bundled workflow.
 
 Example status:
 
@@ -174,7 +183,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 
 ## Current Limitations
 
-- Only one workflow: `diff-review`.
+- Bundled workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
 - Reviews tracked git diffs; untracked file contents are not included.
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
@@ -205,6 +214,7 @@ The MVP has been smoke-tested on:
 - gate pause, approve/resume, reject, and write-without-gate validation
 - workflow registry list/show/validate, duplicate-id detection, and id-or-path runs
 - workflow validation and human-readable status formatting
+- bundled workflow catalog and example workflow registry validation
 
 ## Docs
 
@@ -213,4 +223,5 @@ The MVP has been smoke-tested on:
 - [Full plan](docs/FULL_PLAN.md)
 - [Phase contracts](docs/PHASE_CONTRACTS.md)
 - [Skill plan](docs/SKILL_PLAN.md)
+- [Workflow catalog](docs/workflow-catalog.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)

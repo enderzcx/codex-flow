@@ -2,7 +2,7 @@ import type { DiffContext, ReducedResult, WorkerResult } from "../types.js";
 
 export function renderMarkdownResult(result: ReducedResult, context: DiffContext, workerResults: WorkerResult[], runDir: string): string {
   const lines: string[] = [];
-  lines.push("# codex-workflows diff-review");
+  lines.push(`# codex-workflows ${result.workflow}`);
   lines.push("");
   lines.push("## Verdict");
   lines.push("");

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Codex Flow is a Codex-native workflow runner for repeatable multi-worker engineering review. The MVP focuses on one workflow: `diff-review`.
+Codex Flow is a Codex-native workflow runner for repeatable multi-worker engineering review. The public pack focuses on read-only review workflows.
 
 ## Problem
 
@@ -40,6 +40,8 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Discover local workflows from project and user search paths.
 - Inspect and validate local workflow specs before running.
 - Run workflows by id or direct path.
+- Ship read-only example workflows for repo audit, implementation-plan review, research cross-check, and release review.
+- Document when to use and when not to use each bundled workflow.
 - Keep the public MVP free of private adapters or third-party model routing.
 
 ## Non-Goals
@@ -74,6 +76,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 15. As a user, I can run `cwf workflows show diff-review` before running it.
 16. As a user, I can run either `cwf run diff-review --target <repo>` or `cwf run workflows/diff-review.yaml --target <repo>`.
 17. As a reviewer, I can trust the final output because it preserves worker provenance, raw fallback status, and the artifact evidence used to render the report.
+18. As a user, I can choose `repo-audit`, `implementation-plan`, `research-crosscheck`, or `release-review` from the catalog when my review goal is broader than a code diff review.
 
 ## Success Criteria
 
@@ -104,6 +107,9 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Failed runs include default failure policy metadata and a readable failure summary.
 - Gate fixtures can pause, approve/resume, reject, and prove completed phases do not rerun.
 - Write-capable specs without a prior gate fail validation.
+- `cwf workflows validate` validates all bundled workflows.
+- Each bundled example workflow has fixture coverage and at least one real smoke.
+- Workflow catalog documents when to use and when not to use each bundled workflow.
 
 ## Public Positioning
 

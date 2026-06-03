@@ -42,8 +42,13 @@ Do not use this skill for:
 cwf validate workflows/diff-review.yaml
 cwf workflows list
 cwf workflows show diff-review
+cwf workflows show repo-audit
 cwf workflows validate
 cwf run diff-review --target <repo> --background
+cwf run repo-audit --target <repo> --background
+cwf run implementation-plan --target <repo> --background
+cwf run research-crosscheck --target <repo> --background
+cwf run release-review --target <repo> --background
 cwf status <run-id>
 cwf latest --target <repo>
 cwf show <run-id>
@@ -67,6 +72,7 @@ Before running:
 - note whether the diff includes untracked files
 - run `cwf workflows validate` or `cwf validate <workflow-id-or-path>` before starting workers
 - prefer workflow ids like `diff-review` when the registry can resolve them
+- choose from `docs/workflow-catalog.md` when the user asks for audit, planning, research, or release review
 - prefer background mode for large diffs
 
 During running:
@@ -122,9 +128,7 @@ The skill should ask Codex to report:
 
 ## Future Skill Expansions
 
-Only after `diff-review` is stable:
+Only after the read-only example pack is stable:
 
-- repo audit workflow
 - migration plan workflow
-- research cross-check workflow
 - generated workflow spec suggestions

@@ -40,7 +40,7 @@ Already shipped:
 - `cwf workflows validate`
 - `cwf result`
 - `cwf cancel`
-- one workflow: `diff-review`
+- read-only workflow catalog: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, `release-review`
 - run store under `~/.codex-workflows/runs/<run-id>/`
 - run index under `~/.codex-workflows/index.json`
 - default failure policy metadata and readable failure summaries
@@ -591,15 +591,17 @@ Once the engine is reliable, examples can show what it is for. These workflows s
 - Document when to use and when not to use each workflow.
 - Preserve evidence and provenance.
 
+Status: implemented in v0.7.0.
+
 ### SPEC
 
 Example workflows:
 
 ```text
-examples/repo-audit
-examples/implementation-plan
-examples/research-crosscheck
-examples/release-review
+workflows/repo-audit.yaml
+workflows/implementation-plan.yaml
+workflows/research-crosscheck.yaml
+workflows/release-review.yaml
 ```
 
 Contracts:

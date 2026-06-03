@@ -60,7 +60,7 @@ Users should be able to run:
 ```bash
 cwf run diff-review --target .
 cwf run repo-audit --target .
-cwf run implementation-plan --target . --goal "migrate auth module"
+cwf run implementation-plan --target .
 cwf watch <run-id>
 cwf result <run-id>
 ```
@@ -341,12 +341,14 @@ Acceptance:
 
 Goal: demonstrate usefulness without bloating the core runtime.
 
+Status: implemented.
+
 Deliverables:
 
-- `examples/repo-audit`
-- `examples/implementation-plan`
-- `examples/research-crosscheck`
-- `examples/release-review`
+- `workflows/repo-audit.yaml`
+- `workflows/implementation-plan.yaml`
+- `workflows/research-crosscheck.yaml`
+- `workflows/release-review.yaml`
 - workflow catalog docs
 
 Rules:
@@ -450,11 +452,11 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v0.7:
+The next useful implementation slice is v1.0 release hardening:
 
-1. Add a small read-only example workflow pack.
-2. Keep examples outside core runtime special cases.
-3. Require fixture tests and at least one smoke per example.
-4. Document when to use and when not to use each example.
+1. Audit docs and package contents for public release readiness.
+2. Run all documented command smokes from a fresh install path.
+3. Decide whether v1.0 needs more reducer generalization or the current shared reducer is enough.
+4. Prepare release notes.
 
-Why this next: local registry plus hardened output contracts are now in place, so examples can prove usefulness without changing the public core.
+Why this next: the read-only example pack is now in place, so the remaining work is release confidence and honest positioning.

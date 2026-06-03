@@ -1,8 +1,8 @@
 # Codex Flow
 
-一个轻量的 Codex 原生工作流 runner，用来把一次代码审查拆成多个 Codex worker 并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
+一个轻量的 Codex 原生工作流 runner，用来把一次工程审查拆成多个 Codex worker 并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
 
-它只依赖 OpenAI Codex SDK 和 CLI：不接第三方模型路由，不接私有 adapter，不把项目绑到某个个人环境。现在公开版先做一件事：`diff-review`，也就是让 `correctness`、`tests`、`safety` 三个视角同时审当前 git diff。
+它只依赖 OpenAI Codex SDK 和 CLI：不接第三方模型路由，不接私有 adapter，不把项目绑到某个个人环境。公开版内置一组只读 workflow：`diff-review`、`repo-audit`、`implementation-plan`、`research-crosscheck`、`release-review`。
 
 ## 它解决什么
 
@@ -34,6 +34,7 @@ cwf --help
 ```bash
 cwf workflows list
 cwf workflows show diff-review
+cwf workflows show repo-audit
 cwf workflows validate
 ```
 
@@ -49,6 +50,10 @@ cwf validate workflows/diff-review.yaml
 
 ```bash
 cwf run diff-review --target <repo>
+cwf run repo-audit --target <repo>
+cwf run implementation-plan --target <repo>
+cwf run research-crosscheck --target <repo>
+cwf run release-review --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 ```
 
@@ -112,7 +117,7 @@ cwf show <run-id>
 
 `cwf list` / `latest` / `show` 背后会用 `~/.codex-workflows/index.json`。这个 index 只是可重建缓存；如果缺失、过期或损坏，CLI 会从 `~/.codex-workflows/runs/*/state.json` 自动重建。
 
-带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。这个版本只交付安全原语，不附带生产写文件 workflow。
+带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。这个版本只交付安全原语和只读 workflow，不附带生产写文件 workflow。
 
 示例：
 
@@ -167,6 +172,8 @@ Artifacts:
 
 如果只有部分 worker 失败，Codex Flow 会按默认 failure policy 继续 reduce，但最终结果会把失败 worker 和降级证据写清楚。结构化输出坏掉时，raw fallback 也会出现在 status/result 里。
 
+每个内置 workflow 的使用边界见 [Workflow catalog](docs/workflow-catalog.md)。
+
 最终报告可以直接看：
 
 ```bash
@@ -213,6 +220,7 @@ npm pack --dry-run
 - workflow registry list / show / validate / duplicate-id detection / id-or-path run
 - workflow validate
 - 人能读懂的 status 输出
+- 内置 example workflow 的 registry validate 和 catalog docs
 
 更多设计说明见：
 
@@ -221,4 +229,5 @@ npm pack --dry-run
 - [Full plan](docs/FULL_PLAN.md)
 - [Phase contracts](docs/PHASE_CONTRACTS.md)
 - [Skill plan](docs/SKILL_PLAN.md)
+- [Workflow catalog](docs/workflow-catalog.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)

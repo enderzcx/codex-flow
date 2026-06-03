@@ -8,7 +8,7 @@ const SEVERITY_RANK: Record<Severity, number> = {
   info: 1,
 };
 
-export function reduceDiffReview(workerResults: WorkerResult[], artifacts: ArtifactRef[]): ReducedResult {
+export function reduceDiffReview(workerResults: WorkerResult[], artifacts: ArtifactRef[], workflow = "diff-review"): ReducedResult {
   const findingsByKey = new Map<string, ReducedFinding>();
   const verificationGaps = new Set<string>();
   const nextActions = new Set<string>();
@@ -78,6 +78,7 @@ export function reduceDiffReview(workerResults: WorkerResult[], artifacts: Artif
         : "pass";
 
   return {
+    workflow,
     verdict,
     summary: summarizeReduction(verdict, workerResults, findings.length),
     findings,

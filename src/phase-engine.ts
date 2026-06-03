@@ -155,12 +155,12 @@ async function runReducerPhase(
   const workerResults = await store.readWorkerResults();
   const state = await store.readState();
   const artifacts = buildArtifactRefs(store, workerResults, state.log_path);
-  const reduced = reduceDiffReview(workerResults, artifacts);
+  const workflow = await store.readWorkflow();
+  const reduced = reduceDiffReview(workerResults, artifacts, workflow.id);
   await store.writeReducedResult(reduced);
   const markdown = renderMarkdownResult(reduced, context, workerResults, store.runDir);
   await store.updatePhase(phase.id, "completed");
   await store.writeResult(markdown);
-  const workflow = await store.readWorkflow();
   await store.writeArtifactManifest(buildArtifactManifest(store, workflow.id, artifacts));
 }
 

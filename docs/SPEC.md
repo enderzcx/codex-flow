@@ -45,10 +45,14 @@ Registry commands:
 
 ## Workflow
 
-MVP supports one workflow:
+The public package ships these read-only workflows:
 
 ```text
 workflows/diff-review.yaml
+workflows/repo-audit.yaml
+workflows/implementation-plan.yaml
+workflows/research-crosscheck.yaml
+workflows/release-review.yaml
 ```
 
 Required phases:
@@ -61,7 +65,7 @@ Workflow metadata:
 
 ```yaml
 id: diff-review
-version: 0.6.0
+version: 0.7.0
 title: Diff Review
 description: Review a git diff with independent Codex worker perspectives.
 tags:
@@ -82,6 +86,8 @@ Required metadata fields:
 - `capabilities.writes`
 - `inputs.<name>.type`
 - `inputs.<name>.required`
+
+Bundled example workflows must keep `capabilities.writes: false`, `defaults.sandbox: read-only`, and the same shared `collect -> review -> reduce` contract. Example-specific behavior belongs in workflow YAML prompts and catalog docs, not in the runtime.
 
 ## Run Store
 
