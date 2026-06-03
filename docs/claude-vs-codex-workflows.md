@@ -7,13 +7,13 @@ archive_at: 2026-06-09
 
 ## Verdict
 
-`codex-workflows` can reproduce the most useful outcome of Claude Dynamic Workflows: phased multi-agent work, parallel checks, externalized state, result reduction, and repeatable workflows.
+`codex-workflows` can reproduce the most useful outcome of Claude Dynamic Workflows for supported workflows: phased multi-agent work, parallel checks, externalized state, result reduction, and repeatable runs.
 
 It will not initially reproduce the whole Claude product experience: no native `/workflows` panel, no automatic `workflow` keyword trigger, no `ultracode`, and no built-in Claude-authored JavaScript workflow runtime.
 
 So the right framing is:
 
-> Same operating principle, similar useful effect for chosen workflows, different product surface and implementation substrate.
+> Same workflow principle, similar useful effect for supported workflows, different runtime and safety model.
 
 ## Finished Effect
 
@@ -27,24 +27,24 @@ What can be similar:
 - The final output contains findings, evidence, risks, and next actions.
 - The run can be inspected later through saved logs.
 
-What will be different in the MVP:
+What will be different in the public Codex Flow engine:
 
 - Progress is shown through `cwf status <run-id>` or `cwf watch <run-id>`, not a native Codex background task pane.
-- Runs are explicit commands, not triggered by highlighted prompt words.
-- Workflows are saved as specs, not arbitrary generated JavaScript.
-- Resume/cancel may be coarse at first.
+- Runs are explicit commands or skill-triggered tool calls, not silent keyword triggers.
+- Workflows are saved as constrained specs, not arbitrary generated JavaScript.
+- Resume, gates, and failure policies are public engine features, not Desktop UI features.
 - No third-party model routing.
-- No automatic file edits in the first public workflow unless the workflow explicitly opts in.
+- No automatic file edits unless the workflow explicitly opts in and passes gate validation.
 
 ## Component Comparison
 
-| Layer | Claude Dynamic Workflows | codex-workflows MVP |
+| Layer | Claude Dynamic Workflows | Codex Flow public engine |
 |---|---|---|
-| Trigger | `workflow` keyword, saved commands, `/deep-research`, `ultracode` | explicit `cwf run <workflow>` |
+| Trigger | `workflow` keyword, saved commands, `/deep-research`, `ultracode` | explicit `cwf run <workflow>` or Codex skill call |
 | Runtime | Claude Code native workflow runtime | external Node/TS runner |
 | Worker | Claude subagents | Codex SDK threads |
 | State | workflow script variables and runtime tracking | run folder with `state.json`, `events.jsonl`, worker outputs |
-| Script/spec | Claude-written JavaScript script | checked-in YAML/JSON spec first |
+| Script/spec | Claude-written JavaScript script | constrained YAML/JSON spec first |
 | Monitoring | `/workflows` UI and task panel | `cwf status`, `cwf watch`, log files |
 | Output | final report in session | final report printed and saved |
 | Permissions | Claude tool allowlist + workflow behavior | Codex sandbox/approval settings per worker |
@@ -66,7 +66,7 @@ Claude's runtime is built into Claude Code. `codex-workflows` runtime would live
 
 ## Product Implication
 
-MVP should optimize for reliability and clarity, not spectacle.
+Codex Flow should optimize for reliability and clarity before spectacle.
 
 Do:
 
@@ -75,11 +75,12 @@ Do:
 - Keep default workers read-only.
 - Show phase status and saved outputs.
 - Make reducer output structured and reviewable.
+- Define failure, fallback, gate, and resume behavior before expanding workflow families.
 
 Do not:
 
-- Imitate Claude's keyword trigger before the basic runner is reliable.
-- Let generated scripts run arbitrary logic first.
+- Imitate Claude's keyword trigger before the engine is reliable.
+- Let generated scripts run arbitrary logic in the public core.
 - Add private model adapters to the public version.
 - Claim exact parity with Claude Dynamic Workflows.
 

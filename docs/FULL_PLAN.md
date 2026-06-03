@@ -7,66 +7,93 @@ archive_at: 2026-07-03
 
 ## Plain Summary
 
-Codex Flow 的完整体目标不是复制 Claude Dynamic Workflows 的外壳，而是把它最有价值的效果搬到 Codex 世界里：
+Codex Flow should become a Codex-native workflow engine for inspectable, resumable, multi-worker engineering workflows.
 
-- 用户说一个复杂任务。
-- 系统自动选一个合适 workflow。
-- 主 Codex 负责判断和收口。
-- 多个 Codex worker 分阶段、并行或串行执行。
-- 中间状态不塞进聊天，而是落到可追踪的 run store。
-- 最后 reducer 把证据、风险、结论和下一步合成一份人能读的结果。
+The full product is not "Claude Dynamic Workflows, copied line by line." It should match the useful effect:
 
-简单说：Claude Dynamic Workflows 像是 Claude Code 内置的“任务流水线”。Codex Flow 要做的是 Codex 原生、公开、可审计的“任务流水线底座”。
+- one command starts a complex task
+- the task is split into phases
+- focused Codex workers run in parallel or sequence
+- progress and failures are visible outside the chat
+- intermediate evidence is saved
+- unsafe steps can pause for approval
+- a reducer turns worker output into one actionable result
+
+The important word is **engine**. Codex Flow should first become a reliable workflow runtime, then grow a workflow registry and example workflow packs.
+
+## What "Dynamic" Means
+
+To avoid overclaiming, Codex Flow uses a staged definition of dynamic behavior.
+
+### v1.0 Dynamic
+
+For v1.0, "dynamic" means:
+
+- workflow execution can branch through explicit phases and gates
+- failed runs can explain what happened and what can resume
+- a user or Codex skill can choose a workflow for a task
+- workflow specs can be discovered, validated, and reused
+- worker outputs can influence reducer verdicts and next actions
+
+### Not v1.0 Dynamic
+
+The following are not v1.0 promises:
+
+- Codex automatically generating arbitrary executable workflow scripts
+- a native Codex Desktop `/workflows` task panel
+- automatic keyword triggers that start workflows without explicit user/tool intent
+- non-Codex model routing
+- private model adapters
+
+If future versions add generated workflow specs, they must generate constrained YAML/JSON and pass validation before execution. Arbitrary generated JavaScript is deliberately not part of the public core.
+
+## v1.0 Promise
+
+> Codex Flow is a Codex-native workflow engine for running inspectable, resumable, multi-worker engineering workflows from reusable specs.
+
+This is the public promise. It is strong enough to be useful and narrow enough to verify.
 
 ## Target Effect
 
-完整体用户体验应该是：
+Users should be able to run:
 
 ```bash
-cwf run review --target .
-cwf run plan --goal "migrate auth module to the new token contract" --target .
-cwf run research --question "compare these two approaches" --target .
-cwf status <run-id>
+cwf run diff-review --target .
+cwf run repo-audit --target .
+cwf run implementation-plan --target . --goal "migrate auth module"
+cwf watch <run-id>
 cwf result <run-id>
 ```
 
-或者在 Codex skill 里自然触发：
+And Codex skills should be able to say:
 
 ```text
-Use codex-flow to review this branch with correctness, tests, and safety perspectives.
+Use Codex Flow to review this branch with correctness, tests, and safety perspectives.
 ```
 
-用户不需要关心几个 worker、几个 phase、结果保存在哪。默认路径应该是：
+The user should not need to manually copy prompts into several sessions or hunt through chat history for intermediate findings. A run folder becomes the evidence trail.
 
-1. 先 validate。
-2. 后台启动。
-3. 用 status 看当前在干嘛。
-4. 用 result 拿最终结论。
-5. 必要时从 artifacts 追证据。
+## Claude Dynamic Workflows Comparison
 
-## What We Match From Claude Dynamic Workflows
+### Similar Useful Effect
 
-Codex Flow 应该对标这些“效果”：
+- A user starts one higher-level task.
+- The system runs multiple steps and workers.
+- The main agent stays in a supervisor role.
+- Intermediate state is outside the main chat.
+- Progress can be inspected.
+- Final output is a reduced, actionable answer.
 
-- One command starts a complex multi-step task.
-- Workflow state lives outside the chat.
-- Workers receive smaller focused contexts.
-- Parallel work is first-class.
-- The supervisor can inspect progress.
-- Intermediate outputs are persisted.
-- A reducer produces a final answer.
-- Runs can be cancelled, resumed, inspected, and reused.
+### Different Substrate
 
-## What Will Stay Different
+- Claude has a native workflow runtime; Codex Flow is a public CLI/SDK runtime.
+- Claude can lean on generated scripts; Codex Flow starts with constrained specs.
+- Claude has native UI surfaces; Codex Flow starts with CLI, run store, and skills.
+- Claude is product-integrated; Codex Flow must keep its public core installable and auditable.
 
-这些不强求和 Claude 一样：
+The correct positioning is:
 
-- Claude 有内置 `/workflows` 面板；Codex Flow 先用 CLI + artifacts，之后再接 Codex Desktop。
-- Claude 可以由 Claude 生成 workflow script；Codex Flow 先用受约束 YAML/JSON spec，再考虑安全脚本。
-- Claude 的 runtime 在 Claude Code 内部；Codex Flow runtime 是公开 Node/TS CLI。
-- Claude 可以自然挂在 Claude Code prompt 里；Codex Flow 先通过 skill 触发，再做更自动的 trigger。
-
-完整体的原则是：效果接近，组成不同，安全边界更明确。
+> Same workflow principle, similar useful effect for supported workflows, different runtime and safety model.
 
 ## Core Architecture
 
@@ -75,44 +102,47 @@ User / Codex skill
   -> Workflow Resolver
   -> Workflow Validator
   -> Run Store
+  -> Failure Model
   -> Phase Engine
-      -> Command Phase
-      -> Codex Worker Phase
-      -> Reducer Phase
-      -> Optional Handoff Phase
-  -> Status / Watch / Result
+      -> command
+      -> codex-parallel
+      -> codex-sequential
+      -> reducer
+      -> gate
+      -> handoff
+  -> Status / Watch / List / Show / Result
 ```
 
-### 1. Workflow Resolver
+## Core Concepts
 
-把用户意图映射到 workflow。
+### Workflow Resolver
 
-Examples:
+Maps user intent or CLI input to a workflow spec.
 
-- `review this branch` -> `diff-review`
-- `audit this repo` -> `repo-audit`
-- `make an implementation plan` -> `implementation-plan`
-- `compare approaches` -> `research-crosscheck`
+Early versions should prefer explicit workflow ids:
 
-MVP 后先做显式命令，不急着做自然语言自动触发。
+```bash
+cwf run diff-review --target .
+```
 
-### 2. Workflow Validator
+Natural-language workflow choice can live in the Codex skill layer first. The core runner should not guess silently.
 
-启动前检查：
+### Workflow Validator
 
-- spec schema 合法
-- phase 顺序合法
-- worker id 不重复
-- reducer 存在
-- sandbox / approval / timeout 合法
-- target repo 存在
-- workflow 是否需要 dirty diff、clean repo、或外部网络
+Checks specs before model time is spent:
 
-用户价值：先发现配置错，不浪费模型时间。
+- schema validity
+- supported phase kinds
+- unique worker ids
+- valid reducer
+- valid inputs
+- sandbox and approval settings
+- write-capable phases are gated
+- failure behavior is declared or defaults are clear
 
-### 3. Run Store
+### Run Store
 
-每个 run 都有独立目录：
+Every run writes a durable folder:
 
 ```text
 ~/.codex-workflows/runs/<run-id>/
@@ -126,76 +156,72 @@ MVP 后先做显式命令，不急着做自然语言自动触发。
   run.log
 ```
 
-完整体需要补：
+Later versions add:
 
-- resumable state
 - run index
 - artifact manifest
-- worker usage / cost metadata when available
-- parent / child run relationship
+- resume metadata
+- parent/child run links
+- worker usage metadata when Codex exposes it
 
-### 4. Phase Engine
+### Failure Model
 
-支持更多 phase 类型：
+Every phase needs predictable failure behavior.
 
-- `command`: 本地只读收集上下文
-- `codex-parallel`: 多 Codex worker 并行
-- `codex-sequential`: 后一个 worker 依赖前一个输出
-- `reducer`: 合并结果
-- `gate`: 根据结果决定继续、停止、等待人工确认
-- `handoff`: 生成 Codex prompt、GitHub comment、PR note、或后续任务
+Supported failure policies:
 
-### 5. Worker Model
+- `abort`: stop the run
+- `retry`: retry within configured limits
+- `continue`: keep going and mark degraded
+- `fallback`: accept raw or partial output
+- `gate`: pause for user decision
 
-公开版只用 Codex worker。
+Default for unknown failures should be `abort`, with a clear status and event trail.
 
-每个 worker 必须声明：
+### Phase Engine
+
+Supported phase kinds over time:
+
+- `command`: local context collection
+- `codex-parallel`: focused Codex workers in parallel
+- `codex-sequential`: dependent Codex workers in sequence
+- `reducer`: merge results
+- `gate`: wait for approval or rejection
+- `handoff`: produce a prompt, PR note, GitHub comment, or follow-up task
+
+### Worker Model
+
+Workers are Codex-only in the public core.
+
+Each worker declares:
 
 - id
-- role / perspective
-- input context
+- role
+- prompt
+- inputs
 - output schema
-- sandbox
 - timeout
-- whether writes are allowed
+- sandbox
+- failure policy
+- whether it writes files
 
-默认仍然 read-only。写文件 workflow 必须显式 opt-in。
+Default worker mode is read-only.
 
-### 6. Reducer Model
+### Reducer Model
 
-Reducer 不是简单拼接。它要负责：
+Reducers are product-critical. They must:
 
-- 合并重复发现
-- 保留最强证据
-- 标记分歧
-- 降级低信心结论
-- 输出 next actions
-- 输出 verification gaps
-- 保留 worker provenance
+- merge duplicates
+- preserve strongest evidence
+- mark disagreement
+- lower confidence for weak claims
+- keep worker provenance
+- output verification gaps
+- output next actions
 
-用户价值：多个 worker 的结果变成一份能行动的结论。
+Codex Flow is not useful if reducer output is just pasted worker text.
 
-## Planned Workflow Families
-
-### v0.x Stable Base
-
-- `diff-review`: 多视角代码审查
-
-### v1 Candidate Workflows
-
-- `repo-audit`: 扫项目结构、测试、CI、文档、风险
-- `implementation-plan`: 把需求拆成可执行方案和验收条件
-- `migration-plan`: 评估迁移风险、步骤、回滚
-- `research-crosscheck`: 多 worker 查证同一问题，合并证据
-- `release-review`: 发布前检查测试、风险、回滚、文档
-
-### Later
-
-- `fix-with-review`: 允许 Codex 修改文件，然后自动跑 review
-- `desktop-handoff`: 把结果交给新的 Codex Desktop thread
-- `github-pr-review`: 对 PR diff 产出 GitHub review 格式
-
-## Milestones
+## Revised Milestones
 
 ### v0.2: Usable Public MVP
 
@@ -204,99 +230,141 @@ Status: done.
 Includes:
 
 - `validate`
-- better `help`
-- readable `status`
-- foreground/background/result/cancel
-- Chinese README
-- docs/spec/acceptance aligned
-- real foreground/background/cancel smoke
+- `run`
+- `status`
+- `watch`
+- `result`
+- `cancel`
+- one workflow: `diff-review`
+- readable status/watch output
+- Chinese and English README
 
-### v0.3: Watch And Run Index
+### v0.3: Run Discovery And Failure Model
 
-Goal: 用户不需要反复手动查。
+Goal: make background runs easy to find and failures easy to understand.
 
-Status: in progress. `cwf watch` exists; run discovery still needs `list`, `show`, `latest`, and a run index.
+Status: next slice. `watch` already exists; remaining work is discovery plus failure semantics.
 
 Deliverables:
 
 - `cwf list`
 - `cwf show <run-id>`
 - `cwf latest [--target <path>]`
-- run index under `~/.codex-workflows/index.json`
-- status output includes last event summary
+- run index or rebuildable run discovery
+- last event summary
+- explicit phase failure policy defaults
+- clearer failed/degraded status output
+- timeout and retry metadata in state
 
 Acceptance:
 
-- long background run can be watched until completion
-- user can list recent runs and open the latest result
+- users can find recent runs without remembering ids
+- users can see why a run failed without reading raw JSON first
+- index loss can be recovered from run folders
 - no daemon required
 
-### v0.4: Workflow Registry
+### v0.4: Gates And Resume
 
-Goal: 不只能跑一个 hardcoded workflow。
-
-Deliverables:
-
-- project workflows folder
-- global workflows folder
-- `cwf workflows list`
-- `cwf workflows validate`
-- schema supports workflow metadata and input fields
-
-Acceptance:
-
-- `diff-review` moves through the registry path
-- invalid workflow fails with field-level errors
-- docs show how to add a read-only workflow
-
-### v0.5: Safer Gates And Resume
-
-Goal: 长任务可恢复、危险步骤可停住等人确认。
+Goal: make long or risky workflows resumable and safe before any write-capable workflow exists.
 
 Deliverables:
 
 - `gate` phase
-- `resume <run-id>`
-- `approve <run-id> <gate-id>`
-- failed/cancelled run can explain what is resumable
+- `approve`
+- `reject`
+- `resume`
+- resumable state
+- completed phases are not rerun by default
+- write-capable phases require a prior gate
 
 Acceptance:
 
-- a workflow can stop before write-capable phase
-- user can resume from a completed gate
-- cancelled read-only run does not corrupt state
+- read-only `diff-review` still works without gates
+- a gate fixture can pause, approve, resume, reject
+- invalid write-capable workflow without gate fails validation
+- event log explains decisions
 
-### v0.6: More Workflow Families
+### v0.5: Workflow Registry
 
-Goal: 开始接近动态工作流的真实价值。
+Goal: make workflows reusable by id and discoverable from project/global folders.
 
 Deliverables:
 
-- `repo-audit`
-- `implementation-plan`
-- `research-crosscheck`
-- reducer templates per workflow family
-- shared worker output contracts
+- workflow search paths
+- `cwf workflows list`
+- `cwf workflows show`
+- `cwf workflows validate`
+- run by workflow id
+- workflow metadata: title, tags, inputs, capabilities
 
 Acceptance:
 
-- each workflow has fixture tests
-- each workflow has at least one real smoke
-- docs state when to use and when not to use each workflow
+- `diff-review` works by path and by id
+- duplicate ids fail clearly
+- invalid workflow specs fail with field-level errors
+- docs explain how to add a read-only workflow
 
-### v1.0: Codex-Native Dynamic Workflows
+### v0.6: Reducer And Worker Contract Hardening
 
-Goal: 对外可以说这是 Codex 的 workflow layer。
+Goal: make the engine safe for more workflow types before adding a large workflow library.
+
+Deliverables:
+
+- shared worker output envelope
+- reducer base contract
+- artifact manifest
+- retry/fallback fixtures
+- partial worker failure behavior
+- degraded run verdicts
+- structured verification gaps
+
+Acceptance:
+
+- one worker failing does not make outcomes ambiguous
+- fallback output is visible in status/result
+- artifact manifest can reconstruct what happened
+- reducers preserve worker provenance
+
+### v0.7: Example Workflow Pack
+
+Goal: demonstrate usefulness without bloating the core runtime.
+
+Deliverables:
+
+- `examples/repo-audit`
+- `examples/implementation-plan`
+- `examples/research-crosscheck`
+- `examples/release-review`
+- workflow catalog docs
+
+Rules:
+
+- examples are read-only
+- examples do not become special cases in the core engine
+- every example has when-to-use and when-not-to-use docs
+
+Acceptance:
+
+- each example passes fixture tests
+- at least one real smoke per example
+- core runtime remains generic
+
+### v1.0: Stable Codex Workflow Engine
+
+Goal: public stable release.
 
 Deliverables:
 
 - stable CLI
 - stable workflow schema
-- registry
-- watch/list/result/cancel/resume
-- read-only workflow library
-- clear skill integration
-- documented Desktop handoff plan or guarded implementation
+- run discovery
+- watch/status/result/cancel/resume
+- workflow registry
+- gate safety model
+- hardened worker/reducer contracts
+- read-only example workflow pack
+- clear Codex skill integration
+- honest Claude comparison
 
 Acceptance:
 
@@ -304,7 +372,19 @@ Acceptance:
 - no private adapter required
 - no non-Codex model routing
 - workflow failures are inspectable
-- docs do not claim features that are not implemented
+- docs do not claim unsupported Desktop or Claude parity
+
+## Delayed Until After v1.0
+
+These are valuable but not core v1.0:
+
+- generated workflow spec suggestions
+- generated executable scripts
+- remote workflow marketplace
+- Desktop task panel parity
+- write-capable workflow pack
+- GitHub PR writeback
+- non-Codex collaborator routing
 
 ## Product Rules
 
@@ -313,6 +393,7 @@ Acceptance:
 - Keep public core Codex-native.
 - Make state inspectable.
 - Prefer read-only first.
+- Define failure behavior early.
 - Treat reducer quality as product quality.
 - Make errors human-readable.
 - Make every workflow answer: what happened, what evidence, what next.
@@ -321,11 +402,15 @@ Acceptance:
 
 - Do not add private model routing to the public core.
 - Do not make arbitrary generated scripts the first workflow format.
-- Do not claim Claude feature parity before Desktop integration exists.
+- Do not claim Claude feature parity before the specific surface exists.
 - Do not hide failures behind vague AI summaries.
-- Do not let worker output overwrite user files unless explicitly allowed.
+- Do not let worker output overwrite user files unless explicitly allowed and gated.
+- Do not put domain workflow logic into the core runtime.
 
 ## Full Acceptance Matrix
+
+- [ ] A user can discover runs.
+  - Evidence: `cwf list`, `cwf show`, `cwf latest`
 
 - [ ] A user can discover workflows.
   - Evidence: `cwf workflows list`
@@ -339,17 +424,14 @@ Acceptance:
 - [ ] A user can watch progress without reading JSON.
   - Evidence: `cwf watch <run-id>`
 
-- [ ] A user can inspect raw evidence when needed.
-  - Evidence: run folder includes `state.json`, `events.jsonl`, worker outputs, result, logs, artifact manifest
+- [ ] A user can inspect failure causes.
+  - Evidence: failed run status/result includes phase, policy, error, last event
 
-- [ ] A user can cancel and understand what happened.
-  - Evidence: status shows cancelled phases/workers and no misleading result
+- [ ] A user can pause and resume gated work.
+  - Evidence: gate fixture approve/reject/resume smoke
 
 - [ ] A reducer produces one actionable final answer.
   - Evidence: final result contains verdict, findings, evidence, verification gaps, next actions, worker provenance
-
-- [ ] The system can support more than one workflow safely.
-  - Evidence: registry tests plus at least two workflows passing fixture smoke
 
 - [ ] Public core remains Codex-native.
   - Evidence: dependency and source audit shows no third-party model routers or private adapters
@@ -361,7 +443,8 @@ The next useful implementation slice is v0.3:
 1. Add `cwf list`.
 2. Add `cwf show <run-id>`.
 3. Add `cwf latest`.
-4. Add a run index.
-4. Keep `diff-review` as the only workflow.
+4. Add rebuildable run discovery.
+5. Add explicit failure policy defaults and better failure summaries.
+6. Keep `diff-review` as the only workflow.
 
-Why this first: it improves real user experience without expanding model behavior or workflow complexity. It makes background mode feel like a real workflow product instead of a hidden process.
+Why this first: it improves real user experience and reliability without expanding the workflow surface.

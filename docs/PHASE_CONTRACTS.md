@@ -5,20 +5,21 @@ archive_at: 2026-07-03
 
 # Codex Flow Phase Contracts
 
-This document turns the full roadmap into execution-ready phase contracts. Each phase has:
+This document turns the roadmap into execution-ready contracts. Each phase includes:
 
-- PRD: why users need it and what must change
-- SPEC: concrete behavior and interfaces
-- Acceptance: evidence required before calling the phase done
-- Goal Prompt: copyable prompt for Codex goal mode
+- PRD
+- SPEC
+- Acceptance
+- Goal Prompt
 
-Public core rules apply to every phase:
+Global rules for every phase:
 
-- Keep Codex Flow Codex-native.
+- Keep public core Codex-native.
 - Do not add MiMo, Reasonix, DeepSeek, Ollama, private adapters, or third-party model routing.
 - Do not claim Claude Dynamic Workflows parity unless the specific capability exists.
 - Keep docs aligned with implementation.
-- Prefer read-only workflows until a phase explicitly introduces write-capable gates.
+- Prefer read-only workflows until write-capable workflows are explicitly gated.
+- Do not add domain-specific workflow logic to the core runtime.
 
 ## Current Baseline
 
@@ -33,30 +34,23 @@ Already shipped:
 - one workflow: `diff-review`
 - run store under `~/.codex-workflows/runs/<run-id>/`
 - readable status/watch output
-- Chinese and English README
+- English and Chinese README
 
-## v0.3: Run Discovery And Observability
+## v0.3: Run Discovery And Failure Model
 
 ### PRD
 
-Users can start background runs today, but they still need to save the run id manually. Once a few runs exist, it becomes hard to answer simple questions:
+Users can start and watch background runs, but they still need to remember run ids manually. When a run fails, they need a human-readable explanation before opening raw JSON.
 
-- What did I run recently?
-- Which runs are still active?
-- Which run was for this repo?
-- Where is the latest result?
-- Can I open the last run without copying the id?
-
-v0.3 makes Codex Flow feel like a real long-running workflow tool instead of a hidden process plus scattered run folders.
+v0.3 makes Codex Flow easier to operate: find recent runs, inspect one run, open the latest run, and understand failures.
 
 ### Goals
 
-- Add a run index.
-- Let users list recent runs.
-- Let users inspect one run without remembering artifact paths.
-- Keep `watch` as the live progress view.
-- Do not add a daemon yet.
-- Do not add new workflow types yet.
+- Add run discovery.
+- Add a rebuildable run index or equivalent discovery path.
+- Make failed/degraded runs easier to understand.
+- Define default failure policies.
+- Keep `diff-review` as the only workflow.
 
 ### SPEC
 
@@ -74,7 +68,7 @@ Run index:
 ~/.codex-workflows/index.json
 ```
 
-Index entry fields:
+Index entry:
 
 ```json
 {
@@ -90,65 +84,80 @@ Index entry fields:
 }
 ```
 
-Behavior:
+Failure policy defaults:
 
-- `RunStore.create` writes a new index entry.
-- State-changing operations update the index best-effort.
-- If the index is missing or stale, `cwf list` can rebuild it from `~/.codex-workflows/runs/*/state.json`.
-- `cwf list` prints a compact table: id, status, workflow, age, target.
-- `cwf show` prints the same human-readable summary as `status`, plus artifact paths and last event.
-- `cwf latest` prints the newest matching run id and a one-line summary.
+- command phase: `abort`
+- codex worker phase: `fallback` for malformed output, `abort` when all workers fail
+- reducer phase: `abort`
+- unknown phase error: `abort`
+
+Status/show should include:
+
+- last event summary
+- failed phase or worker
+- failure policy used
+- whether the run is resumable
+- artifact paths
+
+Index behavior:
+
+- `RunStore.create` records a new index entry.
+- State changes update the index best-effort.
+- If the index is missing or stale, `cwf list` rebuilds from `~/.codex-workflows/runs/*/state.json`.
+- If JSON index is corrupted, CLI should explain the repair path or rebuild automatically from run folders.
 
 Out of scope:
 
 - daemon
 - web UI
-- Desktop task panel
-- new workflow registry
-- non-Codex workers
+- workflow registry
+- gates/resume implementation
+- new workflow types
 
 ### Acceptance
 
 - [ ] A user can list recent runs.
   - Evidence: `cwf list`
 
-- [ ] A user can filter by status.
-  - Evidence: `cwf list --status running`
-
-- [ ] A user can filter by target.
-  - Evidence: `cwf list --target <repo>`
+- [ ] A user can filter runs.
+  - Evidence: `cwf list --status running`, `cwf list --target <repo>`
 
 - [ ] A user can inspect a run without reading JSON.
   - Evidence: `cwf show <run-id>` includes status, `Now:`, workers, artifacts, and last event
 
-- [ ] A user can get the latest run id.
-  - Evidence: `cwf latest` and `cwf latest --target <repo>`
+- [ ] A user can get the latest run.
+  - Evidence: `cwf latest`, `cwf latest --target <repo>`
 
-- [ ] The index survives stale/missing cases.
+- [ ] Missing or stale index can recover.
   - Evidence: test deletes `index.json`, then `cwf list` rebuilds from run folders
 
+- [ ] Failure output is human-readable.
+  - Evidence: mocked failed worker run shows failed phase/worker/policy/last event
+
 - [ ] Existing commands still work.
-  - Evidence: `npm run check`, `cwf validate`, foreground smoke, background smoke, watch smoke, cancel smoke
+  - Evidence: `npm run check`, validate smoke, foreground smoke, background smoke, watch smoke, cancel smoke
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v0.3 Run Discovery And Observability in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v0.3 Run Discovery And Failure Model in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Keep public core Codex-native.
 - Do not add private adapters or non-Codex model routing.
 - Do not add new workflow types.
+- Do not add workflow registry yet.
 - Keep existing diff-review behavior working.
 
 Required:
-- Add run index under ~/.codex-workflows/index.json.
+- Add run index under ~/.codex-workflows/index.json or an equivalent rebuildable discovery layer.
 - Add cwf list [--limit <n>] [--status <status>] [--target <path>].
 - Add cwf show <run-id>.
 - Add cwf latest [--target <path>].
-- Make list resilient when index.json is missing or stale by rebuilding from run folders.
-- Update README, README.zh-CN, SPEC, PRD, SKILL_PLAN, ACCEPTANCE, and PHASE_CONTRACTS if behavior changes.
-- Add tests for index creation/update/rebuild and CLI formatting.
+- Rebuild discovery data from run folders when index is missing/stale/corrupt.
+- Add default failure policy metadata and human-readable failure summaries.
+- Update README, README.zh-CN, PRD, SPEC, SKILL_PLAN, ACCEPTANCE, FULL_PLAN, and PHASE_CONTRACTS if behavior changes.
+- Add tests for index/discovery creation, rebuild, filtering, latest, show formatting, and failure summaries.
 
 Verification:
 - npm run check
@@ -158,6 +167,7 @@ Verification:
 - fixture background smoke
 - cwf watch smoke
 - cwf list/show/latest smoke
+- mocked failure smoke
 - cancel smoke
 
 Final response:
@@ -165,21 +175,138 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v0.4: Workflow Registry
+## v0.4: Gates And Resume
 
 ### PRD
 
-One hardcoded workflow is enough for MVP, but not enough for a dynamic workflow layer. Users need a predictable way to discover, validate, and run saved workflows from a project or global location.
-
-v0.4 makes workflows reusable objects instead of one bundled YAML file.
+Before Codex Flow supports write-capable workflows or long multi-stage runs, users need a safe pause/resume model. A workflow should be able to stop before risk, wait for approval, and continue without rerunning completed phases.
 
 ### Goals
 
-- Introduce project and global workflow discovery.
-- Keep workflow specs declarative and constrained.
-- Let users list and validate available workflows.
+- Add explicit gates.
+- Add approve/reject/resume.
+- Preserve read-only defaults.
+- Make write-capable phases impossible without a prior gate.
+- Avoid adding production write workflows in this phase.
+
+### SPEC
+
+New commands:
+
+```bash
+cwf approve <run-id> <gate-id>
+cwf reject <run-id> <gate-id> [--reason <text>]
+cwf resume <run-id>
+```
+
+New phase kind:
+
+```yaml
+- id: approve-write
+  kind: gate
+  prompt: Review the planned file changes before Codex writes.
+  requires_approval: true
+```
+
+New statuses:
+
+```text
+waiting
+approved
+rejected
+```
+
+Resume rules:
+
+- Completed phases do not rerun by default.
+- Pending phases after an approved gate can continue.
+- Rejected gates stop the run.
+- Gate decisions are written to `state.json` and `events.jsonl`.
+- `cwf show` explains why a run is waiting and how to approve/reject.
+
+Validation rules:
+
+- Any phase or worker with `writes: true` must appear after a gate.
+- Any write-capable workflow without a gate fails validation.
+- Read-only workflows do not require gates.
+
+Out of scope:
+
+- automatic code modification workflow pack
+- GitHub writeback
+- remote approval UI
+- Desktop approval panel
+
+### Acceptance
+
+- [ ] Read-only `diff-review` still runs without gates.
+  - Evidence: diff-review smoke
+
+- [ ] Write-capable workflow without gate fails validation.
+  - Evidence: schema fixture test
+
+- [ ] A workflow can pause at a gate.
+  - Evidence: gate fixture reaches `waiting`
+
+- [ ] A user can approve and resume.
+  - Evidence: `cwf approve <run-id> <gate-id>` then `cwf resume <run-id>`
+
+- [ ] A user can reject and stop.
+  - Evidence: `cwf reject <run-id> <gate-id> --reason ...`
+
+- [ ] Completed phases are not rerun on resume.
+  - Evidence: event log shows only pending phases continue
+
+### Goal Prompt
+
+```text
+Build Codex Flow v0.4 Gates And Resume in /Users/sunny/Work/CODEX/codex-workflows.
+
+Scope:
+- Keep public core Codex-native.
+- Do not add a production write-capable workflow.
+- Implement safety primitives only.
+- Keep diff-review read-only and behavior-compatible.
+
+Required:
+- Add gate phase kind.
+- Add waiting/approved/rejected statuses where needed.
+- Add cwf approve, reject, and resume.
+- Add validation rule: workflows with writes:true must include a gate before the first write-capable phase.
+- Ensure completed phases do not rerun on resume.
+- Persist gate decisions in state.json and events.jsonl.
+- Make status/show explain waiting gates in human terms.
+- Update docs and tests.
+
+Verification:
+- npm run check
+- npm pack --dry-run
+- diff-review smoke still passes
+- gate fixture pauses
+- approve/resume fixture completes
+- reject fixture stops cleanly
+- validation fails for write workflow without gate
+
+Final response:
+- Explain the new safety model in plain language.
+- Include commands run, pass/fail, commit hash, and push status.
+```
+
+## v0.5: Workflow Registry
+
+### PRD
+
+One bundled workflow is not enough for a reusable engine. Users need to discover, inspect, validate, and run workflows by id from project or global folders.
+
+v0.5 makes workflows reusable specs, while keeping execution constrained and auditable.
+
+### Goals
+
+- Add project/global workflow discovery.
+- Run workflows by id or path.
+- Keep specs declarative.
 - Keep `diff-review` as the first registry workflow.
-- Do not add arbitrary generated scripts.
+- Do not add generated scripts or marketplace.
 
 ### SPEC
 
@@ -204,59 +331,62 @@ Workflow metadata:
 
 ```yaml
 id: diff-review
-version: 0.4.0
+version: 0.5.0
 title: Diff Review
 description: Review a git diff with independent Codex worker perspectives.
 tags:
   - review
   - read-only
+capabilities:
+  writes: false
 inputs:
   target:
     type: path
     required: true
-    description: Target git repo.
 ```
 
-Validation must check:
+Validation checks:
 
-- unique workflow ids across active search path
-- required fields
+- unique workflow ids
+- required metadata
+- input declarations
 - supported phase kinds
-- valid reducer name
-- worker ids unique inside a workflow
-- workflow declares whether it is read-only or write-capable
+- valid reducer
+- unique worker ids
+- gate before write-capable phase
+- clear duplicate-id errors
 
 Out of scope:
 
-- user-generated JavaScript workflows
-- marketplace publishing
-- remote workflow fetching
+- remote workflow install
+- marketplace
+- arbitrary generated JavaScript workflows
 - non-Codex model providers
 
 ### Acceptance
 
-- [ ] A user can discover local workflows.
+- [ ] A user can discover workflows.
   - Evidence: `cwf workflows list`
 
-- [ ] A user can inspect a workflow before running it.
+- [ ] A user can inspect a workflow.
   - Evidence: `cwf workflows show diff-review`
 
-- [ ] A user can validate all discovered workflows.
+- [ ] A user can validate workflows.
   - Evidence: `cwf workflows validate`
 
-- [ ] A user can run by workflow id.
+- [ ] A user can run by id.
   - Evidence: `cwf run diff-review --target <repo> --background`
 
-- [ ] Duplicate workflow ids fail clearly.
-  - Evidence: fixture test with duplicate project/global ids
-
-- [ ] Existing direct path usage still works.
+- [ ] Direct path usage still works.
   - Evidence: `cwf run workflows/diff-review.yaml --target <repo>`
+
+- [ ] Duplicate ids fail clearly.
+  - Evidence: fixture test
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v0.4 Workflow Registry in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v0.5 Workflow Registry in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Keep public core Codex-native.
@@ -267,8 +397,9 @@ Required:
 - Add workflow search paths: ./.codex-flow/workflows, ./workflows, ~/.codex-flow/workflows.
 - Add cwf workflows list/show/validate.
 - Allow cwf run <workflow-id-or-path> --target <repo>.
-- Extend workflow schema with title, tags, inputs, and read-only/write-capable metadata.
+- Extend workflow schema with title, tags, inputs, and capabilities metadata.
 - Add duplicate-id detection and clear field-level validation errors.
+- Preserve gate validation from v0.4.
 - Update docs and tests.
 
 Verification:
@@ -285,254 +416,238 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v0.5: Gates, Resume, And Safer Writes
+## v0.6: Worker And Reducer Contract Hardening
 
 ### PRD
 
-Dynamic workflows become risky once they can write files or continue after partial failure. Users need a way to pause before dangerous steps, inspect state, approve continuation, and resume without restarting everything.
+Before adding many workflows, the engine needs stable worker and reducer contracts. Otherwise each workflow will invent its own output shape and failure behavior, creating a pile of incompatible scripts.
 
-v0.5 adds the safety model required before Codex Flow can support write-capable workflows.
+v0.6 makes outputs predictable across workflows.
 
 ### Goals
 
-- Add explicit `gate` phases.
-- Add resumable run state.
-- Let users approve a paused gate.
-- Preserve read-only default.
-- Make write-capable phases opt-in only.
+- Standardize worker result envelope.
+- Standardize reducer result envelope.
+- Add artifact manifest.
+- Make degraded/partial results explicit.
+- Test retry/fallback/partial worker failure behavior.
 
 ### SPEC
 
-New commands:
+Worker result envelope:
 
-```bash
-cwf resume <run-id>
-cwf approve <run-id> <gate-id>
-cwf reject <run-id> <gate-id> [--reason <text>]
+```json
+{
+  "worker_id": "tests",
+  "status": "completed",
+  "confidence": "high",
+  "summary": "string",
+  "findings": [],
+  "verification": [],
+  "artifacts": [],
+  "raw_fallback": false,
+  "usage": null
+}
 ```
 
-New statuses:
+Reduced result envelope:
+
+```json
+{
+  "verdict": "pass|review|fail|degraded",
+  "summary": "string",
+  "findings": [],
+  "verification_gaps": [],
+  "next_actions": [],
+  "worker_provenance": [],
+  "artifacts": []
+}
+```
+
+Artifact manifest:
 
 ```text
-waiting
-approved
-rejected
+~/.codex-workflows/runs/<run-id>/artifacts/manifest.json
 ```
 
-New phase kind:
+Must record:
 
-```yaml
-- id: approve-write
-  kind: gate
-  prompt: Review the planned file changes before Codex writes.
-  requires_approval: true
-```
-
-Resume contract:
-
-- Completed phases are not rerun by default.
-- Pending phases after an approved gate may continue.
-- Failed phases expose whether they are resumable.
-- Rejected gates stop the run and write a clear final state.
-- Read-only workflows do not require gates.
-
-Safety contract:
-
-- Any worker or phase that writes files must declare `writes: true`.
-- Any workflow with `writes: true` must include at least one gate before the first write-capable phase.
-- A workflow that declares writes without a gate fails validation.
+- state path
+- events path
+- worker output paths
+- result path
+- input context paths
+- generated artifacts
 
 Out of scope:
 
-- automatic code modification workflow library
-- GitHub writeback
-- remote approval UI
-- Desktop task approval UI
+- new workflow pack
+- generated specs
+- Desktop UI
+- non-Codex workers
 
 ### Acceptance
 
-- [ ] A read-only workflow still runs without gates.
-  - Evidence: `diff-review` smoke passes
+- [ ] Partial worker failure is unambiguous.
+  - Evidence: fixture where one worker fails and result is `degraded` or continues by declared policy
 
-- [ ] A write-capable workflow without a gate fails validation.
-  - Evidence: fixture schema test
+- [ ] Raw fallback is visible.
+  - Evidence: malformed worker output fixture shows fallback in status/result
 
-- [ ] A workflow can pause at a gate.
-  - Evidence: smoke workflow reaches `waiting`
+- [ ] Artifact manifest reconstructs the run.
+  - Evidence: manifest includes state/events/workers/result/input context
 
-- [ ] A user can approve and resume.
-  - Evidence: `cwf approve <run-id> <gate-id>` then `cwf resume <run-id>`
+- [ ] Reducers keep provenance.
+  - Evidence: final result maps findings to worker ids
 
-- [ ] A user can reject and stop.
-  - Evidence: `cwf reject <run-id> <gate-id> --reason ...` produces stopped state
-
-- [ ] Completed phases are not rerun on resume.
-  - Evidence: event log shows only pending phases continue
+- [ ] Existing diff-review remains green.
+  - Evidence: smoke and tests
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v0.5 Gates, Resume, And Safer Writes in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v0.6 Worker And Reducer Contract Hardening in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Keep public core Codex-native.
-- Do not add a write-capable production workflow yet.
-- Implement the safety primitives first.
-- Keep diff-review read-only and unchanged in behavior.
+- Do not add new workflow families yet.
+- Do not add private adapters or non-Codex model routing.
+- Focus on stable output contracts and artifact evidence.
 
 Required:
-- Add gate phase kind.
-- Add waiting/approved/rejected statuses where needed.
-- Add cwf approve, reject, and resume.
-- Add validation rule: workflows with writes:true must include a gate before first write-capable phase.
-- Ensure completed phases do not rerun on resume.
-- Persist gate decisions in state.json and events.jsonl.
+- Standardize worker result envelope.
+- Standardize reduced result envelope.
+- Add artifact manifest.
+- Make partial failure, degraded verdicts, retry/fallback, and raw fallback visible.
+- Preserve worker provenance in final output.
 - Update docs and tests.
 
 Verification:
 - npm run check
 - npm pack --dry-run
-- diff-review smoke still passes
-- gate fixture pauses
-- approve/resume fixture completes
-- reject fixture stops cleanly
-- validation fails for write workflow without gate
+- diff-review smoke
+- partial worker failure fixture
+- malformed output fallback fixture
+- artifact manifest fixture
 
 Final response:
-- Explain the new safety model in plain language.
+- Explain why workflow outputs are now more trustworthy.
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v0.6: Workflow Families
+## v0.7: Example Workflow Pack
 
 ### PRD
 
-Codex Flow starts feeling like Dynamic Workflows only when it has more than one useful workflow. v0.6 adds several read-only workflow families that cover common engineering tasks without introducing file writes.
+Once the engine is reliable, examples can show what it is for. These workflows should prove usefulness without becoming hardcoded core logic.
 
 ### Goals
 
-- Add practical read-only workflows beyond diff review.
-- Reuse the registry from v0.4.
-- Reuse status/watch/list from v0.3.
-- Reuse safety rules from v0.5.
-- Keep every workflow evidence-based.
+- Add read-only example workflows.
+- Keep examples outside the runtime core.
+- Document when to use and when not to use each workflow.
+- Preserve evidence and provenance.
 
 ### SPEC
 
-New workflows:
+Example workflows:
 
 ```text
-repo-audit
-implementation-plan
-research-crosscheck
-release-review
+examples/repo-audit
+examples/implementation-plan
+examples/research-crosscheck
+examples/release-review
 ```
 
-Workflow contracts:
+Contracts:
 
-`repo-audit`:
+- `repo-audit`: structure, tests, docs, risk
+- `implementation-plan`: architecture, implementation, tests, rollout
+- `research-crosscheck`: source-finder, skeptic, synthesizer
+- `release-review`: tests, docs, rollout, rollback
 
-- Inputs: `target`
-- Workers: structure, tests, docs, risk
-- Output: repo health report, priority findings, verification gaps
+Rules:
 
-`implementation-plan`:
-
-- Inputs: `target`, `goal`
-- Workers: architecture, implementation, tests, rollout
-- Output: plan, files likely touched, acceptance matrix, risks
-
-`research-crosscheck`:
-
-- Inputs: `question`, optional `target`, optional `sources`
-- Workers: source-finder, skeptic, synthesizer
-- Output: sourced answer, disagreement notes, confidence
-
-`release-review`:
-
-- Inputs: `target`
-- Workers: tests, docs, rollout, rollback
-- Output: release verdict, blockers, checks, rollback notes
-
-Reducer requirements:
-
-- Each workflow has its own reducer or reducer mode.
-- Every finding keeps worker provenance.
-- Every claim that depends on a file cites a path or artifact.
-- Every workflow returns verification gaps.
+- examples are read-only
+- examples use registry path
+- examples use shared worker/reducer envelopes
+- examples have fixture tests
+- examples do not add special runtime code unless generalized
 
 Out of scope:
 
 - file modification
 - deployment automation
-- browser/UI automation workflows
+- GitHub writeback
+- browser/UI workflow automation
 - non-Codex research providers
 
 ### Acceptance
 
-- [ ] `repo-audit` passes fixture and real smoke.
-  - Evidence: `cwf run repo-audit --target <repo>`
+- [ ] `repo-audit` works as an example workflow.
+  - Evidence: fixture and real smoke
 
-- [ ] `implementation-plan` passes fixture and real smoke.
-  - Evidence: `cwf run implementation-plan --target <repo> --goal "..."`
+- [ ] `implementation-plan` works as an example workflow.
+  - Evidence: fixture and real smoke
 
-- [ ] `research-crosscheck` passes fixture and at least one live-source constrained smoke when network is allowed.
-  - Evidence: result includes sources or explicitly marks unavailable sources
+- [ ] `research-crosscheck` works with constrained sources or clearly marks unavailable sources.
+  - Evidence: fixture and smoke
 
-- [ ] `release-review` passes fixture and real smoke.
-  - Evidence: result includes blockers/checks/rollback notes
+- [ ] `release-review` works as an example workflow.
+  - Evidence: fixture and real smoke
 
-- [ ] Each workflow is documented with when-to-use and when-not-to-use.
-  - Evidence: README or docs workflow catalog
+- [ ] Workflow catalog documents boundaries.
+  - Evidence: when-to-use and when-not-to-use docs
 
-- [ ] Existing `diff-review` remains green.
-  - Evidence: existing smoke and tests
+- [ ] Core runtime remains generic.
+  - Evidence: source review shows no hardcoded example special cases
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v0.6 Workflow Families in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v0.7 Example Workflow Pack in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Keep public core Codex-native.
-- Add only read-only workflows.
+- Add read-only examples only.
 - Do not add file writes, deployment automation, private adapters, or non-Codex model routing.
-- Use the registry and run store already built in earlier phases.
+- Do not hardcode example-specific logic into the core runtime.
 
 Required:
-- Add repo-audit, implementation-plan, research-crosscheck, and release-review workflows.
-- Add or extend reducers for each workflow.
+- Add example workflows: repo-audit, implementation-plan, research-crosscheck, release-review.
 - Add workflow catalog docs with when-to-use and when-not-to-use.
-- Add fixture tests and at least one real smoke per workflow.
+- Use the registry, gates, and worker/reducer contracts already built.
+- Add fixture tests and at least one real smoke per example.
 - Preserve worker provenance and verification gaps in every result.
 
 Verification:
 - npm run check
 - npm pack --dry-run
 - cwf workflows validate
-- smoke each new workflow
+- smoke each example workflow
 - smoke existing diff-review
+- source review for no example-specific core special casing
 
 Final response:
-- Explain which new workflows users can now run.
+- Explain which examples users can now run.
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v1.0: Codex-Native Dynamic Workflows
+## v1.0: Stable Codex Workflow Engine
 
 ### PRD
 
-v1.0 is the point where Codex Flow can be presented as a stable Codex-native workflow layer. It should be installable, discoverable, documented, inspectable, and safe enough for public use by people outside this machine.
+v1.0 is the stable public release of Codex Flow as a workflow engine. It should be installable, inspectable, resumable, and honest about what it does.
 
 ### Goals
 
-- Stabilize CLI and workflow schema.
-- Stabilize workflow registry.
-- Stabilize run store and artifact manifest.
-- Provide a small read-only workflow library.
-- Provide clear Codex skill integration.
-- Document Desktop handoff as guarded future or experimental optional path.
-- Remove stale MVP-only language.
+- Stabilize CLI.
+- Stabilize workflow schema.
+- Stabilize run discovery and registry.
+- Stabilize gate/resume safety model.
+- Stabilize worker/reducer contracts.
+- Ship a read-only example workflow pack.
+- Keep Claude comparison honest.
 
 ### SPEC
 
@@ -541,9 +656,6 @@ Stable commands:
 ```bash
 cwf --help
 cwf validate <workflow>
-cwf workflows list
-cwf workflows show <workflow>
-cwf workflows validate
 cwf run <workflow> --target <repo> [--background]
 cwf status <run-id>
 cwf watch <run-id>
@@ -555,6 +667,9 @@ cwf cancel <run-id>
 cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id>
 cwf resume <run-id>
+cwf workflows list
+cwf workflows show <workflow>
+cwf workflows validate
 ```
 
 Stable docs:
@@ -563,48 +678,41 @@ Stable docs:
 - README.zh-CN
 - PRD
 - SPEC
-- workflow catalog
-- skill plan
-- acceptance matrix
+- FULL_PLAN
+- PHASE_CONTRACTS
+- SKILL_PLAN
 - Claude comparison
-- phase contracts
+- workflow catalog
+- acceptance matrix
 
-Release checklist:
-
-- dependency audit has no private adapters or non-Codex routing
-- tests cover schema, registry, run store, reducers, CLI, failure paths
-- package dry-run is clean enough for public release
-- every documented command works
-- examples are current
-- docs do not claim Desktop UI parity unless implemented
-
-Out of scope for v1.0:
+Out of scope:
 
 - marketplace
 - remote workflow install
 - full Desktop task panel parity
-- automatic generated script execution
+- arbitrary generated JS execution
 - non-Codex model collaboration
+- private adapters
 
 ### Acceptance
 
 - [ ] A new user can install and run from docs alone.
-  - Evidence: fresh clone smoke from README
+  - Evidence: fresh clone smoke
 
 - [ ] All documented commands work.
-  - Evidence: command checklist output
+  - Evidence: command checklist
 
-- [ ] Workflow registry supports multiple workflows.
-  - Evidence: `cwf workflows list` shows workflow library
+- [ ] Workflows are discoverable and reusable.
+  - Evidence: `cwf workflows list`, `cwf run <workflow-id>`
 
-- [ ] Long-running workflow lifecycle works end to end.
+- [ ] Long-running lifecycle works.
   - Evidence: run, watch, list, show, result, cancel/resume where applicable
 
 - [ ] Public core remains Codex-native.
-  - Evidence: source/dependency audit
+  - Evidence: dependency/source audit
 
 - [ ] Docs are honest.
-  - Evidence: no unsupported claims in README/docs
+  - Evidence: claim audit for README/docs
 
 - [ ] Package is releasable.
   - Evidence: `npm pack --dry-run`
@@ -612,20 +720,20 @@ Out of scope for v1.0:
 ### Goal Prompt
 
 ```text
-Prepare Codex Flow v1.0 in /Users/sunny/Work/CODEX/codex-workflows.
+Prepare Codex Flow v1.0 Stable Codex Workflow Engine in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
-- Stabilize the public Codex-native workflow layer.
+- Stabilize the public Codex-native workflow engine.
 - Do not add marketplace, remote workflow install, full Desktop UI parity, generated JS workflow execution, private adapters, or non-Codex model routing.
-- Focus on public reliability, documentation honesty, and installable quality.
+- Focus on reliability, documentation honesty, installable quality, and public release readiness.
 
 Required:
 - Finalize CLI command surface.
 - Finalize workflow schema and registry docs.
 - Finalize run store artifact manifest.
-- Ensure all workflow families are documented and tested.
+- Ensure example workflows are documented and tested.
 - Update README, README.zh-CN, PRD, SPEC, SKILL_PLAN, PHASE_CONTRACTS, FULL_PLAN, workflow catalog, and acceptance docs.
-- Run a source/dependency audit for private adapter or non-Codex routing leaks.
+- Run source/dependency audit for private adapter or non-Codex routing leaks.
 - Prepare release notes.
 
 Verification:
