@@ -7,7 +7,7 @@ archive_at: 2026-06-09
 
 ## Scope
 
-Accept only a public Codex-native MVP. Private adapters are out of scope.
+Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 
 ## Must Pass
 
@@ -104,6 +104,9 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Example workflows preserve the shared worker/reducer evidence contract.
   - Evidence: fixture tests and smokes confirm reduced results include worker provenance, verification gaps, and artifact references.
 
+- [ ] Release notes are prepared.
+  - Evidence: `RELEASE_NOTES.md` describes stable surface, public boundary, verification, and known limits.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.
@@ -113,7 +116,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] Failed runs include default failure policy metadata and a human-readable failure summary.
 - [ ] Degraded reducer results preserve worker provenance and raw fallback details.
 
-## Explicit Non-Goals For MVP
+## Explicit Non-Goals For v1.0
 
 - Native Codex Desktop task panel.
 - Codex app-server Desktop handoff. This is planned for a later guarded integration.
@@ -123,7 +126,7 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - Automatic code modification workflows.
 - Remote workflow marketplace.
 - Production write-capable workflow.
-- Publishing to npm.
+- Publishing to npm from this task.
 
 ## Stop Conditions
 

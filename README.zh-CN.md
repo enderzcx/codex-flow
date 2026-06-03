@@ -2,7 +2,7 @@
 
 一个轻量的 Codex 原生工作流 runner，用来把一次工程审查拆成多个 Codex worker 并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
 
-它只依赖 OpenAI Codex SDK 和 CLI：不接第三方模型路由，不接私有 adapter，不把项目绑到某个个人环境。公开版内置一组只读 workflow：`diff-review`、`repo-audit`、`implementation-plan`、`research-crosscheck`、`release-review`。
+它只依赖 OpenAI Codex SDK 和 CLI：不接第三方模型路由，不接私有 adapter，不把项目绑到某个个人环境。v1.0 公开版内置一组只读 workflow：`diff-review`、`repo-audit`、`implementation-plan`、`research-crosscheck`、`release-review`。
 
 ## 它解决什么
 
@@ -205,7 +205,7 @@ npm run check
 npm pack --dry-run
 ```
 
-当前已覆盖：
+v1.0 已覆盖：
 
 - fixture diff
 - 真实大 diff smoke
@@ -221,9 +221,11 @@ npm pack --dry-run
 - workflow validate
 - 人能读懂的 status 输出
 - 内置 example workflow 的 registry validate 和 catalog docs
+- documented command surface 和 install/build/link flow
 
 更多设计说明见：
 
+- [Release notes](RELEASE_NOTES.md)
 - [PRD](docs/PRD.md)
 - [Spec](docs/SPEC.md)
 - [Full plan](docs/FULL_PLAN.md)

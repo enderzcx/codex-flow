@@ -1,4 +1,4 @@
-# Codex Flow MVP Spec
+# Codex Flow v1.0 Spec
 
 ## CLI
 
@@ -65,7 +65,7 @@ Workflow metadata:
 
 ```yaml
 id: diff-review
-version: 0.7.0
+version: 1.0.0
 title: Diff Review
 description: Review a git diff with independent Codex worker perspectives.
 tags:
@@ -406,7 +406,7 @@ Planned contract:
 - Workflow ids discovered in local search paths must be unique.
 - Write-capable phases or workers must be preceded by a gate.
 - Gates only pause and resume workflow phases; this release does not ship a production write-capable workflow.
-- Public MVP has no private adapters or third-party model routing.
+- Public v1.0 has no private adapters or third-party model routing.
 
 ## Known Limitations
 

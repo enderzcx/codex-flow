@@ -367,6 +367,8 @@ Acceptance:
 
 Goal: public stable release.
 
+Status: implemented.
+
 Deliverables:
 
 - stable CLI
@@ -379,6 +381,7 @@ Deliverables:
 - read-only example workflow pack
 - clear Codex skill integration
 - honest Claude comparison
+- release notes
 
 Acceptance:
 
@@ -452,11 +455,11 @@ These are valuable but not core v1.0:
 
 ## Next Best Slice
 
-The next useful implementation slice is v1.0 release hardening:
+The next useful implementation slice is post-v1.0 release operations:
 
-1. Audit docs and package contents for public release readiness.
-2. Run all documented command smokes from a fresh install path.
-3. Decide whether v1.0 needs more reducer generalization or the current shared reducer is enough.
-4. Prepare release notes.
+1. Decide whether and where to publish the package.
+2. Add CI release checks around the documented command smoke suite.
+3. Explore a second reducer contract only if a non-review workflow needs it.
+4. Keep Desktop handoff and write-capable workflows behind explicit future gates.
 
-Why this next: the read-only example pack is now in place, so the remaining work is release confidence and honest positioning.
+Why this next: the stable CLI core is ready; the next work is distribution discipline, not more runtime scope.

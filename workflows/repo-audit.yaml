@@ -1,5 +1,5 @@
 id: repo-audit
-version: 0.7.0
+version: 1.0.0
 title: Repo Audit
 description: Audit a tracked repo diff for maintainability, project hygiene, and release risk.
 tags:

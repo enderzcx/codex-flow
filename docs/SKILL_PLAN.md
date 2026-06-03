@@ -125,10 +125,12 @@ The skill should ask Codex to report:
 - gate id, gate status, and decision reason when relevant
 - whether the target diff changed
 - short human summary of what the run did, not only raw artifact paths
+- package/version when release readiness matters
 
 ## Future Skill Expansions
 
-Only after the read-only example pack is stable:
+Only after v1.0 release readiness is stable:
 
+- CI release smoke wrapper
 - migration plan workflow
 - generated workflow spec suggestions

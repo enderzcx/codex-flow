@@ -1,7 +1,7 @@
 {
   "name": "codex-flow",
-  "version": "0.7.0",
-  "description": "Codex-native dynamic workflow runner MVP.",
+  "version": "1.0.0",
+  "description": "Codex-native workflow runner for inspectable multi-worker review.",
   "type": "module",
   "bin": {
     "cwf": "./dist/cli.js"

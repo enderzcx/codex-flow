@@ -1,6 +1,6 @@
 # Codex Flow Workflow Catalog
 
-This catalog covers the public read-only workflows bundled with Codex Flow.
+This catalog covers the public read-only workflows bundled with Codex Flow v1.0.
 
 All bundled workflows:
 

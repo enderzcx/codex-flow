@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.7.0"
+  version: "1.0.0"
 ---
 
 # codex-workflows

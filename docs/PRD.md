@@ -42,7 +42,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - Run workflows by id or direct path.
 - Ship read-only example workflows for repo audit, implementation-plan review, research cross-check, and release review.
 - Document when to use and when not to use each bundled workflow.
-- Keep the public MVP free of private adapters or third-party model routing.
+- Keep the public v1.0 core free of private adapters or third-party model routing.
 
 ## Non-Goals
 
@@ -50,14 +50,14 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 - No non-Codex model routing.
 - No UI.
 - No generated workflow scripts.
-- No broad workflow marketplace in MVP.
+- No broad workflow marketplace in v1.0.
 - No production write-capable workflow in this release.
 - No remote workflow marketplace.
 - No generated JavaScript workflows.
 - No exact parity with Claude Dynamic Workflows.
-- No mandatory Codex Desktop integration in MVP.
+- No mandatory Codex Desktop integration in v1.0.
 
-## MVP User Stories
+## User Stories
 
 1. As a Codex user, I can run `cwf validate workflows/diff-review.yaml` and confirm the workflow is valid before spending model time.
 2. As a Codex user, I can run `cwf run workflows/diff-review.yaml --target <repo>` and get a review report.
@@ -113,7 +113,7 @@ Codex is strong in a single session, but large diffs benefit from parallel indep
 
 ## Public Positioning
 
-Codex Flow is a thin Codex-native workflow runner. It is not an orchestration framework, not a multi-model router, and not an enterprise queue. The MVP is intentionally small so the run contract is easy to understand and verify.
+Codex Flow is a thin Codex-native workflow runner. It is not an orchestration framework, not a multi-model router, and not an enterprise queue. The v1.0 public core is intentionally small so the run contract is easy to understand and verify.
 
 ## Future: Codex Desktop Handoff
 

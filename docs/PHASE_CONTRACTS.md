@@ -694,6 +694,8 @@ v1.0 is the stable public release of Codex Flow as a workflow engine. It should 
 - Ship a read-only example workflow pack.
 - Keep Claude comparison honest.
 
+Status: implemented in v1.0.0.
+
 ### SPEC
 
 Stable commands:
@@ -719,6 +721,7 @@ cwf workflows validate
 
 Stable docs:
 
+- RELEASE_NOTES
 - README
 - README.zh-CN
 - PRD

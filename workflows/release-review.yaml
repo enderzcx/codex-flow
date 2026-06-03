@@ -1,5 +1,5 @@
 id: release-review
-version: 0.7.0
+version: 1.0.0
 title: Release Review
 description: Review a tracked release diff for ship readiness, rollout risk, and rollback evidence.
 tags:

@@ -8,7 +8,7 @@ Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK a
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
 
-This is an early public release. It is intentionally narrow: CLI-first, filesystem-backed state, readable status, local workflow discovery, and read-only review by default.
+This is the v1.0 public CLI release. It is intentionally narrow: CLI-first, filesystem-backed state, readable status, local workflow discovery, and read-only review by default.
 
 ## What It Does
 
@@ -200,7 +200,7 @@ npm run check
 npm pack --dry-run
 ```
 
-The MVP has been smoke-tested on:
+The v1.0 release has been smoke-tested on:
 
 - a fixture diff
 - a real larger repo diff
@@ -215,9 +215,11 @@ The MVP has been smoke-tested on:
 - workflow registry list/show/validate, duplicate-id detection, and id-or-path runs
 - workflow validation and human-readable status formatting
 - bundled workflow catalog and example workflow registry validation
+- documented command surface and install/build/link flow
 
 ## Docs
 
+- [Release notes](RELEASE_NOTES.md)
 - [PRD](docs/PRD.md)
 - [Spec](docs/SPEC.md)
 - [Full plan](docs/FULL_PLAN.md)

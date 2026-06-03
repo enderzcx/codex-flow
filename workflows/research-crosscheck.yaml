@@ -1,5 +1,5 @@
 id: research-crosscheck
-version: 0.7.0
+version: 1.0.0
 title: Research Cross-Check
 description: Review a tracked research or documentation diff for source fidelity and unsupported claims.
 tags:

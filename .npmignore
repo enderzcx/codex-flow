@@ -1,0 +1,11 @@
+node_modules/
+*.tgz
+.DS_Store
+
+# Internal planning and test artifacts are useful in the repo but not needed in the npm package.
+GOAL_PROMPT.md
+IMPLEMENTATION_PLAN.md
+PLAN.md
+/tests/
+/src/
+/tsconfig.json
