@@ -4,11 +4,15 @@
 
 ```bash
 cwf --help
+cwf validate <workflow.yaml>
+cwf dry-run <workflow.yaml>
 cwf run <workflow.yaml> --target <repo> [--background]
 cwf status <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
+
+`validate` and `dry-run` are aliases. They load and validate the workflow spec, then print the workflow id, version, phase order, worker ids, and a confirmation that no Codex workers were started.
 
 ## Workflow
 
@@ -66,6 +70,27 @@ Statuses:
 - `completed`
 - `failed`
 - `cancelled`
+
+## Status Output Contract
+
+`cwf status <run-id>` is the human-facing summary for a run. It must include:
+
+- run id
+- workflow id
+- run status
+- plain-language current work
+- target path
+- completed worker count
+- raw fallback count
+- active phase when a phase is running
+- phase status and duration when timestamps exist
+- worker status, duration, fallback marker, and finding count when available
+- artifact paths for `state.json`, `events.jsonl`, `workers/*.json`, `result.md`, and `run.log`
+- PID for active background runs
+
+If `result.md` is not ready, status prints `Result: not ready yet`.
+
+`cwf result <run-id>` must print a useful error when the report is missing and point users back to `cwf status <run-id>`.
 
 ## Worker Contract
 
@@ -166,4 +191,3 @@ Final sections:
 - Background runs are process-based, not daemon-backed.
 - No retry/rate-limit manager yet.
 - No workflow plugin system yet.
-

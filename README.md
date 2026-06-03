@@ -2,11 +2,13 @@
 
 A lightweight, Codex-native workflow runner for multi-agent code review.
 
+中文文档: [README.zh-CN.md](README.zh-CN.md)
+
 Codex Flow lets you run multi-worker workflows using only the OpenAI Codex SDK and CLI: no external LLM routers, no private adapters, no heavy orchestration framework. The MVP ships one workflow, `diff-review`, which starts three Codex workers in parallel and aggregates their findings into structured JSON and a readable Markdown report.
 
 It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, and revisited later.
 
-This is an MVP. It is intentionally narrow: one workflow, CLI-first, filesystem-backed state, read-only review by default.
+This is an early public release. It is intentionally narrow: one workflow, CLI-first, filesystem-backed state, readable status, and read-only review by default.
 
 ## What It Does
 
@@ -34,6 +36,12 @@ cwf --help
 
 ## Usage
 
+Validate the workflow before starting workers:
+
+```bash
+cwf validate workflows/diff-review.yaml
+```
+
 Run in the foreground:
 
 ```bash
@@ -48,6 +56,8 @@ cwf status <run-id>
 cwf result <run-id>
 cwf cancel <run-id>
 ```
+
+`cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, result, and log files.
 
 Run artifacts are stored under:
 
@@ -78,14 +88,22 @@ Example status:
 Run ID: run_...
 Workflow: diff-review
 Status: completed
+Now: done; open the result report
+Target: /path/to/repo
+Workers: 3/3 completed, 0 fallback
 Phases:
-- collect: completed
-- review: completed
-- reduce: completed
+- collect: completed (1s)
+- review: completed (14s)
+- reduce: completed (0s)
 Workers:
-- correctness: completed
-- tests: completed
-- safety: completed
+- correctness: completed (12s), findings=1
+- tests: completed (14s), findings=0
+- safety: completed (11s), findings=0
+Artifacts:
+- State: ~/.codex-workflows/runs/run_.../state.json
+- Events: ~/.codex-workflows/runs/run_.../events.jsonl
+- Workers: ~/.codex-workflows/runs/run_.../workers/*.json
+- Result: ~/.codex-workflows/runs/run_.../result.md
 ```
 
 ## How It Differs From Claude Dynamic Workflows
@@ -120,10 +138,11 @@ npm pack --dry-run
 The MVP has been smoke-tested on:
 
 - a fixture diff
-- a real large Reasonix diff
+- a real larger repo diff
 - foreground and background runs
 - cancellation
 - mocked Codex SDK worker failure
+- workflow validation and human-readable status formatting
 
 ## Docs
 
@@ -131,4 +150,3 @@ The MVP has been smoke-tested on:
 - [Spec](docs/SPEC.md)
 - [Skill plan](docs/SKILL_PLAN.md)
 - [Claude comparison](docs/claude-vs-codex-workflows.md)
-

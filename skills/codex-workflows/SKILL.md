@@ -3,7 +3,7 @@ name: codex-workflows
 description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
-  version: "0.1.0"
+  version: "0.2.0"
 ---
 
 # codex-workflows
@@ -32,6 +32,7 @@ This public skill is Codex-native:
 Only `diff-review` is in scope for the MVP.
 
 ```bash
+cwf validate workflows/diff-review.yaml
 cwf run workflows/diff-review.yaml --target <repo>
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
@@ -43,6 +44,8 @@ cwf cancel <run-id>
 
 Use `--background` for large diffs. The command returns a run id immediately, while the child process writes status, events, worker outputs, and `run.log` under `~/.codex-workflows/runs/<run-id>/`.
 
+`cwf status <run-id>` is the first thing to read during a long run. Start with the `Now:` line, then check worker progress, fallback count, and artifact paths. If `Result: not ready yet`, keep polling status instead of reading raw state first.
+
 ## Required Closeout
 
 Before claiming completion, verify against:
@@ -50,4 +53,4 @@ Before claiming completion, verify against:
 - `/Users/sunny/Work/CODEX/codex-workflows/IMPLEMENTATION_PLAN.md`
 - `/Users/sunny/Work/CODEX/codex-workflows/ACCEPTANCE.md`
 
-Report the exact commands run, what passed, and what failed.
+Report in plain language what the workflow did, then include the exact commands run, what passed, what failed, whether fallback occurred, and where the final report lives.

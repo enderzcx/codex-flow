@@ -17,6 +17,13 @@ npm run check
 npm pack --dry-run
 ```
 
+For CLI changes, also run the command manually when possible:
+
+```bash
+cwf --help
+cwf validate workflows/diff-review.yaml
+```
+
 ## Adding A Workflow
 
 Future workflow specs should include:
@@ -37,8 +44,8 @@ MVP implementation currently supports only `diff-review`; adding another workflo
 Add tests for:
 
 - schema validation
+- CLI help/status formatting when user-facing output changes
 - run store behavior
 - reducer behavior
 - failure paths
 - background/cancel behavior when relevant
-

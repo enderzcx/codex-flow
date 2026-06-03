@@ -1,5 +1,5 @@
 id: diff-review
-version: 0.1.0
+version: 0.2.0
 description: Review a git diff with independent Codex worker perspectives.
 requires:
   target: git-repo
@@ -36,4 +36,3 @@ artifacts:
   - events.jsonl
   - workers/*.json
   - result.md
-

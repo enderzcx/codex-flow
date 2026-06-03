@@ -39,6 +39,7 @@ Do not use this skill for:
 ## Default Workflow
 
 ```bash
+cwf validate workflows/diff-review.yaml
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
 cwf result <run-id>
@@ -56,11 +57,14 @@ Before running:
 
 - confirm the target is a git repo
 - note whether the diff includes untracked files
+- run `cwf validate workflows/diff-review.yaml` before starting workers
 - prefer background mode for large diffs
 
 During running:
 
 - use `cwf status <run-id>` instead of waiting blindly
+- read the `Now:` line first; it is the plain-language summary of current work
+- check fallback count before trusting structured findings blindly
 - inspect `events.jsonl` when status looks stale
 - cancel only when the user asks or when the run clearly cannot complete
 
@@ -81,6 +85,7 @@ The skill should ask Codex to report:
 - result path
 - whether fallback occurred
 - whether the target diff changed
+- short human summary of what the run did, not only raw artifact paths
 
 ## Future Skill Expansions
 
@@ -90,4 +95,3 @@ Only after `diff-review` is stable:
 - migration plan workflow
 - research cross-check workflow
 - generated workflow spec suggestions
-

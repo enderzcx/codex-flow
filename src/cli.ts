@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-import { access } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import { closeSync, openSync } from "node:fs";
 import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { spawn } from "node:child_process";
 import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { RunStore } from "./run-store.js";
+import type { RunState, WorkerResult } from "./types.js";
 
 type ParsedArgs = {
   command?: string;
@@ -24,10 +26,10 @@ async function main(argv: string[]): Promise<void> {
 
   if (args.command === "run") {
     if (!args.workflowPath) {
-      throw new Error("Usage: cwf run <workflow.yaml> --target <repo>");
+      throw new Error("Please tell me which workflow to run. Example: cwf run workflows/diff-review.yaml --target .");
     }
     if (!args.target) {
-      throw new Error("Missing --target <repo>");
+      throw new Error("Please pass --target <repo>. Example: cwf run workflows/diff-review.yaml --target .");
     }
     const specPath = resolve(args.workflowPath);
     const target = resolve(args.target);
@@ -49,6 +51,23 @@ async function main(argv: string[]): Promise<void> {
     return;
   }
 
+  if (args.command === "validate" || args.command === "dry-run") {
+    if (!args.workflowPath) {
+      throw new Error("Please tell me which workflow to validate. Example: cwf validate workflows/diff-review.yaml");
+    }
+    const specPath = resolve(args.workflowPath);
+    await assertPathExists(specPath, "workflow spec");
+    const spec = await loadWorkflowSpec(specPath);
+    console.log(`Workflow OK: ${spec.id}@${spec.version}`);
+    console.log(`Phases: ${spec.phases.map((phase) => phase.id).join(" -> ")}`);
+    const reviewPhase = spec.phases.find((phase) => phase.kind === "codex-parallel");
+    if (reviewPhase?.kind === "codex-parallel") {
+      console.log(`Workers: ${reviewPhase.workers.map((worker) => worker.id).join(", ")}`);
+    }
+    console.log("No Codex workers were started.");
+    return;
+  }
+
   if (args.command === "__run") {
     if (!args.runId || !args.workflowPath || !args.target) {
       throw new Error("Usage: cwf __run <run-id> <workflow.yaml> --target <repo>");
@@ -67,29 +86,7 @@ async function main(argv: string[]): Promise<void> {
     }
     const store = RunStore.fromRunId(args.runId);
     const state = await store.readState();
-    console.log(`Run ID: ${state.id}`);
-    console.log(`Workflow: ${state.workflow}`);
-    console.log(`Status: ${state.status}`);
-    console.log(`Target: ${state.target}`);
-    console.log("Phases:");
-    for (const phase of state.phases) {
-      console.log(`- ${phase.id}: ${phase.status}${phase.error ? ` (${phase.error})` : ""}`);
-    }
-    if (state.workers.length > 0) {
-      console.log("Workers:");
-      for (const worker of state.workers) {
-        console.log(`- ${worker.id}: ${worker.status}${worker.error ? ` (${worker.error})` : ""}`);
-      }
-    }
-    if (state.result_path) {
-      console.log(`Result: ${state.result_path}`);
-    }
-    if (state.log_path) {
-      console.log(`Log: ${state.log_path}`);
-    }
-    if (state.background_pid && (state.status === "running" || state.status === "pending")) {
-      console.log(`PID: ${state.background_pid}`);
-    }
+    await printStatus(store, state);
     return;
   }
 
@@ -98,7 +95,12 @@ async function main(argv: string[]): Promise<void> {
       throw new Error("Usage: cwf result <run-id>");
     }
     const store = RunStore.fromRunId(args.runId);
-    process.stdout.write(await store.readResult());
+    try {
+      process.stdout.write(await store.readResult());
+    } catch {
+      const state = await store.readState();
+      throw new Error(`No result yet for ${args.runId}. Current status is ${state.status}. Try: cwf status ${args.runId}`);
+    }
     return;
   }
 
@@ -143,6 +145,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         parsed.background = true;
       }
     }
+  } else if (command === "validate" || command === "dry-run") {
+    parsed.workflowPath = first;
   } else if (command === "__run") {
     parsed.runId = first;
     parsed.workflowPath = second;
@@ -160,19 +164,135 @@ function parseArgs(argv: string[]): ParsedArgs {
   return parsed;
 }
 
-function printHelp(): void {
-  console.log(`cwf - Codex-native workflow runner
+export function formatHelp(): string {
+  return `cwf - Codex-native workflow runner
 
 Usage:
   cwf --help
+  cwf validate <workflow.yaml>
   cwf run <workflow.yaml> --target <repo> [--background]
   cwf status <run-id>
   cwf result <run-id>
   cwf cancel <run-id>
 
-MVP workflow:
+Common flow:
+  cwf validate workflows/diff-review.yaml
+  cwf run workflows/diff-review.yaml --target . --background
+  cwf status <run-id>
+  cwf result <run-id>
+
+Current workflow:
   workflows/diff-review.yaml
-`);
+`;
+}
+
+function printHelp(): void {
+  console.log(formatHelp());
+}
+
+async function printStatus(store: RunStore, state: RunState): Promise<void> {
+  const workerResults = await readWorkerResults(store.runDir);
+  console.log(formatStatus(state, workerResults));
+}
+
+export function formatStatus(state: RunState, workerResults: WorkerResult[] = [], now = Date.now()): string {
+  const fallbackCount = workerResults.filter((result) => result.raw_fallback).length;
+  const completedWorkers = state.workers.filter((worker) => worker.status === "completed").length;
+  const activePhase = state.phases.find((phase) => phase.status === "running")?.id;
+  const lines: string[] = [];
+
+  lines.push(`Run ID: ${state.id}`);
+  lines.push(`Workflow: ${state.workflow}`);
+  lines.push(`Status: ${state.status}`);
+  lines.push(`Now: ${describeCurrentWork(state)}`);
+  lines.push(`Target: ${state.target}`);
+  lines.push(`Workers: ${completedWorkers}/${state.workers.length} completed, ${fallbackCount} fallback`);
+  if (activePhase) {
+    lines.push(`Active phase: ${activePhase}`);
+  }
+
+  lines.push("Phases:");
+  for (const phase of state.phases) {
+    lines.push(`- ${phase.id}: ${phase.status}${formatDuration(phase.started_at, phase.completed_at, now)}${phase.error ? ` (${phase.error})` : ""}`);
+  }
+
+  if (state.workers.length > 0) {
+    lines.push("Workers:");
+    for (const worker of state.workers) {
+      const result = workerResults.find((item) => item.worker_id === worker.id);
+      const fallback = result?.raw_fallback ? ", fallback" : "";
+      const findings = result?.result ? `, findings=${result.result.findings.length}` : "";
+      lines.push(
+        `- ${worker.id}: ${worker.status}${formatDuration(worker.started_at, worker.completed_at, now)}${fallback}${findings}${worker.error ? ` (${worker.error})` : ""}`,
+      );
+    }
+  }
+
+  lines.push("Artifacts:");
+  lines.push(`- State: ${state.run_dir}/state.json`);
+  lines.push(`- Events: ${state.run_dir}/events.jsonl`);
+  lines.push(`- Workers: ${state.run_dir}/workers/*.json`);
+  if (state.result_path) {
+    lines.push(`- Result: ${state.result_path}`);
+  } else {
+    lines.push(`- Result: not ready yet`);
+  }
+  if (state.log_path) {
+    lines.push(`- Log: ${state.log_path}`);
+  }
+  if (state.background_pid && state.status === "running") {
+    lines.push(`PID: ${state.background_pid}`);
+  }
+  return lines.join("\n");
+}
+
+async function readWorkerResults(runDir: string): Promise<WorkerResult[]> {
+  try {
+    const workerDir = `${runDir}/workers`;
+    const files = await readdir(workerDir);
+    const results = await Promise.all(
+      files
+        .filter((file) => file.endsWith(".json"))
+        .map(async (file) => JSON.parse(await readFile(`${workerDir}/${file}`, "utf8")) as WorkerResult),
+    );
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+function describeCurrentWork(state: RunState): string {
+  if (state.status === "completed") {
+    return "done; open the result report";
+  }
+  if (state.status === "failed") {
+    return `failed${state.error ? `: ${state.error}` : ""}`;
+  }
+  if (state.status === "cancelled") {
+    return "cancelled";
+  }
+  const runningWorkers = state.workers.filter((worker) => worker.status === "running").map((worker) => worker.id);
+  if (runningWorkers.length > 0) {
+    return `reviewing diff with ${runningWorkers.join(", ")}`;
+  }
+  const runningPhase = state.phases.find((phase) => phase.status === "running");
+  if (runningPhase) {
+    return `running ${runningPhase.id}`;
+  }
+  return "waiting for the next phase";
+}
+
+function formatDuration(startedAt?: string, completedAt?: string, now = Date.now()): string {
+  if (!startedAt) {
+    return "";
+  }
+  const end = completedAt ? Date.parse(completedAt) : now;
+  const start = Date.parse(startedAt);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) {
+    return "";
+  }
+  const seconds = Math.max(0, Math.round((end - start) / 1000));
+  return ` (${seconds}s)`;
 }
 
 async function startBackgroundRun(store: RunStore, specPath: string, target: string): Promise<void> {
@@ -198,7 +318,9 @@ async function assertPathExists(path: string, label: string): Promise<void> {
   }
 }
 
-main(process.argv.slice(2)).catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(process.argv.slice(2)).catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

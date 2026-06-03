@@ -17,14 +17,17 @@ Accept only a public Codex-native MVP. Private adapters are out of scope.
 - [ ] CLI exists and prints help.
   - Evidence: `cwf --help`
 
+- [ ] Workflow validation works before workers start.
+  - Evidence: `cwf validate workflows/diff-review.yaml` prints workflow id, phases, worker ids, and `No Codex workers were started.`
+
 - [ ] `diff-review` workflow runs on a git repo and returns a run id.
   - Evidence: `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo>`
 
 - [ ] `diff-review` can start in background mode and return a run id immediately.
   - Evidence: `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo> --background`, then `cwf status <run-id>` while or after it runs.
 
-- [ ] Status command shows phases and worker state.
-  - Evidence: `cwf status <run-id>` includes collect, review, reduce, result states.
+- [ ] Status command explains the run in human terms.
+  - Evidence: `cwf status <run-id>` includes `Now:`, phase durations, worker progress, fallback count, artifact paths, and result/log paths.
 
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
