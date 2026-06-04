@@ -165,6 +165,59 @@ describe("worker adapters", () => {
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_empty");
   });
 
+  it("falls back before worker creation when the live app-thread probe cannot produce output", async () => {
+    const probeServer = new NoOutputProbeAppServer();
+    const registry: WorkerAdapterRegistry = {
+      "codex-app-thread": codexAppThreadAdapter,
+      "codex-sdk-headless": {
+        name: "codex-sdk-headless",
+        async run(worker, _context, options) {
+          return completed(worker.id, {
+            adapter: "codex-sdk-headless",
+            requested_adapter: options.requestedAdapter,
+            fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+            fallback_used: Boolean(options.fallbackUsed),
+            fallback_reason: options.fallbackReason,
+            agent_role: worker.id,
+            transcript_read: false,
+            sandbox: "read-only",
+            approval_policy: "never",
+          });
+        },
+      },
+    };
+
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 10,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => probeServer,
+        capability: availableCapability(),
+      },
+      registry,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime).toEqual(
+      expect.objectContaining({
+        adapter: "codex-sdk-headless",
+        requested_adapter: "codex-app-thread",
+        fallback_adapter: "codex-sdk-headless",
+        fallback_used: true,
+      }),
+    );
+    expect(result.runtime?.fallback_reason).toContain("turn execution probe failed");
+    expect(result.runtime?.fallback_reason).toContain("thread_id=thread_probe");
+    expect(result.runtime?.fallback_reason).toContain("turn_id=turn_probe");
+    expect(probeServer.workerThreadStarted).toBe(false);
+  });
+
   it("fails explicitly when app-thread is unavailable and no fallback is configured", async () => {
     await expect(
       runWorkerWithAdapter(worker, context, {
@@ -374,6 +427,31 @@ class EmptyWorkerAppServer {
     }
     if (method === "thread/read") {
       return { thread: { id: "thread_empty", turns: [] } };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class NoOutputProbeAppServer {
+  threadStarts = 0;
+  workerThreadStarted = false;
+
+  async request(method: string, params?: unknown): Promise<unknown> {
+    if (method === "thread/start") {
+      this.threadStarts += 1;
+      if (this.threadStarts > 1) {
+        this.workerThreadStarted = true;
+        return { thread: { id: "thread_worker" } };
+      }
+      return { thread: { id: "thread_probe" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: "turn_probe" } };
+    }
+    if (method === "thread/read") {
+      return { thread: { id: "thread_probe", turns: [] } };
     }
     return {};
   }

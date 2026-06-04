@@ -55,6 +55,10 @@ export const defaultWorkerAdapters: WorkerAdapterRegistry = {
   "codex-review-detached": codexReviewDetachedAdapter,
 };
 
+const appThreadExecutionProbes = new Map<string, Promise<void>>();
+const appServerFactoryIds = new WeakMap<NonNullable<WorkerAdapterOptions["appServerFactory"]>, number>();
+let nextAppServerFactoryId = 1;
+
 export async function runWorkerWithAdapter(
   worker: WorkflowWorker,
   context: DiffContext,
@@ -164,12 +168,13 @@ async function runCodexAppThreadWorker(
     throw new WorkerAdapterUnavailableError("codex-app-thread", "write-capable app-thread workers are not supported in v1.7");
   }
 
+  const codexPath = options.codexPath ?? process.env.CWF_CODEX_PATH ?? "codex";
   const capability = options.capability ?? await checkDesktopCapability(options.codexPath);
   if (!capability.thread_apis_available) {
     throw new WorkerAdapterUnavailableError("codex-app-thread", "Codex app-server schema does not expose required thread APIs");
   }
+  await ensureAppThreadExecutionAvailable(context, options, codexPath);
 
-  const codexPath = options.codexPath ?? process.env.CWF_CODEX_PATH ?? "codex";
   const appServer = options.appServer ?? (options.appServerFactory ?? (() => createDefaultAppServerTransport()))(codexPath);
 
   const started = Date.now();
@@ -279,6 +284,167 @@ async function runCodexAppThreadWorker(
   }
 }
 
+async function ensureAppThreadExecutionAvailable(context: DiffContext, options: WorkerAdapterOptions, codexPath: string): Promise<void> {
+  if (options.appServer || process.env.CWF_APP_THREAD_EXECUTION_PREFLIGHT === "0") {
+    return;
+  }
+  const cacheKey = appThreadProbeCacheKey(codexPath, options.appServerFactory);
+  let probe = appThreadExecutionProbes.get(cacheKey);
+  if (!probe) {
+    probe = runAppThreadExecutionProbe(context, options, codexPath);
+    appThreadExecutionProbes.set(cacheKey, probe);
+    probe.catch(() => {
+      if (appThreadExecutionProbes.get(cacheKey) === probe) {
+        appThreadExecutionProbes.delete(cacheKey);
+      }
+    });
+  }
+  await probe;
+}
+
+async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerAdapterOptions, codexPath: string): Promise<void> {
+  const appServer = (options.appServerFactory ?? (() => createDefaultAppServerTransport()))(codexPath);
+  const probeTimeoutMs = appThreadProbeTimeoutMs(options);
+  const deadline = Date.now() + probeTimeoutMs;
+  let threadId: string | undefined;
+  let turnId: string | undefined;
+  try {
+    await appServerRequestWithTimeout(appServer, "initialize", buildInitializeParams(), remainingProbeTimeoutMs(deadline, probeTimeoutMs));
+    await appServer.notify?.("initialized");
+    const thread = await appServerRequestWithTimeout(appServer, "thread/start", {
+      cwd: context.target,
+      approvalPolicy: "never",
+      sandbox: "read-only",
+      ephemeral: false,
+      threadSource: "user",
+      baseInstructions: "You are a Codex Flow app-thread execution probe. Reply with the requested tiny JSON only.",
+    }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
+    threadId = extractId(thread, "thread");
+    if (!threadId) {
+      throw new WorkerAdapterUnavailableError("codex-app-thread", "turn execution probe could not start a thread");
+    }
+    await appServerRequestWithTimeout(appServer, "thread/name/set", {
+      threadId,
+      name: `CWF app-thread probe ${new Date().toISOString().slice(11, 19)}`,
+    }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
+    const turn = await appServerRequestWithTimeout(appServer, "turn/start", {
+      threadId,
+      input: [{ type: "text", text: "{\"probe\":\"cwf-app-thread-ok\"}", text_elements: [] }],
+      cwd: context.target,
+      approvalPolicy: "never",
+      sandboxPolicy: { type: "readOnly", networkAccess: false },
+    }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
+    turnId = extractId(turn, "turn");
+    const raw = await readAppThreadProbeRaw(
+      appServer,
+      threadId,
+      turnId,
+      extractWorkerRaw(turn, turnId) ?? "",
+      deadline,
+      probeTimeoutMs,
+    );
+    if (!raw) {
+      throw new WorkerAdapterUnavailableError("codex-app-thread", formatProbeFailure("turn execution probe did not return a readable response", threadId, turnId));
+    }
+  } catch (error) {
+    if (error instanceof WorkerAdapterUnavailableError) {
+      throw error;
+    }
+    throw new WorkerAdapterUnavailableError("codex-app-thread", formatProbeFailure(error instanceof Error ? error.message : String(error), threadId, turnId));
+  } finally {
+    await appServer.close?.();
+  }
+}
+
+function appThreadProbeTimeoutMs(options: WorkerAdapterOptions): number {
+  return Math.max(1, Math.min(Number(process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS || 15000), options.timeoutMs));
+}
+
+function remainingProbeTimeoutMs(deadline: number, originalTimeoutMs: number): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(`app-thread execution probe timed out after ${originalTimeoutMs}ms`);
+  }
+  return Math.max(1, remaining);
+}
+
+function appThreadProbeCacheKey(codexPath: string, appServerFactory: WorkerAdapterOptions["appServerFactory"]): string {
+  if (!appServerFactory) {
+    return `${codexPath}:default`;
+  }
+  let id = appServerFactoryIds.get(appServerFactory);
+  if (!id) {
+    id = nextAppServerFactoryId;
+    nextAppServerFactoryId += 1;
+    appServerFactoryIds.set(appServerFactory, id);
+  }
+  return `${codexPath}:factory:${id}`;
+}
+
+async function readAppThreadProbeRaw(
+  appServer: AppServerTransport,
+  threadId: string,
+  turnId: string | undefined,
+  directRaw: string,
+  deadline: number,
+  originalTimeoutMs: number,
+): Promise<string> {
+  if (directRaw) {
+    return directRaw;
+  }
+  let lastError: string | undefined;
+  while (Date.now() <= deadline) {
+    try {
+      const read = await appServerRequestWithTimeout(
+        appServer,
+        "thread/read",
+        { threadId, includeTurns: true },
+        Math.max(1, Math.min(1000, remainingProbeTimeoutMs(deadline, originalTimeoutMs))),
+      );
+      const readRaw = extractWorkerRaw(read, turnId);
+      if (readRaw) {
+        return readRaw;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+    }
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      await sleep(Math.min(250, remaining));
+    }
+  }
+  throw new Error(`app-thread worker did not return a readable final response${lastError ? `; last thread/read error: ${lastError}` : ""}`);
+}
+
+async function appServerRequestWithTimeout(
+  appServer: AppServerTransport,
+  method: string,
+  params: unknown,
+  timeoutMs: number,
+): Promise<unknown> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${method} timed out after ${timeoutMs}ms`));
+    }, Math.max(1, timeoutMs));
+  });
+  try {
+    return await Promise.race([appServer.request(method, params), timeout]);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+function formatProbeFailure(reason: string, threadId: string | undefined, turnId: string | undefined): string {
+  const ids = [
+    threadId ? `thread_id=${threadId}` : undefined,
+    turnId ? `turn_id=${turnId}` : undefined,
+  ].filter(Boolean);
+  return `turn execution probe failed: ${reason}${ids.length > 0 ? ` (${ids.join(", ")})` : ""}`;
+}
+
 function buildInitializeParams(): Record<string, unknown> {
   return {
     clientInfo: { name: "codex-flow", title: "Codex Flow", version: "1.7.0" },
@@ -331,7 +497,12 @@ async function readAppThreadWorkerRaw(
   let lastError: string | undefined;
   while (Date.now() <= deadline) {
     try {
-      const read = await appServer.request("thread/read", { threadId, includeTurns: true });
+      const read = await appServerRequestWithTimeout(
+        appServer,
+        "thread/read",
+        { threadId, includeTurns: true },
+        Math.max(1, Math.min(1000, deadline - Date.now())),
+      );
       const readRaw = extractWorkerRaw(read, turnId);
       if (readRaw) {
         return { raw: readRaw, transcriptRead: true };

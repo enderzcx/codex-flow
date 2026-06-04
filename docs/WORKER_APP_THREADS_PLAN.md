@@ -158,6 +158,13 @@ If app-server starts the worker but result reading fails:
 - keep app-server ids and artifact paths visible;
 - fail clearly if no reliable worker output exists.
 
+If app-server thread APIs exist but turn execution cannot produce an assistant response:
+
+- treat `codex-app-thread` as execution-unavailable, not merely slow;
+- run the configured fallback worker adapter before creating real worker threads;
+- keep probe thread/turn ids in the fallback reason for diagnosis;
+- continue to distinguish `created/listed` evidence from `executed/responded` evidence.
+
 ### Safety Invariants
 
 - `thread/list` must never choose the initiating/current conversation.
