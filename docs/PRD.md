@@ -127,6 +127,8 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Post-v1 result return works through the skill wrapper or an explicit app-server thread id; it must not guess the current thread from a thread list.
 - Post-v1 worker execution treats "agent" as the role/config and "thread" as the run instance.
 - Post-v1 write-capable phases run only after a gate and inherit Codex sandbox/approval/permissions behavior.
+- Release CI runs build, tests, package dry-run, and non-live CLI smoke on push to `main` and pull requests.
+- Release operators have a checklist for install/build/test, package dry-run, CLI smoke, source audit, docs audit, and optional live smoke.
 
 ## Public Positioning
 

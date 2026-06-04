@@ -107,6 +107,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Release notes are prepared.
   - Evidence: `RELEASE_NOTES.md` describes stable surface, public boundary, verification, and known limits.
 
+- [ ] Release CI and local CLI smoke protect documented commands.
+  - Evidence: `.github/workflows/ci.yml` runs build/test/pack/smoke, and `bash scripts/smoke-cli.sh` passes without live Codex worker calls.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.

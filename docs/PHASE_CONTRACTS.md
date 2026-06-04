@@ -796,3 +796,84 @@ Final response:
 - Explain whether Codex Flow is ready to call v1.0.
 - Include commands run, pass/fail, remaining risks, commit hash, and push status.
 ```
+
+## v1.1: Release Automation And CI Smoke
+
+### PRD
+
+v1.1 makes release checks repeatable. A maintainer should be able to rely on CI and one local smoke script for build, tests, package dry-run, and documented CLI command checks without starting live Codex workers.
+
+### Goals
+
+- Add release CI.
+- Add a CI-safe CLI smoke script.
+- Add a release checklist.
+- Keep live Codex worker smoke manual.
+
+Status: implemented.
+
+### SPEC
+
+Files:
+
+```text
+.github/workflows/ci.yml
+scripts/smoke-cli.sh
+docs/RELEASE_CHECKLIST.md
+```
+
+CI runs on:
+
+- push to `main`
+- pull request
+
+CI commands:
+
+```bash
+npm ci
+npm run check
+npm pack --dry-run
+bash scripts/smoke-cli.sh
+```
+
+Out of scope:
+
+- npm publishing
+- GitHub release publishing
+- live Codex worker CI
+- Desktop integration
+
+### Acceptance
+
+- [ ] CI-safe smoke works locally.
+  - Evidence: `bash scripts/smoke-cli.sh`
+
+- [ ] Package dry-run remains clean.
+  - Evidence: `npm pack --dry-run`
+
+- [ ] CI definition exists and covers build/test/pack/smoke.
+  - Evidence: `.github/workflows/ci.yml`
+
+- [ ] Release checklist exists.
+  - Evidence: `docs/RELEASE_CHECKLIST.md`
+
+- [ ] Public core remains Codex-native.
+  - Evidence: source/dependency audit shows no private adapters or non-Codex routing
+
+### Goal Prompt
+
+```text
+Build Codex Flow v1.1 Release Automation And CI Smoke in /Users/sunny/Work/CODEX/codex-workflows.
+
+Required:
+- Add scripts/smoke-cli.sh.
+- Add docs/RELEASE_CHECKLIST.md.
+- Add GitHub Actions CI for build, tests, pack dry-run, and non-live CLI smoke.
+- Update README/README.zh-CN/docs if release workflow changes.
+
+Verification:
+- npm run check
+- npm pack --dry-run
+- bash scripts/smoke-cli.sh
+- local inspection of .github/workflows/ci.yml
+```

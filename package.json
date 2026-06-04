@@ -3,6 +3,19 @@
   "version": "1.0.0",
   "description": "Codex-native workflow runner for inspectable multi-worker review.",
   "type": "module",
+  "files": [
+    "dist/",
+    "workflows/",
+    "fixtures/",
+    "skills/",
+    "scripts/",
+    "docs/",
+    "README.md",
+    "README.zh-CN.md",
+    "RELEASE_NOTES.md",
+    "CONTRIBUTING.md",
+    "ACCEPTANCE.md"
+  ],
   "bin": {
     "cwf": "./dist/cli.js"
   },

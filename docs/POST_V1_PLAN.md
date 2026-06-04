@@ -30,6 +30,8 @@ Global rules:
 
 ## v1.1: Release Automation And CI Smoke
 
+Status: implemented. The CI-safe smoke path exists in `scripts/smoke-cli.sh`, the GitHub Actions workflow exists at `.github/workflows/ci.yml`, and release operators have `docs/RELEASE_CHECKLIST.md`.
+
 ### PRD
 
 v1.0 is usable, but release quality still depends on a human remembering the right command sequence. v1.1 makes releases repeatable and harder to regress.

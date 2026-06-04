@@ -24,6 +24,18 @@ cwf cancel <run-id>
 
 `validate` and `dry-run` are aliases. They load and validate the workflow spec by id or path, then print the workflow id, version, phase order, worker ids, and a confirmation that no Codex workers were started.
 
+## Release Verification
+
+The public package includes a CI-safe release smoke:
+
+```bash
+bash scripts/smoke-cli.sh
+```
+
+The smoke runs build, tests, package dry-run, CLI help, workflow registry listing/showing/validation, default `diff-review` validation, gated fixture validation, and write-without-gate validation failure. It must not start live Codex workers.
+
+GitHub Actions runs on pull requests and pushes to `main` through `.github/workflows/ci.yml`. CI runs `npm ci`, `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`.
+
 ## Workflow Registry
 
 Workflow discovery searches local files in this order:

@@ -402,6 +402,27 @@ Acceptance:
 - workflow failures are inspectable
 - docs do not claim unsupported Desktop or Claude parity
 
+### v1.1: Release Automation And CI Smoke
+
+Goal: make release checks repeatable instead of relying on a human remembering the right command sequence.
+
+Status: implemented.
+
+Deliverables:
+
+- `.github/workflows/ci.yml`
+- `scripts/smoke-cli.sh`
+- `docs/RELEASE_CHECKLIST.md`
+- README verification updates
+
+Acceptance:
+
+- CI runs build and tests on push to `main` and pull requests
+- CI runs `npm pack --dry-run`
+- CI runs a non-live CLI smoke
+- local release smoke works with `bash scripts/smoke-cli.sh`
+- live Codex worker smoke remains manual unless safe credentials and cost controls are configured
+
 ## Delayed Until After v1.0
 
 These are valuable but not core v1.0:

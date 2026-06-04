@@ -128,12 +128,12 @@ The skill should ask Codex to report:
 - whether the target diff changed
 - short human summary of what the run did, not only raw artifact paths
 - package/version when release readiness matters
+- release smoke status when release readiness matters: `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`
 
 ## Future Skill Expansions
 
 Only after v1.0 release readiness is stable:
 
-- CI release smoke wrapper
 - native runtime bridge with coordinator threads and result return
 - worker agent thread integration
 - GitHub PR review output

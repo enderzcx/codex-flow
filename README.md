@@ -200,7 +200,10 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 ```bash
 npm run check
 npm pack --dry-run
+bash scripts/smoke-cli.sh
 ```
+
+Release CI runs the same non-live command smoke on push to `main` and on pull requests. The smoke validates the local workflow registry, validates `diff-review`, and confirms write-capable specs still require a prior gate without starting live Codex workers.
 
 The v1.0 release has been smoke-tested on:
 
@@ -219,9 +222,12 @@ The v1.0 release has been smoke-tested on:
 - bundled workflow catalog and example workflow registry validation
 - documented command surface and install/build/link flow
 
+For release preparation, use [Release checklist](docs/RELEASE_CHECKLIST.md).
+
 ## Docs
 
 - [Release notes](RELEASE_NOTES.md)
+- [Release checklist](docs/RELEASE_CHECKLIST.md)
 - [PRD](docs/PRD.md)
 - [Spec](docs/SPEC.md)
 - [Full plan](docs/FULL_PLAN.md)
