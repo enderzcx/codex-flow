@@ -180,26 +180,34 @@ async function runCodexAppThreadWorker(
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
   const prompt = buildWorkerPrompt(worker, context);
+  const requestTimeoutMs = appThreadWorkerRequestTimeoutMs(options);
+  const deadline = Date.now() + Math.max(1, options.timeoutMs);
   let threadId: string | undefined;
   let turnId: string | undefined;
   let transcriptRead = false;
   let raw = "";
 
   try {
-    await appServer.request("initialize", buildInitializeParams());
-    await appServer.notify?.("initialized");
+    await appServerRequestWithTimeout(appServer, "initialize", buildInitializeParams(), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
+    await appServerNotifyWithTimeout(appServer, "initialized", remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
 
-    const thread = await appServer.request("thread/start", buildWorkerThreadStartParams(context));
+    const thread = await appServerRequestWithTimeout(appServer, "thread/start", buildWorkerThreadStartParams(context), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
     threadId = extractId(thread, "thread");
     if (!threadId) {
       throw new Error("thread/start did not return thread.id");
     }
-    await appServer.request("thread/name/set", buildWorkerThreadNameParams(threadId, worker, options));
+    await appServerRequestWithTimeout(appServer, "thread/name/set", buildWorkerThreadNameParams(threadId, worker, options), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
 
-    const turn = await appServer.request("turn/start", buildWorkerTurnStartParams(threadId, prompt, context));
+    const turn = await appServerRequestWithTimeout(appServer, "turn/start", buildWorkerTurnStartParams(threadId, prompt, context), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
     turnId = extractId(turn, "turn");
     const directRaw = extractWorkerRaw(turn, turnId) ?? "";
-    const readResult = await readAppThreadWorkerRaw(appServer, threadId, turnId, directRaw, options.timeoutMs);
+    const readResult = await readAppThreadWorkerRaw(
+      appServer,
+      threadId,
+      turnId,
+      directRaw,
+      directRaw ? 1 : remainingWorkerTimeoutMs(deadline, options.timeoutMs),
+    );
     raw = readResult.raw;
     transcriptRead = readResult.transcriptRead;
 
@@ -280,7 +288,7 @@ async function runCodexAppThreadWorker(
       },
     };
   } finally {
-    await appServer.close?.();
+    await appServerCloseWithTimeout(appServer, appThreadCloseTimeoutMs(requestTimeoutMs)).catch(() => {});
   }
 }
 
@@ -362,12 +370,28 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
         : formatAppThreadProbeSetupFailure(reason, threadId),
     );
   } finally {
-    await appServerCloseWithTimeout(appServer, Math.min(1000, probeTimeoutMs)).catch(() => {});
+    await appServerCloseWithTimeout(appServer, appThreadCloseTimeoutMs(probeTimeoutMs)).catch(() => {});
   }
 }
 
 function appThreadProbeTimeoutMs(options: WorkerAdapterOptions): number {
-  return Math.max(1, Math.min(Number(process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS || 15000), options.timeoutMs));
+  return Math.max(1, Math.min(timeoutEnvMs("CWF_APP_THREAD_PROBE_TIMEOUT_MS", 15000), options.timeoutMs));
+}
+
+function appThreadWorkerRequestTimeoutMs(options: WorkerAdapterOptions): number {
+  return Math.max(1, Math.min(timeoutEnvMs("CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS", 15000), options.timeoutMs));
+}
+
+function appThreadCloseTimeoutMs(referenceTimeoutMs: number): number {
+  return Math.max(1, Math.min(timeoutEnvMs("CWF_APP_THREAD_CLOSE_TIMEOUT_MS", 1000), referenceTimeoutMs));
+}
+
+function remainingWorkerTimeoutMs(deadline: number, originalTimeoutMs: number, capMs = Number.POSITIVE_INFINITY): number {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(`app-thread worker timed out after ${originalTimeoutMs}ms`);
+  }
+  return Math.max(1, Math.min(remaining, capMs));
 }
 
 function remainingProbeTimeoutMs(deadline: number, originalTimeoutMs: number): number {
@@ -410,6 +434,7 @@ async function readAppThreadProbeRaw(
         "thread/read",
         { threadId, includeTurns: true },
         Math.max(1, Math.min(1000, remainingProbeTimeoutMs(deadline, originalTimeoutMs))),
+        false,
       );
       const readRaw = extractWorkerRaw(read, turnId);
       if (readRaw) {
@@ -431,8 +456,13 @@ async function appServerRequestWithTimeout(
   method: string,
   params: unknown,
   timeoutMs: number,
+  closeOnTimeout = true,
 ): Promise<unknown> {
-  return promiseWithTimeout(appServer.request(method, params), method, timeoutMs);
+  return promiseWithTimeout(appServer.request(method, params), method, timeoutMs, () => {
+    if (closeOnTimeout) {
+      void appServerCloseWithTimeout(appServer, appThreadCloseTimeoutMs(timeoutMs)).catch(() => {});
+    }
+  });
 }
 
 async function appServerNotifyWithTimeout(
@@ -440,23 +470,24 @@ async function appServerNotifyWithTimeout(
   method: string,
   timeoutMs: number,
 ): Promise<void> {
-  if (!appServer.notify) {
+  if (typeof appServer.notify !== "function") {
     return;
   }
   await promiseWithTimeout(Promise.resolve(appServer.notify(method)), `notify/${method}`, timeoutMs);
 }
 
 async function appServerCloseWithTimeout(appServer: AppServerTransport, timeoutMs: number): Promise<void> {
-  if (!appServer.close) {
+  if (typeof appServer.close !== "function") {
     return;
   }
   await promiseWithTimeout(Promise.resolve(appServer.close()), "app-server close", timeoutMs);
 }
 
-async function promiseWithTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
+async function promiseWithTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number, onTimeout?: () => void): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
+      onTimeout?.();
       reject(new Error(`${label} timed out after ${timeoutMs}ms`));
     }, Math.max(1, timeoutMs));
   });
@@ -544,7 +575,10 @@ async function readAppThreadWorkerRaw(
   directRaw: string,
   timeoutMs: number,
 ): Promise<{ raw: string; transcriptRead: boolean }> {
-  const deadline = Date.now() + Math.max(1000, Math.min(timeoutMs, Number(process.env.CWF_APP_THREAD_RESULT_TIMEOUT_MS || 120000)));
+  if (directRaw) {
+    return { raw: directRaw, transcriptRead: false };
+  }
+  const deadline = Date.now() + Math.max(1, Math.min(timeoutMs, timeoutEnvMs("CWF_APP_THREAD_RESULT_TIMEOUT_MS", 120000)));
   let lastError: string | undefined;
   while (Date.now() <= deadline) {
     try {
@@ -553,6 +587,7 @@ async function readAppThreadWorkerRaw(
         "thread/read",
         { threadId, includeTurns: true },
         Math.max(1, Math.min(1000, deadline - Date.now())),
+        false,
       );
       const readRaw = extractWorkerRaw(read, turnId);
       if (readRaw) {
@@ -561,15 +596,24 @@ async function readAppThreadWorkerRaw(
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
     }
-    if (directRaw) {
-      return { raw: directRaw, transcriptRead: false };
+    const remaining = deadline - Date.now();
+    if (remaining > 0) {
+      await sleep(Math.min(1000, remaining));
     }
-    await sleep(1000);
   }
   if (lastError) {
     throw new Error(formatAppThreadExecutionUnavailable(`worker read failed; last thread/read error: ${lastError}`, threadId, turnId));
   }
   throw new Error(formatAppThreadExecutionUnavailable("worker did not return an assistant response", threadId, turnId));
+}
+
+function timeoutEnvMs(name: string, fallbackMs: number): number {
+  const raw = process.env[name];
+  if (!raw) {
+    return fallbackMs;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallbackMs;
 }
 
 function shortRunId(runId?: string): string | undefined {

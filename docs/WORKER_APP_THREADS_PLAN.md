@@ -168,6 +168,14 @@ If app-server thread APIs exist but turn execution cannot produce an assistant r
 
 If the probe cannot complete setup before a turn exists, keep that separate as `app-thread-probe-setup-failed`; do not label initialize, thread creation, naming, transport timeout, or app-server setup failures as model-channel execution failures.
 
+Timeout tuning:
+
+- `options.timeoutMs` is the overall worker deadline; app-thread setup, turn start, and result reading must not exceed it cumulatively.
+- `CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS` caps individual app-server setup/start requests within that overall deadline.
+- `CWF_APP_THREAD_RESULT_TIMEOUT_MS` caps worker result polling within the remaining overall deadline.
+- `CWF_APP_THREAD_CLOSE_TIMEOUT_MS` caps best-effort transport close; close failures must not hide an already collected worker result.
+- Invalid timeout env values fall back to defaults instead of producing `NaN` or immediate accidental timeouts.
+
 ### Safety Invariants
 
 - `thread/list` must never choose the initiating/current conversation.

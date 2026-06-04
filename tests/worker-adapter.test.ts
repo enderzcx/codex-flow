@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   WorkerAdapterUnavailableError,
   codexAppThreadAdapter,
@@ -64,6 +64,63 @@ describe("worker adapters", () => {
     expect(appServer.methods).toEqual(["initialize", "thread/start", "thread/name/set", "turn/start", "thread/read"]);
     expect(appServer.methods).not.toContain("thread/list");
     expect(appServer.threadName).toBe("CWF diff-review correctness abcdef123456");
+  });
+
+  it("reads app-thread worker output from thread/read with a small timeout", async () => {
+    const result = await runWorkerWithAdapter(worker, context, {
+      target: "/repo",
+      timeoutMs: 20,
+      runtime: {
+        preferred_worker_adapter: "codex-app-thread",
+      },
+      appServer: new FakeWorkerAppServer(),
+      capability: availableCapability(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.summary).toBe("app-thread ok");
+    expect(result.runtime?.transcript_read).toBe(true);
+  });
+
+  it("uses direct turn output without waiting for thread/read", async () => {
+    const startedAt = Date.now();
+    const result = await runWorkerWithAdapter(worker, context, {
+      target: "/repo",
+      timeoutMs: 20,
+      runtime: {
+        preferred_worker_adapter: "codex-app-thread",
+      },
+      appServer: new DirectRawHangingReadAppServer(),
+      capability: availableCapability(),
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(result.status).toBe("completed");
+    expect(result.summary).toBe("direct turn output ok");
+    expect(result.runtime?.transcript_read).toBe(false);
+  });
+
+  it("keeps direct turn output even when the overall deadline is exhausted before read", async () => {
+    const now = vi.spyOn(Date, "now");
+    const times = [0, 0, 1, 2, 3, 4, 5, 11, 12, 12];
+    now.mockImplementation(() => times.shift() ?? 12);
+    try {
+      const result = await runWorkerWithAdapter(worker, context, {
+        target: "/repo",
+        timeoutMs: 10,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+        },
+        appServer: new DirectRawHangingReadAppServer(),
+        capability: availableCapability(),
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.summary).toBe("direct turn output ok");
+      expect(result.runtime?.transcript_read).toBe(false);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it("runs the app-thread worker only after the fixed JSON execution probe succeeds", async () => {
@@ -157,6 +214,7 @@ describe("worker adapters", () => {
       },
     };
 
+    const startedAt = Date.now();
     const result = await runWorkerWithAdapter(
       worker,
       context,
@@ -173,6 +231,7 @@ describe("worker adapters", () => {
       registry,
     );
 
+    expect(Date.now() - startedAt).toBeLessThan(1000);
     expect(result.status).toBe("completed");
     expect(result.runtime).toEqual(
       expect.objectContaining({
@@ -186,6 +245,155 @@ describe("worker adapters", () => {
     expect(result.runtime?.fallback_reason).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
     expect(result.runtime?.fallback_reason).toContain("thread_id=thread_empty");
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_empty");
+  });
+
+  it("falls back when the real app-thread worker request hangs", async () => {
+    const appServer = new HangingWorkerStartAppServer();
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 25,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServer,
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("thread/start timed out");
+    expect(appServer.closeCalled).toBe(true);
+  });
+
+  it("ignores invalid worker request timeout env values", async () => {
+    const previousTimeout = process.env.CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS = "abc";
+    try {
+      const result = await runWorkerWithAdapter(
+        worker,
+        context,
+        {
+          target: "/repo",
+          timeoutMs: 25,
+          runtime: {
+            preferred_worker_adapter: "codex-app-thread",
+            fallback_worker_adapter: "codex-sdk-headless",
+          },
+          appServer: new HangingWorkerStartAppServer(),
+          capability: availableCapability(),
+        },
+        fallbackRegistry(),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(result.runtime?.fallback_reason).toContain("thread/start timed out after 25ms");
+      expect(result.runtime?.fallback_reason).not.toContain("NaN");
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
+
+  it("ignores invalid worker result timeout env values", async () => {
+    const previousTimeout = process.env.CWF_APP_THREAD_RESULT_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_RESULT_TIMEOUT_MS = "abc";
+    try {
+      const result = await runWorkerWithAdapter(worker, context, {
+        target: "/repo",
+        timeoutMs: 20,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+        },
+        appServer: new FakeWorkerAppServer(),
+        capability: availableCapability(),
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.summary).toBe("app-thread ok");
+      expect(result.error).toBeUndefined();
+      expect(JSON.stringify(result)).not.toContain("NaN");
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_RESULT_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_RESULT_TIMEOUT_MS = previousTimeout;
+      }
+    }
+  });
+
+  it("enforces an overall timeout across real app-thread worker requests", async () => {
+    const startedAt = Date.now();
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 35,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServer: new SlowSetupWorkerAppServer(),
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toMatch(/timed out after \d+ms|app-thread worker timed out after 35ms/);
+  });
+
+  it("does not let a hanging real app-thread close block a completed worker", async () => {
+    const appServer = new HangingCloseWorkerAppServer();
+    const startedAt = Date.now();
+
+    const result = await runWorkerWithAdapter(worker, context, {
+      target: "/repo",
+      timeoutMs: 20,
+      runtime: {
+        preferred_worker_adapter: "codex-app-thread",
+      },
+      appServer,
+      capability: availableCapability(),
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(1000);
+    expect(result.status).toBe("completed");
+    expect(result.summary).toBe("app-thread ok");
+  });
+
+  it("ignores invalid close timeout env values", async () => {
+    const previousTimeout = process.env.CWF_APP_THREAD_CLOSE_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_CLOSE_TIMEOUT_MS = "abc";
+    try {
+      const result = await runWorkerWithAdapter(worker, context, {
+        target: "/repo",
+        timeoutMs: 20,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+        },
+        appServer: new HangingCloseWorkerAppServer(),
+        capability: availableCapability(),
+      });
+
+      expect(result.status).toBe("completed");
+      expect(result.summary).toBe("app-thread ok");
+    } finally {
+      if (previousTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_CLOSE_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_CLOSE_TIMEOUT_MS = previousTimeout;
+      }
+    }
   });
 
   it("preserves thread/read errors in app-thread execution-unavailable fallback reasons", async () => {
@@ -232,6 +440,29 @@ describe("worker adapters", () => {
     expect(result.runtime?.fallback_reason).toContain("fake thread/read failed");
     expect(result.runtime?.fallback_reason).toContain("thread_id=thread_read_error");
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_read_error");
+  });
+
+  it("does not close the transport on recoverable thread/read polling timeouts", async () => {
+    const appServer = new HangingReadCloseCountWorkerAppServer();
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 5,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServer,
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("thread/read timed out");
+    expect(appServer.closeCalls).toBe(1);
   });
 
   it("falls back before worker creation when the live app-thread probe cannot produce output", async () => {
@@ -484,6 +715,39 @@ describe("worker adapters", () => {
     }
   });
 
+  it("ignores invalid probe timeout env values", async () => {
+    const previousProbeTimeout = process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = "abc";
+    try {
+      const result = await runWorkerWithAdapter(
+        worker,
+        context,
+        {
+          target: "/repo",
+          timeoutMs: 25,
+          runtime: {
+            preferred_worker_adapter: "codex-app-thread",
+            fallback_worker_adapter: "codex-sdk-headless",
+          },
+          appServerFactory: () => new HangingNotifyProbeAppServer(),
+          capability: availableCapability(),
+        },
+        fallbackRegistry(),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+      expect(result.runtime?.fallback_reason).toContain("notify/initialized timed out after");
+      expect(result.runtime?.fallback_reason).not.toContain("NaN");
+    } finally {
+      if (previousProbeTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = previousProbeTimeout;
+      }
+    }
+  });
+
   it("does not expose hanging probe close as the fallback reason", async () => {
     const previousProbeTimeout = process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
     process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = "5";
@@ -717,6 +981,35 @@ class FakeWorkerAppServer {
   }
 }
 
+class DirectRawHangingReadAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: { id: "thread_direct_raw" } };
+    }
+    if (method === "turn/start") {
+      return {
+        turn: {
+          id: "turn_direct_raw",
+          finalResponse: JSON.stringify({
+            worker_id: "correctness",
+            summary: "direct turn output ok",
+            findings: [],
+            verification: ["direct raw used"],
+            artifacts: [],
+            confidence: "high",
+          }),
+        },
+      };
+    }
+    if (method === "thread/read") {
+      return new Promise(() => {});
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
 class EmptyWorkerAppServer {
   async request(method: string): Promise<unknown> {
     if (method === "thread/start") {
@@ -732,6 +1025,46 @@ class EmptyWorkerAppServer {
   }
 
   async notify(_method: string): Promise<void> {}
+}
+
+class HangingWorkerStartAppServer {
+  closeCalled = false;
+
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return new Promise(() => {});
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+
+  async close(): Promise<void> {
+    this.closeCalled = true;
+  }
+}
+
+class SlowSetupWorkerAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "initialize" || method === "thread/start" || method === "thread/name/set" || method === "turn/start") {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    if (method === "thread/start") {
+      return { thread: { id: "thread_slow_setup" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: "turn_slow_setup" } };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class HangingCloseWorkerAppServer extends FakeWorkerAppServer {
+  async close(): Promise<void> {
+    return new Promise(() => {});
+  }
 }
 
 class JsonProbeThenWorkerAppServer {
@@ -830,6 +1163,29 @@ class ThrowingReadWorkerAppServer {
   }
 
   async notify(_method: string): Promise<void> {}
+}
+
+class HangingReadCloseCountWorkerAppServer {
+  closeCalls = 0;
+
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: { id: "thread_hanging_read" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: "turn_hanging_read" } };
+    }
+    if (method === "thread/read") {
+      return new Promise(() => {});
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+
+  async close(): Promise<void> {
+    this.closeCalls += 1;
+  }
 }
 
 class NoOutputProbeAppServer {
