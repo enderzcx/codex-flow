@@ -119,11 +119,11 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Active Codex conversation result return is the primary UX.
   - Evidence: docs and skill guidance say a workflow launched from Codex returns its final result to the initiating conversation; `--new-thread` is explicit/background/fallback behavior only.
 
-- [ ] Worker app threads have a complete post-v1.7 acceptance contract.
-  - Evidence: `docs/WORKER_APP_THREADS_PLAN.md`, `docs/POST_V1_PLAN.md`, `docs/SPEC.md`, and `docs/PHASE_CONTRACTS.md` define app-thread worker execution, metadata, fallback, and no-current-thread-guessing requirements.
+- [x] Worker app threads have a complete post-v1.7 acceptance contract.
+  - Evidence: `docs/WORKER_APP_THREADS_PLAN.md`, `docs/POST_V1_PLAN.md`, `docs/SPEC.md`, and `docs/PHASE_CONTRACTS.md` define app-thread worker execution, metadata, fallback, result-return boundaries, and no-current-thread-guessing requirements.
 
-- [ ] `codex-app-thread` workers create Desktop worker threads when enabled and app-server is available.
-  - Evidence: v1.7 implementation provides fake app-server tests; live app-server smoke must record worker `thread_id` and `turn_id` values when the host app-server is available.
+- [x] `codex-app-thread` workers create Desktop worker threads when enabled and app-server is available.
+  - Evidence: v1.7 implementation provides fake app-server tests, and live run `run_20260604084923_hqu0l8` recorded three completed app-thread workers with real `thread_id` and `turn_id` values and no SDK fallback.
 
 - [x] Managed-agents-style scheduling is explicitly not approved for implementation now.
   - Evidence: v1.8 decision docs keep scheduling out of scope and require a future PRD/SPEC/acceptance contract before any queue, daemon, remote lifecycle service, nested worker runtime, or scheduler work starts.

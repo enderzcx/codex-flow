@@ -875,9 +875,11 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## Later: Remote Workflow Sharing
+## v1.9: Public Workflow Registry Planning
 
-Remote workflow sharing should only happen after local registry, validation, release checks, and write-gates are mature.
+Status: next phase. Plan first; do not implement runtime commands yet.
+
+v1.9 should define how public workflow sharing can exist without turning Codex Flow into a remote-code marketplace. The first deliverable is a PRD/SPEC/acceptance contract for a safe registry boundary.
 
 Possible shape:
 
@@ -886,6 +888,7 @@ Possible shape:
 - trust policy
 - local cache
 - explicit install
+- explicit enable/run rules
 
 Non-goals:
 
@@ -893,5 +896,6 @@ Non-goals:
 - remote code execution
 - generated JavaScript marketplace
 - unreviewed write-capable remote workflows
+- scheduler, daemon, queue, or remote lifecycle service
 
-This is intentionally not scoped as v1.x until the local engine has enough real usage.
+Implementation should only start after the v1.9 contract is accepted.

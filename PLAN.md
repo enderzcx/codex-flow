@@ -94,7 +94,7 @@ Until one of those cases is proven, Codex Flow should keep scheduling out of pub
 
 Goal: let users share and install workflow specs safely.
 
-This is deferred until v1.7 and the v1.8 decision are complete.
+This is the next phase after v1.8. Start with planning, not implementation.
 
 Required shape when revisited:
 
@@ -107,14 +107,16 @@ Required shape when revisited:
 ## Next Implementation Order
 
 1. Keep v1.8 as a completed decision record: no scheduler now.
-2. Continue collecting real workflow evidence through the existing CLI, SDK worker, app-thread worker, gate, artifact, and skill-wrapper surfaces.
-3. If a concrete scheduling gap appears, write the smallest PRD/SPEC/acceptance plan before implementation.
-4. Only after that revisit public workflow sharing.
+2. Write the v1.9 Public Workflow Registry PRD/SPEC/acceptance contract.
+3. Decide the smallest safe registry slice: local install, remote source metadata, checksum/signature policy, trust levels, and explicit enable/run rules.
+4. Do not implement registry commands until the v1.9 contract is accepted.
+5. If a concrete scheduling gap appears later, write a separate scheduler PRD/SPEC/acceptance plan before implementation.
 
 ## Acceptance For This Plan
 
 - The plan separates completed evidence from unfinished work.
 - v1.8 is decision-only and does not authorize scheduler implementation.
+- v1.9 is the next phase and starts with registry planning only.
 - Same-conversation result return is primary for Codex-launched workflows.
 - Desktop worker threads are optional execution/evidence surfaces.
 - Managed-agents-style scheduling is explicitly gated by evidence.

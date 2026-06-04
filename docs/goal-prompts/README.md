@@ -23,6 +23,7 @@ Examples:
 - `v0.3-run-discovery.md`
 - `v1.7-worker-app-threads.md`
 - `v1.8-managed-agents-decision.md`
+- `v1.9-public-workflow-registry.md`
 
 Update rule:
 

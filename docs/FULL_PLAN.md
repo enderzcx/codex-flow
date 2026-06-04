@@ -153,9 +153,9 @@ Archived phase prompt: `goal-prompts/v1.8-managed-agents-decision.md`.
 
 ### v1.9 Public Workflow Registry
 
-Do not build yet.
+Next phase. Plan first; do not build yet.
 
-Only revisit after v1.7 and the v1.8 decision. A registry adds trust and supply-chain risk, so it needs its own plan.
+v1.7 and v1.8 are complete, so v1.9 can start. A registry adds trust and supply-chain risk, so the first deliverable is a PRD/SPEC/acceptance contract, not runtime implementation.
 
 Minimum future requirements:
 
