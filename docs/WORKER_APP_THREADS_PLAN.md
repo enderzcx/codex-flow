@@ -25,6 +25,8 @@ After v1.7:
 
 Worker threads are non-ephemeral inspection surfaces in Codex Desktop. They are intentionally visible after the run; cleanup is a user or host concern until Codex exposes a safe lifecycle API for this use case.
 
+Visibility is host-scoped. A worker thread can be successfully created and listed by app-server with a real `thread_id`, name, cwd, and session file, while a particular Codex Desktop left sidebar may still filter it out by host source, workspace, cwd, or current account view. For live proof, record both the worker JSON ids and an app-server `thread/list` confirmation for the worker name or short run id.
+
 This is not a managed-agent platform. It is the smallest useful bridge between CWF workers and Codex's native thread surface.
 
 ## PRD

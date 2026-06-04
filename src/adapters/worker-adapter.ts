@@ -65,32 +65,17 @@ export async function runWorkerWithAdapter(
   const fallback = options.runtime?.fallback_worker_adapter;
   const adapter = resolveAdapter(preferred, registry);
   try {
-    return await adapter.run(worker, context, { ...options, requestedAdapter: preferred });
+    const result = await adapter.run(worker, context, { ...options, requestedAdapter: preferred });
+    if (result.status === "failed" && fallback && fallback !== preferred) {
+      return await runFallbackWorker(fallback, preferred, fallbackReasonFromResult(result), worker, context, options, registry);
+    }
+    return result;
   } catch (error) {
     if (!fallback || fallback === preferred) {
       throw error;
     }
-    const fallbackAdapter = resolveAdapter(fallback, registry);
     const fallbackReason = error instanceof Error ? error.message : String(error);
-    const result = await fallbackAdapter.run(worker, context, {
-      ...options,
-      requestedAdapter: preferred,
-      fallbackUsed: true,
-      fallbackReason,
-    });
-    return {
-      ...result,
-      runtime: {
-        ...result.runtime,
-        adapter: fallback,
-        requested_adapter: preferred,
-        fallback_adapter: fallback,
-        fallback_used: true,
-        fallback_reason: fallbackReason,
-        agent_role: result.runtime?.agent_role ?? worker.id,
-        transcript_read: result.runtime?.transcript_read ?? false,
-      },
-    };
+    return await runFallbackWorker(fallback, preferred, fallbackReason, worker, context, options, registry);
   }
 }
 
@@ -119,6 +104,46 @@ function resolveAdapter(name: WorkerAdapterName, registry: WorkerAdapterRegistry
     throw new WorkerAdapterUnavailableError(name, "adapter is not registered");
   }
   return adapter;
+}
+
+async function runFallbackWorker(
+  fallback: WorkerAdapterName,
+  preferred: WorkerAdapterName,
+  fallbackReason: string,
+  worker: WorkflowWorker,
+  context: DiffContext,
+  options: WorkerAdapterOptions,
+  registry: WorkerAdapterRegistry,
+): Promise<WorkerResult> {
+  const fallbackAdapter = resolveAdapter(fallback, registry);
+  const result = await fallbackAdapter.run(worker, context, {
+    ...options,
+    requestedAdapter: preferred,
+    fallbackUsed: true,
+    fallbackReason,
+  });
+  return {
+    ...result,
+    runtime: {
+      ...result.runtime,
+      adapter: fallback,
+      requested_adapter: preferred,
+      fallback_adapter: fallback,
+      fallback_used: true,
+      fallback_reason: fallbackReason,
+      agent_role: result.runtime?.agent_role ?? worker.id,
+      transcript_read: result.runtime?.transcript_read ?? false,
+    },
+  };
+}
+
+function fallbackReasonFromResult(result: WorkerResult): string {
+  const reason = result.error || result.summary || "preferred worker adapter returned failed status";
+  const ids = [
+    result.runtime?.thread_id ? `thread_id=${result.runtime.thread_id}` : undefined,
+    result.runtime?.turn_id ? `turn_id=${result.runtime.turn_id}` : undefined,
+  ].filter(Boolean);
+  return ids.length > 0 ? `${reason} (${ids.join(", ")})` : reason;
 }
 
 function unsupportedNativeAdapter(name: WorkerAdapterName, reason: string): WorkerAdapter {

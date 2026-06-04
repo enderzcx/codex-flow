@@ -66,13 +66,58 @@ describe("CLI output formatting", () => {
 
     expect(output).toContain("Now: reviewing diff with tests");
     expect(output).toContain("Failure policy: worker failures are tolerated");
-    expect(output).toContain("Workers: 1/3 completed, 1 fallback");
+    expect(output).toContain("Workers: 1/3 completed, 1 raw fallback, 0 adapter fallback");
     expect(output).toContain("Active phase: review");
     expect(output).toContain("- tests: running (3s)");
     expect(output).toContain("- correctness: completed (2s), raw_fallback=malformed structured output, findings=0, artifacts=0");
     expect(output).toContain("- Result: not ready yet");
     expect(output).toContain("- Log: /tmp/cwf/run.log");
     expect(output).toContain("PID: 12345");
+  });
+
+  it("counts adapter fallback in status output", () => {
+    const state = createState({
+      status: "completed",
+      phases: [
+        { id: "collect", status: "completed" },
+        { id: "review", status: "completed" },
+        { id: "reduce", status: "completed" },
+      ],
+      workers: [{ id: "correctness", status: "completed" }],
+    });
+    const workerResults: WorkerResult[] = [
+      {
+        worker_id: "correctness",
+        status: "completed",
+        confidence: "high",
+        summary: "ok",
+        findings: [],
+        verification: [],
+        artifacts: [],
+        started_at: "2026-01-01T00:00:01.000Z",
+        completed_at: "2026-01-01T00:00:03.000Z",
+        duration_ms: 2000,
+        prompt: "review",
+        raw: "{}",
+        raw_fallback: false,
+        retry_count: 0,
+        runtime: {
+          adapter: "codex-sdk-headless",
+          requested_adapter: "codex-app-thread",
+          fallback_adapter: "codex-sdk-headless",
+          fallback_used: true,
+          fallback_reason: "app-thread worker did not return a readable final response",
+          agent_role: "correctness",
+          transcript_read: false,
+        },
+      },
+    ];
+
+    const output = formatStatus(state, workerResults, Date.parse("2026-01-01T00:00:05.000Z"));
+
+    expect(output).toContain("Workers: 1/1 completed, 0 raw fallback, 1 adapter fallback");
+    expect(output).toContain("adapter_fallback=codex-app-thread->codex-sdk-headless");
+    expect(output).toContain("app-thread worker did not return a readable final response");
   });
 
   it("points completed runs at their final report", () => {

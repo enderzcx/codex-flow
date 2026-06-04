@@ -564,7 +564,8 @@ async function printStatus(store: RunStore, state: RunState): Promise<void> {
 
 export function formatStatus(state: RunState, workerResults: WorkerResult[] = [], now = Date.now()): string {
   state = normalizeRunState(state);
-  const fallbackCount = workerResults.filter((result) => result.raw_fallback).length;
+  const rawFallbackCount = workerResults.filter((result) => result.raw_fallback).length;
+  const adapterFallbackCount = workerResults.filter((result) => result.runtime?.fallback_used).length;
   const completedWorkers = state.workers.filter((worker) => worker.status === "completed").length;
   const activePhase = state.phases.find((phase) => phase.status === "running")?.id;
   const activeGate = findActiveGate(state);
@@ -588,7 +589,7 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
       lines.push(`Resume: cwf resume ${state.id}`);
     }
   }
-  lines.push(`Workers: ${completedWorkers}/${state.workers.length} completed, ${fallbackCount} fallback`);
+  lines.push(`Workers: ${completedWorkers}/${state.workers.length} completed, ${rawFallbackCount} raw fallback, ${adapterFallbackCount} adapter fallback`);
   if (activePhase) {
     lines.push(`Active phase: ${activePhase}`);
   }
@@ -602,11 +603,14 @@ export function formatStatus(state: RunState, workerResults: WorkerResult[] = []
     lines.push("Workers:");
     for (const worker of state.workers) {
       const result = workerResults.find((item) => item.worker_id === worker.id);
-      const fallback = result?.raw_fallback ? `, raw_fallback${result.fallback_reason ? `=${result.fallback_reason}` : ""}` : "";
+      const rawFallback = result?.raw_fallback ? `, raw_fallback${result.fallback_reason ? `=${result.fallback_reason}` : ""}` : "";
+      const adapterFallback = result?.runtime?.fallback_used
+        ? `, adapter_fallback=${result.runtime.requested_adapter}->${result.runtime.adapter}${result.runtime.fallback_reason ? ` (${result.runtime.fallback_reason})` : ""}`
+        : "";
       const findings = result ? `, findings=${result.findings.length}` : "";
       const artifacts = result ? `, artifacts=${result.artifacts.length}` : "";
       lines.push(
-        `- ${worker.id}: ${worker.status}${formatDuration(worker.started_at, worker.completed_at, now)}${fallback}${findings}${artifacts}${worker.error ? ` (${worker.error})` : ""}`,
+        `- ${worker.id}: ${worker.status}${formatDuration(worker.started_at, worker.completed_at, now)}${rawFallback}${adapterFallback}${findings}${artifacts}${worker.error ? ` (${worker.error})` : ""}`,
       );
     }
   }
