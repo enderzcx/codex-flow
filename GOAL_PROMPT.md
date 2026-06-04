@@ -1,34 +1,82 @@
 ---
 half_life: 7d
-archive_at: 2026-06-09
+archive_at: 2026-06-11
 ---
 
-# Goal Prompt For The Next Run
+# Goal Prompt For v1.7
 
-Use this when setting a goal for implementation:
+Use this copy-ready prompt when starting Codex goal mode for the next unfinished slice.
 
 ```text
-Build the public Codex-native `codex-workflows` MVP in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v1.7 Worker App Threads in /Users/sunny/Work/CODEX/codex-workflows.
 
-Scope:
-- Implement only the public Codex-native runner.
-- Do not add third-party model routing or private adapters.
-- Implement one workflow only: `diff-review`.
-- Use Codex SDK if reachable; if not reachable, report the blocker and stop instead of inventing another architecture.
-- Keep `diff-review` read-only by default.
+Outcome:
+- Workflows can opt into a live codex-app-thread worker adapter.
+- When app-server is available, each selected worker runs in its own Codex Desktop-visible thread and records thread_id / turn_id metadata.
+- When a workflow is launched from an active Codex conversation, the final result returns to that initiating conversation through the skill wrapper. Worker threads are evidence/execution surfaces, not the default final-result destination.
+- Existing CLI workflows still work without Codex Desktop.
 
-Required deliverables:
-- CLI commands: cwf --help, cwf run, cwf status, cwf result, cwf cancel.
-- Workflow spec for diff-review.
-- Skill file at skills/codex-workflows/SKILL.md.
-- Run store under ~/.codex-workflows/runs/<run-id>/.
-- Persisted events.jsonl, state.json, worker outputs, and result.md.
-- Fixture or smoke target proving the workflow runs end to end.
-- README/docs explaining how the result differs from Claude Dynamic Workflows.
+Allowed writes:
+- src/
+- tests/
+- workflows/ or fixtures/ only when needed for v1.7 test fixtures
+- docs/WORKER_APP_THREADS_PLAN.md
+- docs/SPEC.md
+- docs/POST_V1_PLAN.md only if the v1.7 contract changes
+- ACCEPTANCE.md only if acceptance wording must match implementation
+- README.md / README.zh-CN.md only if user-facing commands or behavior change
 
-Acceptance:
+Forbidden:
+- Do not rewrite completed v1.1-v1.6 evidence in GOAL_CHECKLIST.md.
+- Do not build managed-agents-style platform scheduling.
+- Do not build a custom queue, daemon, marketplace, or remote lifecycle service.
+- Do not add non-Codex model routing or private model adapters.
+- Do not enable write-capable app-thread workers.
+- Do not infer the current/parent Codex conversation from thread/list.
+- Do not make CLI-only users depend on Codex Desktop.
+- Do not claim live Desktop worker-thread success unless real thread_id and turn_id values are recorded from a live app-server smoke.
+
+Constraints:
+- Reuse the existing app-server transport/capability probe and worker adapter contract where possible.
+- Keep reducer behavior adapter-independent.
+- Fallback to codex-sdk-headless only when runtime.fallback_worker_adapter is configured.
+- Preserve worker runtime metadata in worker JSON and reducer provenance.
+- Keep --new-thread explicit for CLI/background/coordinator use only.
+- Keep public core Codex-native.
+
+Implementation plan:
 - Follow /Users/sunny/Work/CODEX/codex-workflows/IMPLEMENTATION_PLAN.md.
-- Follow /Users/sunny/Work/CODEX/codex-workflows/ACCEPTANCE.md.
-- Stop after diff-review MVP passes smoke; do not expand into ui-check/repo-audit/research-crosscheck yet.
-- Final response must include exact commands run and what passed/failed.
+- Follow /Users/sunny/Work/CODEX/codex-workflows/docs/WORKER_APP_THREADS_PLAN.md.
+- Treat /Users/sunny/Work/CODEX/codex-workflows/PLAN.md as the active roadmap.
+
+Verification:
+- npm run check
+- bash scripts/smoke-cli.sh
+- git diff --check
+- fake app-server app-thread worker test covering thread/start, thread/name/set, turn/start, result read, and worker envelope normalization
+- mixed SDK/app-thread reducer fixture
+- source audit proving thread/list is never used to select an initiating/current conversation
+- normal CLI diff-review smoke without app-server
+- live app-server diff-review smoke with per-worker thread_id and turn_id when app-server is available; if unavailable, report the exact command/error and mark live Desktop acceptance as not proven
+
+Iteration policy:
+- Work in small vertical slices: adapter skeleton, fake app-server test, reducer compatibility, CLI regression smoke, live smoke.
+- After each slice, run the nearest targeted test before expanding scope.
+- If app-server behavior is unclear, write a fake test first and then verify live behavior.
+- Keep a short human summary of what changed after each major step.
+
+Stop/Pause conditions:
+- Stop if app-server methods needed for worker execution are absent or unstable.
+- Stop if deterministic result retrieval cannot be implemented without guessing conversation state.
+- Stop if finishing v1.7 would require a custom scheduler, queue, daemon, or write-capable worker threads.
+- Stop after three repeated no-progress attempts against the same app-server failure and report the blocker.
+- Stop when all required verification passes and either live Desktop smoke is proven or the unavailability is documented honestly.
+
+Final response:
+- Explain in plain language what v1.7 can now do.
+- State whether same-conversation result return remains primary.
+- List commands run and pass/fail.
+- List live worker thread ids / turn ids if available.
+- State fallback behavior and whether fallback was used.
+- Include commit hash, push status, CI status if pushed, and any remaining gap.
 ```

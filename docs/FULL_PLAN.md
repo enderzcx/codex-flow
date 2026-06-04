@@ -1,537 +1,186 @@
 ---
 half_life: 30d
-archive_at: 2026-07-03
+archive_at: 2026-07-04
 ---
 
 # Codex Flow Full Plan
 
-## Plain Summary
+## Product North Star
 
-Codex Flow should become a Codex-native workflow layer for inspectable, resumable, multi-agent engineering workflows.
+Codex Flow should let Codex run repeatable engineering workflows without turning every complex task into one giant chat.
 
-The full product is not "Claude Dynamic Workflows, copied line by line." It should match the useful effect:
+The finished product should feel like this:
 
-- one command starts a complex task
-- the task is split into phases
-- focused Codex worker agents run in parallel or sequence
-- progress and failures are visible outside the chat
-- intermediate evidence is saved
-- unsafe steps can pause for approval
-- a reducer turns worker output into one actionable result
+1. The user or a Codex skill chooses a workflow.
+2. CWF validates the workflow before spending model time.
+3. CWF runs focused Codex workers through phases.
+4. CWF saves progress, worker output, gates, failures, and artifacts.
+5. Risky phases pause for explicit approval.
+6. A reducer produces one actionable result.
+7. If launched from Codex, the final result comes back to the initiating conversation.
+8. Optional native Codex threads make worker activity inspectable when the host supports it.
 
-The important phrase is **thin workflow layer**. Codex Flow owns the repeatable workflow contract, gates, and evidence trail, while Codex owns threads, subagents, sandbox, permissions, and worktrees.
+## Design Principle
 
-## What "Dynamic" Means
+Codex Flow is not a replacement for Codex's own agent runtime. It is a small workflow contract layer on top of it.
 
-To avoid overclaiming, Codex Flow uses a staged definition of dynamic behavior.
+Reuse Codex-native capability first:
 
-### v1.0 Dynamic
+- Codex SDK for headless workers
+- Codex app-server threads for Desktop-visible workers
+- Codex sandbox and approval model
+- Codex skills for active-conversation result return
+- Codex worktrees/subagents when those host surfaces are available
 
-For v1.0, "dynamic" means:
+Only add a custom CWF layer where Codex does not already provide the product concept:
 
-- workflow execution can branch through explicit phases and gates
-- failed runs can explain what happened and what can resume
-- a user or Codex skill can choose a workflow for a task
-- workflow specs can be discovered, validated, and reused
-- worker outputs can influence reducer verdicts and next actions
+- workflow spec validation
+- phase ordering
+- run store
+- gate state
+- worker envelope normalization
+- reducer output
+- artifact manifest
+- CLI status/watch/result
 
-### Not v1.0 Dynamic
+## Current Completed Capability
 
-The following are not v1.0 promises:
+Completed phases are historical evidence. Do not rewrite their detailed acceptance records during future planning passes.
 
-- Codex automatically generating arbitrary executable workflow scripts
-- a native Codex Desktop `/workflows` task panel
-- automatic keyword triggers that start workflows without explicit user/tool intent
-- non-Codex model routing
-- private model adapters
+| Area | Current Capability |
+| --- | --- |
+| Workflow engine | CLI runner, workflow validation, status/watch/result/cancel, durable run folders. |
+| Workflow catalog | `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, `release-review`, `doc-refresh`. |
+| Failure model | Worker fallback/degraded evidence, failure summaries, status/show visibility. |
+| Gates | Approve/reject/resume for write-capable phases. |
+| Write safety | `doc-refresh` is docs-only, gated, previewed, and runs through Codex SDK workspace-write after approval. |
+| PR artifacts | Completed runs can produce local GitHub PR comment/review artifacts; posting requires explicit flags. |
+| Workflow suggestions | Suggestions create validated YAML and are not installed or run automatically. |
+| Desktop bridge | Completed runs can attempt explicit app-server result return; CLI remains reliable when app-server is unavailable. |
 
-If future versions add generated workflow specs, they must generate constrained YAML/JSON and pass validation before execution. Arbitrary generated JavaScript is deliberately not part of the public core.
+Completed ledger: `GOAL_CHECKLIST.md`.
 
-## v1.0 Promise
-
-> Codex Flow is a Codex-native workflow engine for running inspectable, resumable, multi-worker engineering workflows from reusable specs.
-
-This is the public promise. It is strong enough to be useful and narrow enough to verify.
-
-## Target Effect
-
-Users should be able to run:
-
-```bash
-cwf run diff-review --target .
-cwf run repo-audit --target .
-cwf run implementation-plan --target .
-cwf watch <run-id>
-cwf result <run-id>
-```
-
-And Codex skills should be able to say:
+## Target Runtime Shape
 
 ```text
-Use Codex Flow to review this branch with correctness, tests, and safety perspectives.
+Codex conversation or CLI
+  -> CWF workflow resolver
+  -> spec validator
+  -> run store
+  -> phase engine
+      -> command phase
+      -> Codex SDK worker
+      -> optional Codex app-thread worker
+      -> gate
+      -> reducer
+      -> artifact writer
+  -> final result
+      -> initiating Codex conversation when launched by a skill
+      -> explicit known thread when --thread is provided
+      -> explicit new coordinator/result thread when --new-thread is provided
+      -> CLI result.md when no Desktop path exists
 ```
-
-The user should not need to manually copy prompts into several sessions or hunt through chat history for intermediate findings. A run folder becomes the evidence trail.
 
 ## Claude Dynamic Workflows Comparison
 
-### Similar Useful Effect
+Similar effect:
 
-- A user starts one higher-level task.
-- The system runs multiple steps and workers.
-- The main agent stays in a supervisor role.
-- Intermediate state is outside the main chat.
-- Progress can be inspected.
-- Final output is a reduced, actionable answer.
+- one higher-level request can fan out into focused workers;
+- the main conversation does not need to hold every intermediate detail;
+- progress and results can be inspected;
+- evidence survives after the chat scrolls away;
+- the final answer is reduced into one coherent result.
 
-### Different Substrate
+Different composition:
 
-- Claude has a native workflow runtime; Codex Flow is a public CLI/SDK runtime.
-- Claude can lean on generated scripts; Codex Flow starts with constrained specs.
-- Claude has native UI surfaces; Codex Flow starts with CLI, run store, and skills.
-- Claude is product-integrated; Codex Flow must keep its public core installable and auditable.
+- Claude Dynamic Workflows are product-native inside Claude Code.
+- Codex Flow is a public CLI/skill layer that must stay installable and auditable.
+- Claude can rely on Claude's managed workflow surfaces.
+- Codex Flow should reuse Codex SDK, app-server, skills, subagents, sandbox, approvals, and worktrees rather than pretending to own them.
 
-The correct positioning is:
+Correct promise:
 
-> Same workflow principle, similar useful effect for supported workflows, different runtime and safety model.
+> Similar useful workflow effect for supported Codex workflows, different runtime and safety model.
 
-## Core Architecture
+Incorrect promise:
 
-```text
-User / Codex skill
-  -> Workflow Resolver
-  -> Workflow Validator
-  -> Run Store
-  -> Failure Model
-  -> Coordinator
-      -> optional Codex App coordinator thread
-      -> Phase Engine
-          -> command
-          -> codex-parallel
-          -> codex-sequential
-          -> native worker agent thread
-          -> detached native review thread
-          -> reducer
-          -> gate
-          -> result return
-  -> Status / Watch / List / Show / Result
-```
+> Full Claude Dynamic Workflows parity.
 
-## Core Concepts
+## Unfinished Plan
 
-### Workflow Resolver
+### v1.7 Worker App Threads
 
-Maps user intent or CLI input to a workflow spec.
+Build now.
 
-Early versions should prefer explicit workflow ids:
+Outcome:
+
+- workflows may opt into `codex-app-thread`;
+- one Desktop-visible Codex thread is created per selected worker when app-server is available;
+- worker output is normalized into the existing worker envelope;
+- final result still returns to the initiating Codex conversation when launched by a skill;
+- CLI-only users keep working without Desktop.
+
+Detailed plan: `WORKER_APP_THREADS_PLAN.md`.
+
+Goal prompt: `../GOAL_PROMPT.md`.
+
+### v1.8 Managed-Agents-Style Scheduling Decision
+
+Do not build yet.
+
+After v1.7, decide whether a scheduler is actually needed. The decision must be evidence-based:
+
+- What could not be solved by Codex app-server worker threads?
+- What could not be solved by Codex subagents or worktrees?
+- What user-visible problem requires a queue, daemon, remote lifecycle service, or nested worker policy?
+- What would be worse if CWF owned scheduling instead of Codex?
+
+Deliverable when started:
+
+- design audit
+- PRD/SPEC/acceptance
+- explicit non-goals
+- fake-runtime tests if any scheduler behavior is proposed
+
+No implementation until that decision doc is accepted.
+
+### v1.9 Public Workflow Registry
+
+Do not build yet.
+
+Only revisit after v1.7 and the v1.8 decision. A registry adds trust and supply-chain risk, so it needs its own plan.
+
+Minimum future requirements:
+
+- local install path and remote source path are distinct;
+- workflow specs are validated before install;
+- checksums or signatures are considered;
+- generated JavaScript remains out of public core;
+- write-capable workflows require gates and visible warnings;
+- bundled/local/remote trust levels are clear in CLI output.
+
+## Guardrails For Future Plans
+
+- Separate completed evidence from unfinished implementation.
+- Do not make Desktop required for normal CLI use.
+- Do not claim live Desktop worker-thread support without recorded thread ids and turn ids.
+- Do not turn roadmap prose into acceptance evidence.
+- Do not use `thread/list` to guess the active conversation.
+- Do not add process or doc ceremony without saying when it applies and when it should be skipped.
+
+## Verification For Plan Updates
+
+Docs-only plan updates should run:
 
 ```bash
-cwf run diff-review --target .
+git diff --check
 ```
 
-Natural-language workflow choice can live in the Codex skill layer first. The core runner should not guess silently.
+Also run a source-audit grep for stale old-goal wording before committing. Keep the searched phrases outside this file or the audit will match its own instructions.
 
-### Workflow Validator
+Code-adjacent plan updates should also run:
 
-Checks specs before model time is spent:
-
-- schema validity
-- supported phase kinds
-- unique worker ids
-- valid reducer
-- valid inputs
-- sandbox and approval settings
-- write-capable phases are gated
-- failure behavior is declared or defaults are clear
-
-### Run Store
-
-Every run writes a durable folder:
-
-```text
-~/.codex-workflows/runs/<run-id>/
-  workflow.json
-  state.json
-  events.jsonl
-  inputs/
-  workers/
-  artifacts/
-  result.md
-  run.log
+```bash
+npm run check
+bash scripts/smoke-cli.sh
 ```
-
-Later versions add:
-
-- resume metadata
-- parent/child run links
-- worker usage metadata when Codex exposes it
-
-### Failure Model
-
-Every phase needs predictable failure behavior.
-
-v0.3 stores a default failure policy in each run:
-
-- worker failures continue when at least one Codex worker succeeds
-- all-worker failure fails the run
-- target diff changes fail the run
-- unhandled errors fail the run
-
-Failed runs also store a readable failure summary with the failed phase, failed workers when known, and a next-step hint.
-
-Supported failure policies:
-
-- `abort`: stop the run
-- `retry`: retry within configured limits
-- `continue`: keep going and mark degraded
-- `fallback`: accept raw or partial output
-- `gate`: pause for user decision
-
-Default for unknown failures should be `abort`, with a clear status and event trail.
-
-### Phase Engine
-
-Supported phase kinds over time:
-
-- `command`: local context collection
-- `codex-parallel`: focused Codex workers in parallel
-- `codex-sequential`: dependent Codex workers in sequence
-- `reducer`: merge results
-- `gate`: wait for approval or rejection
-- `handoff`: produce a prompt, PR note, GitHub comment, or follow-up task
-
-### Worker Model
-
-Workers are Codex-only in the public core.
-
-The workflow spec describes a worker agent role. The runtime chooses an execution adapter:
-
-- SDK headless worker for v1.0 CLI stability
-- Codex App thread for Desktop-visible work
-- Codex subagent when native subagent tools are available
-- detached Codex review thread for review-shaped workflows
-
-The v1.3 adapter seam is implemented with `codex-sdk-headless` as the real default. Native adapter names are validated and normalized into worker runtime metadata. v1.7 is the planned slice that turns `codex-app-thread` into a live app-server worker path now that Desktop thread creation has been proven. Fallback to SDK happens only when the workflow config declares it.
-
-Each worker declares:
-
-- id
-- role
-- prompt
-- inputs
-- output schema
-- timeout
-- sandbox
-- failure policy
-- whether it writes files
-
-Default worker mode is read-only.
-
-### Reducer Model
-
-Reducers are product-critical. They must:
-
-- merge duplicates
-- preserve strongest evidence
-- mark disagreement
-- lower confidence for weak claims
-- keep worker provenance
-- output verification gaps
-- output next actions
-
-Codex Flow is not useful if reducer output is just pasted worker text.
-
-## Revised Milestones
-
-### v0.2: Usable Public MVP
-
-Status: done.
-
-Includes:
-
-- `validate`
-- `run`
-- `status`
-- `watch`
-- `result`
-- `cancel`
-- one workflow: `diff-review`
-- readable status/watch output
-- Chinese and English README
-
-### v0.3: Run Discovery And Failure Model
-
-Goal: make background runs easy to find and failures easy to understand.
-
-Status: implemented.
-
-Deliverables:
-
-- `cwf list [--limit <n>] [--status <status>] [--target <path>]`
-- `cwf show <run-id>`
-- `cwf latest [--target <path>]`
-- run index at `~/.codex-workflows/index.json`
-- rebuild from run folders when the index is missing, stale, or corrupt
-- explicit phase failure policy defaults
-- human-readable failure summaries in `status`/`show`
-
-Acceptance:
-
-- users can find recent runs without remembering ids
-- users can see why a run failed without reading raw JSON first
-- index loss can be recovered from run folders
-- no daemon required
-
-### v0.4: Gates And Resume
-
-Goal: make long or risky workflows resumable and safe before any write-capable workflow exists.
-
-Status: implemented.
-
-Deliverables:
-
-- `gate` phase
-- `approve`
-- `reject`
-- `resume`
-- resumable state with persisted gate decisions
-- completed phases are not rerun by default
-- write-capable phases require a prior gate
-
-Acceptance:
-
-- read-only `diff-review` still works without gates
-- a gate fixture can pause, approve, resume, reject
-- invalid write-capable workflow without gate fails validation
-- event log explains decisions
-
-### v0.5: Workflow Registry
-
-Goal: make workflows reusable by id and discoverable from project/global folders.
-
-Status: implemented.
-
-Deliverables:
-
-- workflow search paths
-- `cwf workflows list`
-- `cwf workflows show`
-- `cwf workflows validate`
-- run by workflow id
-- workflow metadata: title, tags, inputs, capabilities
-
-Acceptance:
-
-- `diff-review` works by path and by id
-- duplicate ids fail clearly
-- invalid workflow specs fail with field-level errors
-- docs explain how to add a read-only workflow
-
-### v0.6: Reducer And Worker Contract Hardening
-
-Goal: make the engine safe for more workflow types before adding a large workflow library.
-
-Status: implemented.
-
-Deliverables:
-
-- shared worker output envelope
-- reducer base contract
-- artifact manifest
-- retry/fallback fixtures
-- partial worker failure behavior
-- degraded run verdicts
-- structured verification gaps
-
-Acceptance:
-
-- one worker failing does not make outcomes ambiguous
-- fallback output is visible in status/result
-- artifact manifest can reconstruct what happened
-- reducers preserve worker provenance
-
-### v0.7: Example Workflow Pack
-
-Goal: demonstrate usefulness without bloating the core runtime.
-
-Status: implemented.
-
-Deliverables:
-
-- `workflows/repo-audit.yaml`
-- `workflows/implementation-plan.yaml`
-- `workflows/research-crosscheck.yaml`
-- `workflows/release-review.yaml`
-- workflow catalog docs
-
-Rules:
-
-- examples are read-only
-- examples do not become special cases in the core engine
-- every example has when-to-use and when-not-to-use docs
-
-Acceptance:
-
-- each example passes fixture tests
-- at least one real smoke per example
-- core runtime remains generic
-
-### v1.0: Stable Codex Workflow Engine
-
-Goal: public stable release.
-
-Status: implemented.
-
-Deliverables:
-
-- stable CLI
-- stable workflow schema
-- run discovery
-- watch/status/result/cancel/resume
-- workflow registry
-- gate safety model
-- hardened worker/reducer contracts
-- read-only example workflow pack
-- clear Codex skill integration
-- honest Claude comparison
-- release notes
-
-Acceptance:
-
-- a new user can install, validate, run, inspect, and reuse workflows from docs alone
-- no private adapter required
-- no non-Codex model routing
-- workflow failures are inspectable
-- docs do not claim unsupported Desktop or Claude parity
-
-### v1.1: Release Automation And CI Smoke
-
-Goal: make release checks repeatable instead of relying on a human remembering the right command sequence.
-
-Status: implemented.
-
-Deliverables:
-
-- `.github/workflows/ci.yml`
-- `scripts/smoke-cli.sh`
-- `docs/RELEASE_CHECKLIST.md`
-- README verification updates
-
-Acceptance:
-
-- CI runs build and tests on push to `main` and pull requests
-- CI runs `npm pack --dry-run`
-- CI runs a non-live CLI smoke
-- local release smoke works with `bash scripts/smoke-cli.sh`
-- live Codex worker smoke remains manual unless safe credentials and cost controls are configured
-
-### v1.2: Native Runtime Bridge
-
-Goal: return completed filesystem workflow results to Codex without making Desktop mandatory.
-
-Status: implemented with fallback.
-
-Deliverables:
-
-- `cwf desktop check`
-- `cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]`
-- `artifacts/handoff-prompt.md`
-- `artifacts/desktop-handoff.json` for app-server attempts
-- `RunState.native_runtime.desktop_handoff` metadata
-
-Acceptance:
-
-- local prompt handoff works without Desktop
-- app-server capability check reports schema and daemon state
-- app-server return requires `--new-thread` or explicit `--thread`
-- app-server failure records fallback metadata and does not fail completed CLI runs
-- normal run/watch/result remains available without Desktop
-
-## Delayed Until After v1.0
-
-These are valuable but not core v1.0:
-
-- generated workflow spec suggestions
-- generated executable scripts
-- remote workflow marketplace
-- Desktop task panel parity
-- write-capable workflow pack
-- GitHub PR writeback
-- non-Codex collaborator routing
-
-Detailed post-v1 PRDs, specs, acceptance criteria, and goal prompts live in [POST_V1_PLAN.md](POST_V1_PLAN.md).
-
-v1.4 status: the first write-capable pack is `doc-refresh`, a documentation-only workflow that writes preview artifacts, pauses at a gate, then uses Codex SDK `workspace-write` after explicit approval.
-
-## Product Rules
-
-### Do
-
-- Keep public core Codex-native.
-- Make state inspectable.
-- Prefer read-only first.
-- Define failure behavior early.
-- Treat reducer quality as product quality.
-- Make errors human-readable.
-- Make every workflow answer: what happened, what evidence, what next.
-
-### Do Not
-
-- Do not add private model routing to the public core.
-- Do not make arbitrary generated scripts the first workflow format.
-- Do not claim Claude feature parity before the specific surface exists.
-- Do not hide failures behind vague AI summaries.
-- Do not let worker output overwrite user files unless explicitly allowed and gated.
-- Do not put domain workflow logic into the core runtime.
-
-## Full Acceptance Matrix
-
-- [ ] A user can discover runs.
-  - Evidence: `cwf list`, `cwf show`, `cwf latest`
-
-- [ ] A user can discover workflows.
-  - Evidence: `cwf workflows list`
-
-- [ ] A user can validate a workflow without spending model time.
-  - Evidence: `cwf validate <workflow>`
-
-- [ ] A user can run long workflows in the background.
-  - Evidence: `cwf run <workflow> --background`
-
-- [ ] A user can watch progress without reading JSON.
-  - Evidence: `cwf watch <run-id>`
-
-- [ ] A user can inspect failure causes.
-  - Evidence: failed run status/show includes phase, policy, error, failed workers when known, and next step
-
-- [ ] A user can pause and resume gated work.
-  - Evidence: gate fixture approve/reject/resume smoke
-
-- [ ] A user can run a narrow gated documentation write workflow.
-  - Evidence: `doc-refresh` preview/approve/reject fixture smoke and artifact manifest entries
-
-- [ ] A reducer produces one actionable final answer.
-  - Evidence: final result contains verdict, findings, evidence, verification gaps, next actions, worker provenance
-
-- [ ] A user can generate PR-ready local artifacts without posting.
-  - Evidence: `cwf github-pr <run-id> --format comment|review`
-
-- [ ] A user can generate workflow spec suggestions safely.
-  - Evidence: `cwf suggest-workflow --goal "<task>"`, invalid diagnostics test, registry unchanged after suggestion, and explicit-path run with mocked worker
-
-- [ ] Public core remains Codex-native.
-  - Evidence: dependency and source audit shows no third-party model routers or private adapters
-
-## Next Best Slice
-
-The next useful implementation slice is the native runtime bridge:
-
-1. Keep the stable CLI run store unchanged.
-2. Add app-server coordinator thread creation and result return.
-3. Record native runtime metadata in artifacts.
-4. Then map workers to native agent threads/subagents.
-5. Continue expanding write-capable workflows only behind Codex-native gates.
-
-Exact v1.x numbering lives in [POST_V1_PLAN.md](POST_V1_PLAN.md).
-
-Why this next: v1.0 proved the engine. The next gap is user-visible Codex-native collaboration, not more example workflows.

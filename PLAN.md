@@ -1,149 +1,132 @@
 ---
-half_life: 7d
-archive_at: 2026-06-09
+half_life: 30d
+archive_at: 2026-07-04
 ---
 
-# codex-workflows MVP Plan
+# Codex Flow Plan
 
-## Building
+## What We Are Building
 
-Build a public Codex-native workflow runner that can run repeatable phased workflows using Codex SDK worker threads and deterministic command steps. The MVP proves one useful workflow end to end: `diff-review`.
+Codex Flow is a thin Codex-native workflow layer.
 
-## Not Building
+In plain terms: a user asks Codex to run a repeatable engineering workflow, CWF splits the job into phases and workers, saves the evidence, lets risky steps pause for approval, and returns one useful final answer.
 
-- No third-party model routing or private adapters.
-- No native Codex Desktop background pane in the MVP.
-- No automatic `workflow` keyword trigger.
-- No generated JavaScript workflow scripts.
-- No broad agent marketplace.
-- No automatic production file edits in the first workflow.
+Codex Flow owns:
 
-## Approach
+- workflow specs
+- run state
+- gates
+- worker evidence envelopes
+- reducer output
+- artifact manifests
+- CLI/status/watch/result surfaces
 
-Start with an explicit CLI runner and declarative workflow specs.
+Codex owns:
 
-Recommended commands:
+- model execution
+- threads and subagents
+- sandbox and approvals
+- permissions
+- skills and plugins
+- worktrees
 
-```bash
-cwf run workflows/diff-review.yaml --target <repo>
-cwf status <run-id>
-cwf watch <run-id>
-cwf result <run-id>
-cwf cancel <run-id>
-```
+The project should keep reusing Codex-native capability instead of rebuilding a separate agent platform.
 
-Recommended run storage:
+## What We Are Not Building
 
-```text
-~/.codex-workflows/runs/<run-id>/
-  workflow.json
-  state.json
-  events.jsonl
-  workers/
-    <phase>-<worker-id>.json
-  result.md
-```
+- No third-party model router in the public core.
+- No private model adapter requirement.
+- No exact clone of Claude Dynamic Workflows.
+- No custom agent marketplace.
+- No custom remote scheduler before native worker threads are proven.
+- No implicit posting into a guessed Codex conversation.
+- No generated JavaScript workflow execution.
+- No ungated write-capable workflow.
 
-## MVP Workflow: diff-review
+## Source Of Truth
 
-Goal: review a git diff with multiple independent Codex perspectives, then merge the findings.
+- Current product behavior: `README.md`, `README.zh-CN.md`, `docs/SPEC.md`, `ACCEPTANCE.md`.
+- Full product direction: `docs/FULL_PLAN.md`.
+- Next unfinished implementation slice: `docs/WORKER_APP_THREADS_PLAN.md`.
+- Next goal-mode contract: `GOAL_PROMPT.md`.
+- Completed phase evidence: `GOAL_CHECKLIST.md`.
+- Detailed historical roadmap: `docs/POST_V1_PLAN.md` and `docs/PHASE_CONTRACTS.md`.
 
-Phases:
+Do not rewrite completed phase evidence unless a new audit proves it is factually wrong.
 
-1. Collect context
-   - Verify target is a git repo.
-   - Capture branch, staged/unstaged diff, changed files, and package metadata.
+## Current Baseline
 
-2. Parallel review
-   - Worker A: correctness and regressions.
-   - Worker B: tests and verification gaps.
-   - Worker C: security, permissions, data-loss, rollback risk.
+Implemented and treated as historical evidence:
 
-3. Reduce
-   - Merge duplicate findings.
-   - Drop unsupported findings.
-   - Rank by severity.
-   - Produce final review with file references when available.
+| Phase | Status | Human Meaning |
+| --- | --- | --- |
+| v1.0 | Done | Stable CLI workflow engine and public package shape. |
+| v1.1 | Done | CI, package smoke, and release checklist. |
+| v1.2 | Done with fallback | Desktop result handoff can be attempted explicitly; CLI remains reliable when app-server is unavailable. |
+| v1.3 | Done | Worker adapter contract exists; native adapters fail honestly when unavailable. |
+| v1.4 | Done | Gated docs-only write workflow exists. |
+| v1.5 | Done | Completed runs can become GitHub PR comment/review artifacts; posting is explicit. |
+| v1.6 | Done | Workflow suggestions create validated YAML specs and do not install or run automatically. |
 
-4. Evidence
-   - Save worker prompts, outputs, usage if available, and final result.
+The completed ledger lives in `GOAL_CHECKLIST.md`. Leave it alone during future planning rewrites.
 
-## Minimal Architecture
+## Unfinished Roadmap
 
-```text
-CLI
-  -> workflow loader
-  -> run store
-  -> phase engine
-      -> codex worker adapter
-      -> command step adapter
-  -> reducer
-  -> result renderer
-```
+### v1.7 Worker App Threads
 
-## Key Decisions
+Goal: make selected workflow workers run as real Codex Desktop-visible threads.
 
-1. Use Codex SDK as the default agent substrate.
-   - Reason: public users already need Codex; no additional model account should be required.
+User-facing effect:
 
-2. Use declarative specs first.
-   - Reason: safer, easier to test, easier to explain than model-generated scripts.
+- If the workflow starts inside an active Codex conversation, the final result returns to that same conversation through the skill wrapper.
+- If the workflow requests Desktop-visible worker execution, each worker can also appear as its own Codex thread in the left sidebar.
+- `--new-thread` remains explicit and is used only for CLI/background/coordinator cases.
 
-3. Default worker sandbox is read-only.
-   - Reason: review/audit workflows should not mutate the repo by surprise.
+Detailed contract: `docs/WORKER_APP_THREADS_PLAN.md`.
 
-4. Persist every run.
-   - Reason: a workflow without durable evidence is just a long prompt with extra steps.
+### v1.8 Managed-Agents-Style Scheduling Decision
 
-5. Start with `diff-review`.
-   - Reason: high value, easy to validate, does not require UI, browser, or private adapters.
+Goal: decide whether a platform scheduler is still needed after v1.7.
 
-## Current State
+This is not approved for implementation yet. It should start as a design audit, not code.
 
-Local version is `0.2.0`, not `2.0.0`.
+Build only if v1.7 proves that native Codex threads are useful but insufficient for one or more concrete cases:
 
-Implemented in `0.2.0`:
+- durable queueing outside the current process
+- cancellation across many long-running worker threads
+- policy for nested workers
+- shared run ownership across users or machines
+- a public workflow registry that needs lifecycle management
 
-- `diff-review`
-- foreground and background runs
-- `status`, `result`, and `cancel`
-- `watch` live-refresh status view
-- persistent run store under `~/.codex-workflows/runs/<run-id>/`
+If Codex-native threads/subagents cover the common case, do not build a scheduler.
 
-## Post-MVP Roadmap
+### v1.9 Public Workflow Registry
 
-### 0.3: Codex Desktop / App-Server Handoff
+Goal: let users share and install workflow specs safely.
 
-Goal: make workflow-created follow-up work visible in Codex Desktop instead of only in `cwf` run folders.
+This is deferred until v1.7 and the v1.8 decision are complete.
 
-Planned capabilities:
+Required shape when revisited:
 
-- Discover and validate the experimental Codex app-server protocol before use.
-- Add a guarded command such as `cwf handoff --app <run-id>` or `cwf spawn-thread --app`.
-- Use app-server `thread/start` / `turn/start` where available to create Codex Desktop-visible threads.
-- Preserve the stable local fallback: generate a prompt and run `codex -C <repo> ...` when app-server is unavailable.
-- Store created thread ids in the run folder for later `status`, `result`, or resume hints.
-- Keep `cwf watch` as the public stable progress view until app-server behavior is proven.
+- signed or checksum-verifiable workflow specs
+- validation before install
+- no generated JavaScript execution
+- no automatic write-capable workflow enablement
+- clear trust boundary between bundled, local, and remote workflows
 
-Non-goals for 0.3:
+## Next Implementation Order
 
-- No dependency on a running Desktop app for normal `diff-review`.
-- No private model routing.
-- No claim of full Claude Dynamic Workflows parity.
+1. Finish v1.7 Worker App Threads.
+2. Run real and fake app-server verification.
+3. Audit whether native Codex thread reuse is enough.
+4. Only then write the v1.8 scheduler decision plan.
+5. Only after that revisit public workflow sharing.
 
-## Fragile Assumption
+## Acceptance For This Plan
 
-This plan assumes the Codex SDK is available and stable enough for local worker threads. If the SDK changes or is unavailable, the fallback is to wrap `codex exec` JSONL events behind the same adapter interface.
-
-The app-server handoff plan assumes Codex's experimental Desktop protocol remains available. If it changes, `cwf` must fall back to local session creation and keep app integration optional.
-
-## Implementation Order
-
-1. Create package skeleton and CLI entrypoint.
-2. Add workflow spec schema.
-3. Add run store and status/result commands.
-4. Add Codex SDK worker adapter.
-5. Add `diff-review` workflow.
-6. Add reducer and result renderer.
-7. Add fixture repo smoke test.
-8. Write README with exact comparison to Claude Dynamic Workflows.
+- The plan separates completed evidence from unfinished work.
+- The next implementation slice is v1.7 only.
+- Same-conversation result return is primary for Codex-launched workflows.
+- Desktop worker threads are optional execution/evidence surfaces.
+- Managed-agents-style scheduling is explicitly deferred.
+- Future agents can find the current goal prompt without reading every historical phase.

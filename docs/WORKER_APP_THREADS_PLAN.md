@@ -5,52 +5,65 @@ archive_at: 2026-07-04
 
 # v1.7 Worker App Threads Plan
 
-## Plain-Language Outcome
+## Capability Sentence
 
-When a user starts Codex Flow from an active Codex conversation, the final workflow summary should come back to that same conversation through the skill wrapper.
+This phase helps Codex users inspect workflow worker execution in Codex Desktop by adding an optional `codex-app-thread` worker adapter, while keeping final results in the initiating conversation and preserving CLI fallback.
 
-When the user asks for Desktop-visible worker execution, each workflow worker can also run in its own Codex Desktop thread. The left sidebar then shows real worker threads such as `CWF diff-review correctness`, `CWF diff-review tests`, and `CWF diff-review safety`. Those worker threads are evidence and debugging surfaces; they are not the default final result destination.
+## Plain-Language Result
 
-`--new-thread` remains explicit. It is for CLI/background runs that do not have an initiating conversation, or when the user intentionally wants a separate coordinator/result thread.
+Today, CWF can run workers and save their outputs, but those workers usually do not appear as separate Codex Desktop threads.
+
+After v1.7:
+
+- a workflow can request Desktop-visible worker execution;
+- each selected worker can become a real Codex thread;
+- CWF still saves the same worker JSON and reducer output;
+- the final result still comes back to the Codex conversation that started the workflow;
+- if Desktop/app-server is unavailable, CLI workflows still work.
+
+This is not a managed-agent platform. It is the smallest useful bridge between CWF workers and Codex's native thread surface.
 
 ## PRD
 
 ### Problem
 
-Codex Flow can now return a completed run to a newly created Codex Desktop thread, but that is not the normal product shape when a user starts the workflow from an existing Codex conversation. The default user expectation is:
+Codex Flow has durable run folders, status output, and worker evidence. That is enough for CLI reliability, but not enough for a native Codex Desktop experience. Users want to see what each worker did without digging through JSON files.
 
-- I ask Codex to run a workflow here.
-- Codex may create worker threads to do the work.
-- The final answer returns here.
+At the same time, the final answer should not disappear into a newly created side thread when the user started the workflow from an existing Codex conversation.
 
-At the same time, Desktop-visible worker threads are valuable because they make each worker's context, prompt, transcript, and result inspectable without hiding all work inside a filesystem run folder.
+### Target Users
+
+- Codex Desktop users running CWF from an active conversation.
+- CLI users who may optionally inspect worker threads when app-server is available.
+- Future skill authors who need a clear worker-thread contract without inventing their own scheduler.
 
 ### Goals
 
-- Keep same-conversation result return as the primary UX when CWF is launched by a Codex skill or host thread.
-- Add `codex-app-thread` worker execution as an explicit runtime option.
-- Create one Codex Desktop thread per worker when `codex-app-thread` is selected and app-server is available.
-- Record worker `thread_id`, `turn_id`, adapter, fallback status, sandbox, approval policy, and transcript-read status in worker runtime metadata.
-- Normalize app-thread worker output into the same `workers/<worker-id>.json` envelope used by SDK workers.
-- Keep reducers adapter-independent.
-- Fall back to `codex-sdk-headless` only when the workflow explicitly configures that fallback.
-- Keep CLI-only workflows working without Codex Desktop.
+- Add live `codex-app-thread` worker execution.
+- Create one Codex app-server thread per worker when selected.
+- Preserve existing worker JSON and reducer contracts.
+- Record thread/turn metadata for every app-thread worker.
+- Keep same-conversation final result return as primary for skill-launched workflows.
+- Keep `--new-thread` explicit for separate coordinator/result threads.
+- Keep CLI-only operation reliable without app-server.
+- Make fallback behavior explicit and visible.
 
 ### Non-Goals
 
-- No implicit current-thread detection from `thread/list`.
-- No default result return to a new Desktop thread when a current Codex conversation exists.
-- No custom subagent scheduler.
-- No Claude Managed Agents parity in this phase.
+- No managed-agent platform scheduler.
+- No remote queue or daemon.
+- No marketplace or registry.
 - No recursive worker fan-out.
-- No write-capable worker threads in this phase.
-- No background daemon, remote queue, or custom platform scheduler.
+- No write-capable app-thread workers.
+- No implicit current-thread detection.
+- No non-Codex model routing.
+- No exact Claude Managed Agents parity.
 
 ## SPEC
 
-### Runtime Selection
+### Runtime Opt-In
 
-Workflow authors can request Desktop-visible worker execution:
+Workflow specs may request the adapter:
 
 ```yaml
 runtime:
@@ -58,106 +71,163 @@ runtime:
   fallback_worker_adapter: codex-sdk-headless
 ```
 
-If `preferred_worker_adapter: codex-app-thread` is selected:
+If `fallback_worker_adapter` is omitted and app-server execution is unavailable, the worker fails explicitly.
 
-1. CWF probes the Codex app-server schema and daemon.
-2. CWF creates one thread per worker with `thread/start`.
-3. CWF names each thread with workflow id, run id, and worker id.
-4. CWF starts a worker turn with `turn/start`.
-5. CWF reads or receives the worker result, then normalizes it into the standard worker envelope.
-6. CWF records native runtime metadata beside the worker result.
+### App-Thread Worker Flow
 
-If app-server is unavailable:
+For each worker:
 
-- if `fallback_worker_adapter` is configured, CWF uses that adapter and records `fallback_used: true`;
-- if no fallback is configured, the worker fails explicitly with `WorkerAdapterUnavailableError`.
+1. Probe Codex app-server availability and required methods.
+2. Start a thread with `thread/start`.
+3. Set a readable name with `thread/name/set`.
+4. Start a worker turn with `turn/start`.
+5. Read or receive the worker result from the app-server path.
+6. Normalize the result into `workers/<worker-id>.json`.
+7. Include app-thread metadata in reducer provenance.
 
-### Result Return Priority
+Readable thread name format should include:
 
-Result return follows this order:
+- `CWF`
+- workflow id
+- short run id
+- worker id or role
 
-1. **Skill wrapper return**: if a Codex skill launched the workflow, it reads `result.md` or structured result JSON and replies in the active conversation.
-2. **Explicit thread return**: if a host or user provides `--thread <thread-id>`, CWF posts to that known thread.
-3. **Explicit new thread**: if the user provides `--new-thread`, CWF creates a separate coordinator/result thread.
-4. **CLI fallback**: without Desktop context, CWF writes `handoff-prompt.md`, `result.md`, and run artifacts.
+Example:
 
-CWF must never infer the initiating conversation from `thread/list`.
+```text
+CWF diff-review correctness run_ab12
+```
 
-### Worker Runtime Metadata
+### Worker Metadata
 
-Each app-thread worker stores:
+Each worker JSON must preserve:
 
 ```json
 {
-  "adapter": "codex-app-thread",
-  "requested_adapter": "codex-app-thread",
-  "fallback_adapter": "codex-sdk-headless",
-  "fallback_used": false,
-  "fallback_reason": null,
-  "parent_thread_id": "optional host-provided initiating thread id",
-  "coordinator_thread_id": "optional coordinator/result thread id",
-  "thread_id": "worker thread id",
-  "turn_id": "worker turn id",
-  "agent_role": "correctness",
-  "agent_nickname": "correctness",
-  "transcript_read": true,
-  "sandbox": "read-only",
-  "approval_policy": "never",
-  "result_return_path": "worker-envelope"
+  "runtime": {
+    "adapter": "codex-app-thread",
+    "requested_adapter": "codex-app-thread",
+    "fallback_adapter": "codex-sdk-headless",
+    "fallback_used": false,
+    "fallback_reason": null,
+    "parent_thread_id": null,
+    "coordinator_thread_id": null,
+    "thread_id": "thr_worker",
+    "turn_id": "turn_worker",
+    "agent_role": "correctness",
+    "agent_nickname": "correctness",
+    "transcript_read": true,
+    "sandbox": "read-only",
+    "approval_policy": "never",
+    "result_return_path": "worker-envelope"
+  }
 }
 ```
 
-If transcript reading is not available, CWF preserves the best available final response, records `transcript_read: false`, and keeps artifact paths inspectable.
+If the host provides an initiating thread id, record it as `parent_thread_id`. If it does not, leave it null. Do not infer it.
 
-### Thread Topology
+### Result Return
 
-```text
-initiating Codex conversation
-  -> CWF skill wrapper returns final result here
-  -> CWF run store records all evidence
-  -> optional worker thread: correctness
-  -> optional worker thread: tests
-  -> optional worker thread: safety
-  -> optional coordinator/result thread only when explicitly requested
-```
+Final result priority:
+
+1. Skill wrapper returns the result to the active Codex conversation.
+2. Explicit `--thread <thread-id>` posts to a known thread.
+3. Explicit `--new-thread` creates a separate coordinator/result thread.
+4. CLI artifacts remain the fallback.
+
+Worker threads do not replace the final-result path.
+
+### Failure And Fallback
+
+If app-server is unavailable:
+
+- with fallback configured: use fallback, record `fallback_used: true`, keep status readable;
+- without fallback: fail with `WorkerAdapterUnavailableError`;
+- never silently downgrade without metadata.
+
+If app-server starts the worker but result reading fails:
+
+- preserve the best available response if any;
+- set `transcript_read: false`;
+- keep app-server ids and artifact paths visible;
+- fail clearly if no reliable worker output exists.
+
+### Safety Invariants
+
+- `thread/list` must never choose the initiating/current conversation.
+- App-thread workers are read-only in v1.7.
+- Write-capable phases continue to use existing gates and SDK workspace-write behavior.
+- Reducers must be adapter-independent.
+- CLI lifecycle must not depend on Codex Desktop.
+- All native-thread claims must be backed by recorded `thread_id` and `turn_id`.
 
 ## Acceptance Criteria
 
-- [ ] Same-conversation result return is the documented primary UX.
-  - Test: docs/spec source audit proves `--new-thread` is described as explicit/background/fallback, not default.
+- [ ] Same-conversation final result remains primary.
+  - Test: docs/source audit shows `--new-thread` is explicit and not the default Codex-launched return path.
 
-- [ ] `codex-app-thread` can run one worker through app-server.
-  - Test: fake app-server integration test covers `thread/start`, `thread/name/set`, `turn/start`, `thread/read`, and worker envelope normalization.
+- [ ] One worker can run through a fake app-server.
+  - Test: fake app-server integration covers `thread/start`, `thread/name/set`, `turn/start`, result read, and worker envelope normalization.
 
-- [ ] `diff-review` can create three Desktop-visible worker threads when app-server is available.
-  - Manual evidence: live smoke records three worker `thread_id` values and three `turn_id` values in worker JSON.
+- [ ] Runtime metadata is complete.
+  - Test: worker JSON contains adapter, requested adapter, fallback fields, parent/coordinator ids when known, worker `thread_id`, worker `turn_id`, transcript-read status, sandbox, approval policy, and result-return path.
 
-- [ ] Worker runtime metadata is recorded per spec.
-  - Test: worker JSON includes adapter, requested adapter, fallback fields, worker `thread_id`, worker `turn_id`, parent/coordinator ids when provided, transcript-read status, sandbox, and approval policy.
-
-- [ ] Reducer behavior is unchanged across SDK and app-thread workers.
-  - Test: mixed-adapter reducer fixture passes and preserves runtime metadata in provenance.
+- [ ] Reducer output is adapter-independent.
+  - Test: mixed SDK/app-thread reducer fixture passes and preserves runtime metadata in provenance.
 
 - [ ] Fallback is explicit.
-  - Test: native adapter unavailable with fallback configured records `fallback_used: true`; without fallback it fails with `WorkerAdapterUnavailableError`.
+  - Test: unavailable app-thread with configured fallback records `fallback_used: true`; unavailable app-thread without fallback fails with `WorkerAdapterUnavailableError`.
+
+- [ ] CLI-only use still works.
+  - Test: `npm run check`, `bash scripts/smoke-cli.sh`, and normal CLI `diff-review` smoke pass without app-server.
 
 - [ ] No current-thread guessing exists.
-  - Test: source audit and unit tests show CWF never selects a parent/current thread from `thread/list`.
+  - Test: source audit and unit tests prove `thread/list` is not used to select a parent/current thread.
 
-- [ ] Existing CLI users are unaffected.
-  - Test: `npm run check`, `bash scripts/smoke-cli.sh`, and a CLI `diff-review` smoke pass without app-server.
+- [ ] Live Desktop worker threads are proven when app-server is available.
+  - Manual evidence: live `diff-review` smoke records one worker `thread_id` and one worker `turn_id` per worker.
 
-- [ ] Result thread behavior stays explicit.
-  - Manual evidence: `cwf desktop result <run-id> --new-thread` creates a coordinator/result thread only when the flag is present.
+## Verification Commands
 
-## Deferred: Managed-Agents-Style Platform Scheduling
+```bash
+git diff --check
+npm run check
+bash scripts/smoke-cli.sh
+npx vitest run tests/worker-adapter.test.ts
+npx vitest run tests/desktop-bridge.test.ts
+npx vitest run tests/diff-review-reducer.test.ts
+```
 
-This phase intentionally does not build a managed agent platform. It does not own a scheduler, queue, remote lifecycle service, nested agent policy, or agent marketplace. That work can be reconsidered after worker app threads are proven with real app-server smoke.
+Live app-server smoke when available:
 
-The future managed scheduling plan should start only after v1.7 can prove:
+```bash
+cwf desktop check
+cwf run diff-review --target <fixture> --background
+cwf status <run-id>
+cwf result <run-id>
+```
+
+The implementation may add a specific fixture workflow or runtime flag for app-thread smoke. If so, update this file and `GOAL_PROMPT.md`.
+
+## Stop Conditions
+
+Stop and ask for direction if:
+
+- app-server lacks required thread/turn methods;
+- worker result retrieval is not deterministic;
+- v1.7 cannot be completed without a custom scheduler;
+- write-capable app-thread workers become necessary;
+- no-current-thread guessing becomes tempting;
+- live app-server smoke is unavailable after three repeated attempts with the same blocker.
+
+## Deferred
+
+Managed-agents-style scheduling is deferred.
+
+Start a separate v1.8 design plan only after v1.7 proves:
 
 - worker threads are visible;
-- worker outputs return to the reducer;
-- final results return to the initiating conversation;
+- worker output returns to the reducer;
+- final result returns to the initiating conversation;
 - fallback is safe for CLI-only users;
-- no custom platform layer is needed for the common case.
+- native Codex thread/subagent reuse still leaves a concrete unsolved scheduling problem.
