@@ -159,41 +159,7 @@ Out of scope:
 
 ### Goal Prompt
 
-```text
-Build Codex Flow v0.3 Run Discovery And Failure Model in /Users/sunny/Work/CODEX/codex-workflows.
-
-Scope:
-- Keep public core Codex-native.
-- Do not add private adapters or non-Codex model routing.
-- Do not add new workflow types.
-- Do not add workflow registry yet.
-- Keep existing diff-review behavior working.
-
-Required:
-- Add run index under ~/.codex-workflows/index.json or an equivalent rebuildable discovery layer.
-- Add cwf list [--limit <n>] [--status <status>] [--target <path>].
-- Add cwf show <run-id>.
-- Add cwf latest [--target <path>].
-- Rebuild discovery data from run folders when index is missing/stale/corrupt.
-- Add default failure policy metadata and human-readable failure summaries.
-- Update README, README.zh-CN, PRD, SPEC, SKILL_PLAN, ACCEPTANCE, FULL_PLAN, and PHASE_CONTRACTS if behavior changes.
-- Add tests for index/discovery creation, rebuild, filtering, latest, show formatting, and failure summaries.
-
-Verification:
-- npm run check
-- npm pack --dry-run
-- cwf validate workflows/diff-review.yaml
-- fixture foreground smoke
-- fixture background smoke
-- cwf watch smoke
-- cwf list/show/latest smoke
-- mocked failure smoke
-- cancel smoke
-
-Final response:
-- Explain in human terms what users can now do.
-- Include commands run, pass/fail, commit hash, and push status.
-```
+Archived prompt: [v0.3 run discovery](goal-prompts/v0.3-run-discovery.md).
 
 ## v0.4: Gates And Resume
 
@@ -999,3 +965,69 @@ Rules:
 
 - [x] Existing CLI lifecycle remains unaffected.
   - Evidence: `npm run check`, CLI smoke, and normal `diff-review` smoke pass without app-server
+
+## v1.8: Managed-Agents-Style Scheduling Decision
+
+Status: completed as a decision record. Do not implement a scheduler now.
+
+### PRD
+
+v1.8 answers whether Codex Flow should start building a Claude Managed Agents-style scheduler after v1.7 worker app threads.
+
+The decision is no for now. Codex Flow should stay a thin Codex-native workflow layer. It owns workflow specs, run state, gates, worker envelopes, reducers, artifact manifests, and CLI/status surfaces. Codex should continue to own model execution, threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees.
+
+This keeps the public promise honest:
+
+> Similar useful workflow effect for supported Codex workflows, different runtime and safety model.
+
+It is not:
+
+> Full Claude Dynamic Workflows parity.
+
+### Evidence
+
+- v1.7 app-thread workers are implemented and documented as completed.
+- Live run `run_20260604084923_hqu0l8` recorded 3/3 completed app-thread workers with no SDK fallback and no raw fallback:
+  - correctness: thread `019e91d2-ac76-7191-90b2-a7b2234f1c96`, turn `019e91d2-b4a6-7760-8f72-1e34aa73c96a`;
+  - tests: thread `019e91d2-ac75-71a0-8186-764d87e9cdf1`, turn `019e91d2-b8be-7793-86c7-674a08bd9205`;
+  - safety: thread `019e91d2-ac76-7191-90b2-a7a457bef8f2`, turn `019e91d2-b0d3-73f3-be0a-1060c7067178`.
+- Worker output returns through the existing worker envelope and reducer path.
+- Same-conversation final result return remains the skill wrapper's job.
+- CLI-only users keep process-backed background runs, `status`, `watch`, `result`, `cancel`, local discovery, and durable artifacts without Desktop.
+- No current verified workflow requires Codex Flow to own a queue, daemon, remote lifecycle service, recursive worker runtime, or scheduler.
+
+### SPEC
+
+No runtime behavior is added in v1.8.
+
+Rules:
+
+- Do not add a scheduler, queue, daemon, marketplace, registry, remote lifecycle service, or nested worker execution in this phase.
+- Do not add non-Codex model routing, private adapters, MiMo/Reasonix-specific behavior, or user-specific defaults to public Codex Flow.
+- Do not change result routing: worker threads are evidence/execution surfaces, and same-conversation final result return remains the skill wrapper's job.
+- Do not use `thread/list` to infer an initiating/current conversation.
+- Revisit scheduling only with a new PRD/SPEC/acceptance plan.
+
+Revisit criteria:
+
+- durable queueing outside the current process becomes a real user need;
+- cancellation across many long-running worker threads cannot be handled through existing run state and host controls;
+- nested workers are required by a concrete workflow and cannot be delegated to Codex host subagents;
+- shared run ownership across users or machines becomes a real product requirement;
+- a public workflow registry creates lifecycle needs that local filesystem discovery cannot cover.
+
+Any future scheduler plan must also say when it applies and when it should be skipped.
+
+### Acceptance
+
+- [x] v1.8 produces an evidence-backed decision.
+  - Evidence: this section cites v1.7 live app-thread run evidence, existing CLI lifecycle behavior, and the absence of a proven scheduling gap.
+
+- [x] v1.8 does not authorize scheduler implementation.
+  - Evidence: docs keep scheduler/queue/daemon/remote lifecycle/nested worker runtime out of scope and require a future PRD/SPEC/acceptance contract.
+
+- [x] v1.7 remains completed historical evidence.
+  - Evidence: v1.7 section remains checked and references live run `run_20260604084923_hqu0l8`.
+
+- [x] Public product promise remains honest.
+  - Evidence: this section repeats the supported Codex workflow promise and rejects full Claude Dynamic Workflows parity.

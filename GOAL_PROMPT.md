@@ -10,78 +10,52 @@ This file is the current goal-mode entrypoint. Historical phase prompts live in
 
 Current phase:
 
-- v1.8 Managed-Agents-Style Scheduling Decision
+- none; v1.8 is completed as a decision record
+
+Latest decision:
+
+- v1.8 Managed-Agents-Style Scheduling Decision: do not build a scheduler now.
 
 Archived phase prompts:
 
 - `docs/goal-prompts/v0.3-run-discovery.md`
 - `docs/goal-prompts/v1.7-worker-app-threads.md`
+- `docs/goal-prompts/v1.8-managed-agents-decision.md`
 
-When the current phase changes, update this file and add or update the matching
-phase file under `docs/goal-prompts/`.
+When a new phase starts, replace this file with the active goal prompt and add
+or update the matching historical prompt under `docs/goal-prompts/`.
 
-```text
-Decide Codex Flow v1.8 Managed-Agents-Style Scheduling Scope in /Users/sunny/Work/CODEX/codex-workflows.
+## v1.8 Decision Summary
 
-Outcome:
-- Produce an evidence-backed decision on whether Codex Flow needs its own managed-agents-style scheduler after v1.7 worker app threads.
-- If the answer is "not now", update the roadmap so v1.8 stays a decision record and does not invite premature scheduler implementation.
-- If the answer is "yes, later", write a narrow PRD/SPEC/acceptance plan for the smallest scheduler slice and clearly state what native Codex features it cannot reuse.
-- Keep the public product promise honest: similar workflow effect for supported Codex workflows, not full Claude Dynamic Workflows parity.
-- Preserve v1.7 as completed historical evidence.
+Codex Flow should not implement a managed-agents-style scheduler in v1.8.
 
-Allowed writes:
-- GOAL_PROMPT.md
-- PLAN.md
-- docs/FULL_PLAN.md
-- docs/POST_V1_PLAN.md
-- docs/PRD.md
-- docs/SPEC.md
-- ACCEPTANCE.md
-- docs/PHASE_CONTRACTS.md
-- docs/goal-prompts/
-- docs/WORKER_APP_THREADS_PLAN.md only for reference/status corrections
+Evidence reviewed:
 
-Forbidden:
-- Do not implement scheduler, queue, daemon, marketplace, registry, remote lifecycle service, or nested worker execution in this goal.
-- Do not change src/ runtime behavior unless a stale docs reference cannot be verified without a tiny read-only helper; ask first before any code edit.
-- Do not add non-Codex model routing, private adapters, MiMo/Reasonix-specific behavior, or user-specific defaults to public Codex Flow.
-- Do not rewrite completed v1.0-v1.7 evidence in GOAL_CHECKLIST.md unless a factual error is proven.
-- Do not claim Codex Desktop can automatically return final results into arbitrary guessed conversations.
-- Do not use thread/list to infer an initiating/current Codex conversation.
+- v1.7 app-thread worker support is implemented and documented as completed.
+- Live run `run_20260604084923_hqu0l8` recorded real app-thread metadata for
+  3/3 workers, with no SDK fallback and no raw fallback:
+  - correctness: thread `019e91d2-ac76-7191-90b2-a7b2234f1c96`, turn
+    `019e91d2-b4a6-7760-8f72-1e34aa73c96a`
+  - tests: thread `019e91d2-ac75-71a0-8186-764d87e9cdf1`, turn
+    `019e91d2-b8be-7793-86c7-674a08bd9205`
+  - safety: thread `019e91d2-ac76-7191-90b2-a7a457bef8f2`, turn
+    `019e91d2-b0d3-73f3-be0a-1060c7067178`
+- Existing CLI/background/watch/list/show/result/cancel surfaces already provide
+  inspectable local lifecycle behavior without a daemon.
+- Codex-native app-server threads, SDK workers, skills, sandbox/approval rules,
+  worktrees, and host subagents remain the preferred execution boundary.
 
-Constraints:
-- Reuse Codex-native capabilities first: app-server worker threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents where available.
-- Treat native worker threads as execution/evidence surfaces; same-conversation final result return remains the skill wrapper's job.
-- Keep CLI-only operation valid.
-- Keep all roadmap claims tied to current code, docs, and verification evidence.
-- Any proposed future scheduler must explain when it applies and when it should be skipped.
+What v1.8 adds:
 
-Verification:
-- `git diff --check`
-- Source audit that `GOAL_PROMPT.md` is current and old v0.3/v1.7 prompts are only under `docs/goal-prompts/`.
-- Source audit that `PLAN.md` and `docs/FULL_PLAN.md` treat v1.7 as completed and v1.8 as decision-only.
-- Source audit that no src/ runtime files changed for this decision-doc goal, unless explicitly approved.
-- If docs touch packaged/user-facing behavior, run `npm run check` and `bash scripts/smoke-cli.sh`.
-- Review current v1.7 evidence before deciding: `GOAL_CHECKLIST.md`, `docs/WORKER_APP_THREADS_PLAN.md`, `docs/PRE_V17_DOC_CODE_AUDIT.md`, and the latest live app-thread run evidence if present.
-- Use Reasonix/DeepSeek final review for the roadmap and goal-contract wording; apply blocker/high fixes before finishing.
+- an explicit roadmap decision;
+- a tighter non-goal around schedulers, queues, daemons, marketplaces, remote
+  lifecycle services, and nested worker execution;
+- revisit criteria for a future scheduler decision.
 
-Iteration policy:
-- Start with a code/docs evidence audit, then write the decision.
-- Keep the decision smaller than an implementation plan unless the evidence proves a scheduler is required.
-- After each docs edit, run the closest grep/source audit before expanding scope.
-- Use plain-language summaries in every major progress update: what changed, what users get, what remains impossible.
-- If a verification command fails, state the root-cause hypothesis before retrying.
+What v1.8 does not add:
 
-Stop/Pause conditions:
-- Stop and ask if the decision depends on unavailable Codex platform details that cannot be verified locally.
-- Stop and ask before adding any scheduler/runtime implementation.
-- Stop and ask before changing public safety boundaries, write-capable workers, or final-result routing semantics.
-- Stop after three repeated no-progress attempts on the same verification failure and report the blocker.
-- Stop when the v1.8 decision is documented, stale phase-goal references are removed, verification passes, and the commit/push/CI state is reported.
-
-Final response:
-- Explain in human terms whether Codex Flow should build a scheduler now.
-- Explain what v1.7 already enables and what v1.8 will or will not add.
-- List files changed, commands run, Reasonix review result, commit hash, push status, and CI status if pushed.
-```
+- no scheduler implementation;
+- no queue, daemon, registry, marketplace, remote lifecycle service, or nested
+  worker runtime;
+- no private adapters, non-Codex model routing, or user-specific defaults;
+- no change to same-conversation result-return semantics.

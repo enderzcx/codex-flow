@@ -751,17 +751,25 @@ Out of scope:
 
 Archived prompt: [v1.7 worker app threads](goal-prompts/v1.7-worker-app-threads.md).
 
-## Deferred: Managed-Agents-Style Platform Scheduling
+## v1.8 Decision: Managed-Agents-Style Platform Scheduling
 
-Do not implement platform-level scheduling as part of v1.7. v1.8 is a decision slice that checks whether a scheduler is still worth building after native worker app threads.
+Status: completed as a decision record. Do not build a managed-agents-style scheduler now.
 
-Future implementation planning can start only if v1.8 proves all of these:
+Rationale:
 
-- worker threads are visible in Codex Desktop;
-- worker outputs return to the reducer;
-- final results return to the initiating conversation through the skill wrapper;
-- fallback is safe for CLI-only users;
-- a custom scheduler is still clearly needed after reusing Codex's native thread/subagent surface.
+- v1.7 proved Desktop-visible app-thread worker execution with live run `run_20260604084923_hqu0l8`: correctness `019e91d2-ac76-7191-90b2-a7b2234f1c96` / `019e91d2-b4a6-7760-8f72-1e34aa73c96a`, tests `019e91d2-ac75-71a0-8186-764d87e9cdf1` / `019e91d2-b8be-7793-86c7-674a08bd9205`, and safety `019e91d2-ac76-7191-90b2-a7a457bef8f2` / `019e91d2-b0d3-73f3-be0a-1060c7067178`.
+- Worker outputs return through the existing worker envelope and reducer.
+- The primary Codex-launched result path remains same-conversation skill-wrapper return.
+- CLI-only users still have local process-backed background runs, `watch`, `status`, `result`, `cancel`, discovery, and durable artifacts.
+- No verified user workflow currently requires Codex Flow to own a queue, daemon, remote lifecycle service, recursive worker policy, or scheduler.
+
+Future implementation planning can start only if a later evidence review proves all of these:
+
+- Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents have been tried or ruled out;
+- a concrete user workflow still needs durable queueing, cross-thread cancellation policy, nested-worker policy, shared multi-user/multi-machine run ownership, or registry lifecycle management;
+- the new behavior has a narrow PRD/SPEC/acceptance contract that says when it applies and when it must be skipped.
+
+Until then, scheduling remains a non-goal, not a hidden backlog item.
 
 ## Superseded: Gated Write-Capable Workflow Pack
 

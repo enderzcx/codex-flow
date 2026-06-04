@@ -38,7 +38,7 @@ The project should keep reusing Codex-native capability instead of rebuilding a 
 - No private model adapter requirement.
 - No exact clone of Claude Dynamic Workflows.
 - No custom agent marketplace.
-- No custom remote scheduler before native worker threads are proven.
+- No custom remote scheduler unless a later evidence review proves Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents cannot cover a concrete user workflow.
 - No implicit posting into a guessed Codex conversation.
 - No generated JavaScript workflow execution.
 - No ungated write-capable workflow.
@@ -76,11 +76,11 @@ The completed ledger lives in `GOAL_CHECKLIST.md`. Leave it alone during future 
 
 ### v1.8 Managed-Agents-Style Scheduling Decision
 
-Goal: decide whether a platform scheduler is still needed after v1.7.
+Decision: do not build a platform scheduler now.
 
-This is not approved for implementation yet. It should start as a design audit, not code.
+Evidence from v1.7 shows the next useful step is not a custom scheduler: app-thread workers can create Codex Desktop-visible execution surfaces, worker outputs still return to the reducer, the CLI lifecycle remains valid without Desktop, and same-conversation final result return stays with the skill wrapper.
 
-Build only if v1.7 proves that native Codex threads are useful but insufficient for one or more concrete cases:
+Revisit only if real usage proves native Codex surfaces are useful but insufficient for one or more concrete cases:
 
 - durable queueing outside the current process
 - cancellation across many long-running worker threads
@@ -88,7 +88,7 @@ Build only if v1.7 proves that native Codex threads are useful but insufficient 
 - shared run ownership across users or machines
 - a public workflow registry that needs lifecycle management
 
-If Codex-native threads/subagents cover the common case, do not build a scheduler.
+Until one of those cases is proven, Codex Flow should keep scheduling out of public core and continue to rely on Codex-native execution boundaries.
 
 ### v1.9 Public Workflow Registry
 
@@ -106,16 +106,15 @@ Required shape when revisited:
 
 ## Next Implementation Order
 
-1. Run the v1.8 managed-agents-style scheduling decision audit.
-2. Check whether Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents cover the common case.
-3. If native capability is enough, keep scheduler work out of Codex Flow and record the decision.
-4. If a concrete gap remains, write the smallest PRD/SPEC/acceptance plan before implementation.
-5. Only after that revisit public workflow sharing.
+1. Keep v1.8 as a completed decision record: no scheduler now.
+2. Continue collecting real workflow evidence through the existing CLI, SDK worker, app-thread worker, gate, artifact, and skill-wrapper surfaces.
+3. If a concrete scheduling gap appears, write the smallest PRD/SPEC/acceptance plan before implementation.
+4. Only after that revisit public workflow sharing.
 
 ## Acceptance For This Plan
 
 - The plan separates completed evidence from unfinished work.
-- The next goal is v1.8 decision-only, not scheduler implementation.
+- v1.8 is decision-only and does not authorize scheduler implementation.
 - Same-conversation result return is primary for Codex-launched workflows.
 - Desktop worker threads are optional execution/evidence surfaces.
 - Managed-agents-style scheduling is explicitly gated by evidence.

@@ -610,6 +610,7 @@ Contract:
 - Public v1.0 has no private adapters or third-party model routing.
 - `thread/list` must never be used to infer the initiating/current Codex conversation.
 - v1.7 worker app threads must not introduce a global scheduler, remote queue, recursive fan-out, or agent marketplace.
+- v1.8 does not add managed-agents-style scheduling. A future scheduler requires a new PRD/SPEC/acceptance contract proving a concrete gap after Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents are considered.
 
 ## Known Limitations
 
@@ -620,3 +621,4 @@ Contract:
 - Run discovery is a local index only.
 - Workflow registry is local filesystem discovery only; no remote marketplace.
 - Live worker app-thread support depends on host app-server availability; fake app-server tests prove the contract, and live Desktop acceptance requires recorded worker `thread_id` and `turn_id` values.
+- There is no Codex Flow-owned scheduler, durable queue, remote lifecycle service, recursive worker runtime, or agent marketplace.

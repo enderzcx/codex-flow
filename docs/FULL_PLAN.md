@@ -127,25 +127,27 @@ Historical goal prompt: `goal-prompts/v1.7-worker-app-threads.md`.
 
 ### v1.8 Managed-Agents-Style Scheduling Decision
 
-Current next goal. Decide first; do not build yet.
+Done. Decision: do not build a scheduler now.
 
-After v1.7, decide whether a scheduler is actually needed. The decision must be evidence-based:
+Evidence reviewed:
 
-- What could not be solved by Codex app-server worker threads?
-- What could not be solved by Codex subagents or worktrees?
-- What user-visible problem requires a queue, daemon, remote lifecycle service, or nested worker policy?
-- What would be worse if CWF owned scheduling instead of Codex?
+- v1.7 proved app-server-backed worker threads can create Desktop-visible execution/evidence surfaces.
+- Worker output still normalizes into the existing worker envelope and reducer path.
+- Same-conversation final result return remains the skill wrapper's job.
+- CLI-only users still have process-backed background runs, watch/status/result, cancellation, local run discovery, and artifacts without Desktop.
+- No current evidence proves a queue, daemon, remote lifecycle service, nested worker runtime, or custom scheduler is required in public core.
 
-Deliverable when started:
+Revisit criteria:
 
-- design audit
-- PRD/SPEC/acceptance
-- explicit non-goals
-- fake-runtime tests if any scheduler behavior is proposed
+- durable queueing outside the current process becomes a real user need;
+- cancellation across many long-running worker threads cannot be handled through existing run state and host controls;
+- nested workers are required by a concrete workflow and cannot be delegated to Codex host subagents;
+- shared run ownership across users or machines becomes a real product requirement;
+- a future public workflow registry creates lifecycle needs that local filesystem discovery cannot cover.
 
-No implementation until that decision doc is accepted.
+Until one of those criteria is proven, scheduler work remains out of scope.
 
-Current goal prompt: `../GOAL_PROMPT.md`.
+Decision record: `../GOAL_PROMPT.md`.
 
 Archived phase prompt: `goal-prompts/v1.8-managed-agents-decision.md`.
 

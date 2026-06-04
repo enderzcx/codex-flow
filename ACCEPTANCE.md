@@ -125,6 +125,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] `codex-app-thread` workers create Desktop worker threads when enabled and app-server is available.
   - Evidence: v1.7 implementation provides fake app-server tests; live app-server smoke must record worker `thread_id` and `turn_id` values when the host app-server is available.
 
+- [x] Managed-agents-style scheduling is explicitly not approved for implementation now.
+  - Evidence: v1.8 decision docs keep scheduling out of scope and require a future PRD/SPEC/acceptance contract before any queue, daemon, remote lifecycle service, nested worker runtime, or scheduler work starts.
+
 - [ ] GitHub PR artifacts are generated locally and posting is explicit.
   - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.
 
