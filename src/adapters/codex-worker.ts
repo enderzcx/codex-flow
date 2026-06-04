@@ -119,7 +119,10 @@ export async function runCodexWorker(
 
 export function parseWorkerOutput(workerId: string, raw: string): { output: WorkerOutput; rawFallback: boolean } {
   try {
-    const parsed = JSON.parse(raw) as WorkerOutput;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isWorkerOutput(parsed)) {
+      throw new Error("Worker JSON did not match the worker envelope.");
+    }
     return { output: normalizeWorkerOutput(workerId, parsed), rawFallback: false };
   } catch {
     return {
@@ -147,6 +150,37 @@ function normalizeWorkerOutput(workerId: string, output: WorkerOutput): WorkerOu
   };
 }
 
+function isWorkerOutput(value: unknown): value is WorkerOutput {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const output = value as WorkerOutput;
+  return (
+    typeof output.summary === "string" &&
+    Array.isArray(output.findings) &&
+    output.findings.every(isFinding) &&
+    Array.isArray(output.verification) &&
+    output.verification.every((item) => typeof item === "string") &&
+    Array.isArray(output.artifacts) &&
+    output.artifacts.every((item) => typeof item === "string") &&
+    (output.confidence === "high" || output.confidence === "medium" || output.confidence === "low")
+  );
+}
+
+function isFinding(value: unknown): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const finding = value as Record<string, unknown>;
+  return (
+    (finding.severity === "critical" || finding.severity === "high" || finding.severity === "medium" || finding.severity === "low" || finding.severity === "info") &&
+    typeof finding.title === "string" &&
+    typeof finding.evidence === "string" &&
+    typeof finding.reason === "string" &&
+    typeof finding.suggested_fix === "string"
+  );
+}
+
 function buildSdkRuntime(worker: WorkflowWorker, options: RunCodexWorkerOptions): WorkerResult["runtime"] {
   return {
     adapter: "codex-sdk-headless",
@@ -161,7 +195,7 @@ function buildSdkRuntime(worker: WorkflowWorker, options: RunCodexWorkerOptions)
   };
 }
 
-function buildWorkerPrompt(worker: WorkflowWorker, context: DiffContext): string {
+export function buildWorkerPrompt(worker: WorkflowWorker, context: DiffContext): string {
   return `You are a read-only Codex worker inside the public codex-workflows diff-review MVP.
 
 Worker id: ${worker.id}
@@ -176,6 +210,11 @@ Rules:
 - Prefer concrete findings with file/diff evidence.
 - Do not invent line numbers if the diff does not provide them.
 - Return JSON only. No Markdown, no prose outside JSON.
+- Use exactly this top-level JSON shape:
+  {"worker_id":"${worker.id}","summary":"...","findings":[],"verification":[],"artifacts":[],"confidence":"high|medium|low"}
+- Each finding must use exactly:
+  {"severity":"critical|high|medium|low|info","title":"...","evidence":"...","reason":"...","suggested_fix":"..."}
+- Do not use alternate finding keys such as file, line, message, issue, impact, or recommendation.
 - Include an artifacts array; use [] when you did not create or reference extra artifacts.
 - If there are no findings, return an empty findings array and explain briefly in summary.
 

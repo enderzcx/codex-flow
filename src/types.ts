@@ -255,6 +255,8 @@ export type WorkerRuntimeMetadata = {
   fallback_adapter?: WorkerAdapterName;
   fallback_used: boolean;
   fallback_reason?: string;
+  parent_thread_id?: string;
+  coordinator_thread_id?: string;
   thread_id?: string;
   turn_id?: string;
   agent_role: string;
@@ -263,6 +265,7 @@ export type WorkerRuntimeMetadata = {
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   approval_policy?: "never" | "on-request" | "on-failure" | "untrusted";
   worktree_path?: string;
+  result_return_path?: "worker-envelope";
 };
 
 export type ReducedFinding = Finding & {

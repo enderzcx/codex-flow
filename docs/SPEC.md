@@ -565,7 +565,7 @@ Artifact entries contain `id`, `type`, `path`, and `description`. The default `d
 
 ## Native Codex Runtime Bridge
 
-The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Codex Flow v1.2 uses this only for explicit result handoff. v1.7 should reuse the same app-server transport for explicit worker app threads.
+The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Codex Flow v1.2 uses this for explicit result handoff. v1.7 reuses the same app-server transport for explicit worker app threads.
 
 Commands:
 
@@ -601,7 +601,7 @@ Contract:
 - If the diff changes during review, the run fails.
 - If one or more Codex workers fail but at least one succeeds, the review continues and worker failures remain visible in state, events, status, show output, reducer provenance, and the final report.
 - If a worker uses raw fallback, the reducer marks the evidence as degraded and records the fallback reason.
-- If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
+- If all Codex workers fail, the run fails with a failure summary that points users at Codex worker adapter connectivity and worker logs.
 - Workflow ids discovered in local search paths must be unique.
 - Write-capable phases or workers must be preceded by a gate.
 - Write-capable phases fail before writing if the target diff changed after preview.
@@ -619,4 +619,4 @@ Contract:
 - No workflow plugin system yet.
 - Run discovery is a local index only.
 - Workflow registry is local filesystem discovery only; no remote marketplace.
-- No live worker app-thread implementation yet; v1.7 is the planned implementation slice.
+- Live worker app-thread support depends on host app-server availability; fake app-server tests prove the contract, and live Desktop acceptance requires recorded worker `thread_id` and `turn_id` values.

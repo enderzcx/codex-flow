@@ -161,7 +161,7 @@ export function createRunIndexEntry(state: RunState): RunIndexEntry {
 
 function describeFailureNextStep(state: RunState, detail: string, failedWorkers: string[]): string {
   if (failedWorkers.length === state.workers.length && failedWorkers.length > 0) {
-    return "Check Codex SDK connectivity and worker logs before changing workflow design.";
+    return "Check Codex worker adapter connectivity and worker logs before changing workflow design.";
   }
   if (detail.includes("diff changed")) {
     return "Re-run after the target repository diff is stable.";

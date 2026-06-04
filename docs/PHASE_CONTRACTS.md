@@ -941,6 +941,8 @@ Rules:
 
 ## v1.7: Worker App Threads
 
+Status: implemented with fake app-server coverage and live app-thread smoke evidence.
+
 ### PRD
 
 v1.7 makes workflow workers visible in Codex Desktop when explicitly requested. It does not change the primary result-return UX: a workflow launched from an active Codex conversation should return its final summary to that same conversation through the skill wrapper.
@@ -980,20 +982,20 @@ Rules:
 
 ### Acceptance
 
-- [ ] One app-thread worker can run through app-server.
+- [x] One app-thread worker can run through app-server.
   - Evidence: fake app-server test covers thread creation, turn start, and worker envelope normalization
 
-- [ ] A live multi-worker run records Desktop worker threads.
-  - Evidence: live `diff-review` smoke records worker `thread_id` and `turn_id` for correctness/tests/safety
+- [x] A live multi-worker run records Desktop worker threads.
+  - Evidence: live run `run_20260604084923_hqu0l8` records worker `thread_id` and `turn_id` for correctness/tests/safety with 3/3 workers completed and 0 fallback
 
-- [ ] Same-conversation result return remains primary.
+- [x] Same-conversation result return remains primary.
   - Evidence: skill wrapper or documented manual path returns final result to the initiating conversation; `--new-thread` remains explicit
 
-- [ ] Reducer remains adapter-independent.
+- [x] Reducer remains adapter-independent.
   - Evidence: mixed SDK/app-thread fixture passes
 
-- [ ] Fallback is explicit.
+- [x] Fallback is explicit.
   - Evidence: tests cover configured fallback and no-fallback failure
 
-- [ ] Existing CLI lifecycle remains unaffected.
+- [x] Existing CLI lifecycle remains unaffected.
   - Evidence: `npm run check`, CLI smoke, and normal `diff-review` smoke pass without app-server

@@ -50,6 +50,10 @@ export type AppServerTransport = {
   close?(): Promise<void> | void;
 };
 
+export function createDefaultAppServerTransport(): AppServerTransport {
+  return new UnixSocketWebSocketAppServerTransport();
+}
+
 export async function checkDesktopCapability(codexPath = process.env.CWF_CODEX_PATH || "codex"): Promise<DesktopCapabilitySummary> {
   const methods = Object.fromEntries(DESKTOP_REQUIRED_METHODS.map((method) => [method, false])) as Record<string, boolean>;
   let codexCliVersion: string | undefined;
@@ -299,7 +303,7 @@ async function attemptAppServerResult(
   options: DesktopResultOptions,
 ): Promise<DesktopHandoffRecord> {
   const codexPath = options.codexPath ?? process.env.CWF_CODEX_PATH ?? "codex";
-  const appServer = options.appServer ?? (options.appServerFactory ?? (() => new UnixSocketWebSocketAppServerTransport()))(codexPath);
+  const appServer = options.appServer ?? (options.appServerFactory ?? (() => createDefaultAppServerTransport()))(codexPath);
   const capability = options.capability ?? await checkDesktopCapability(options.codexPath);
   const base: DesktopHandoffRecord = {
     adapter: "codex-app-server",

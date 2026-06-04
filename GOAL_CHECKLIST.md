@@ -261,3 +261,47 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 
 - [x] Commit v1.6.
   - Evidence: commit `3c38d73` in git history.
+
+## v1.7 Worker App Threads
+
+- [x] Same-conversation final result remains primary.
+  - Evidence: docs/source audit shows worker threads are evidence surfaces; `--new-thread` remains explicit and `thread/list` is not used to infer current conversation.
+
+- [x] One worker can run through a fake app-server app thread.
+  - Evidence: `tests/worker-adapter.test.ts` covers `thread/start`, `thread/name/set`, `turn/start`, `thread/read`, and worker envelope normalization.
+
+- [x] Runtime metadata is complete for app-thread workers.
+  - Evidence: worker adapter test asserts adapter/requested/fallback fields, parent/coordinator ids, worker `thread_id`, worker `turn_id`, transcript-read status, sandbox, approval policy, and result-return path.
+
+- [x] Reducer output is adapter-independent for mixed SDK/app-thread workers.
+  - Evidence: `tests/diff-review-reducer.test.ts`.
+
+- [x] Fallback is explicit.
+  - Evidence: unavailable app-thread with fallback configured records `fallback_used: true`; unavailable app-thread without fallback throws `WorkerAdapterUnavailableError`.
+
+- [x] CLI-only use still works.
+  - Evidence: `npm run check`, `bash scripts/smoke-cli.sh`, and normal CLI `diff-review` smoke `run_20260604084030_k0c6xu` passed with 3/3 SDK workers completed.
+
+- [x] No current-thread guessing exists.
+  - Evidence: source audit and tests prove worker execution does not use `thread/list` to select a parent/current thread.
+
+- [x] Live Desktop worker thread smoke is attempted honestly.
+  - Evidence: `node dist/cli.js desktop check` reported app-server running and thread APIs available; live app-thread run `run_20260604084923_hqu0l8` completed with correctness/tests/safety worker `thread_id` and `turn_id` values recorded, 3/3 completed, 0 fallback.
+
+- [x] Verification: `git diff --check`
+  - Evidence: passed locally.
+
+- [x] Verification: `npm run check`
+  - Evidence: passed locally; `tsc` build plus 78 Vitest tests.
+
+- [x] Verification: `bash scripts/smoke-cli.sh`
+  - Evidence: passed locally; validates `app-thread-diff-review` fixture without live workers and preserves existing CLI smoke.
+
+- [x] Verification: targeted v1.7 tests
+  - Evidence: `npx vitest run tests/worker-adapter.test.ts tests/diff-review-reducer.test.ts tests/desktop-bridge.test.ts` passed 20 tests.
+
+- [x] Verification: v1.7 final review
+  - Evidence: Reasonix final-review returned `approve`; only info notes, no blockers.
+
+- [x] Commit v1.7.
+  - Evidence: v1.7 commit in git history; final response reports the exact hash after commit.

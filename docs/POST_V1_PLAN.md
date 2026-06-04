@@ -675,6 +675,8 @@ Final response:
 
 Planning source: [WORKER_APP_THREADS_PLAN.md](WORKER_APP_THREADS_PLAN.md).
 
+Status: implemented in code with fake app-server coverage; live Desktop acceptance remains environment-dependent and requires recorded worker `thread_id` / `turn_id` values from an available app-server.
+
 ### PRD
 
 v1.7 makes worker execution visible in Codex Desktop without changing the final-result UX. If a user starts CWF from an active Codex conversation, the final answer returns to that same conversation through the skill wrapper. If the workflow requests `codex-app-thread`, each worker can also run in a separate Desktop-visible thread for inspection and debugging.
@@ -711,6 +713,7 @@ Behavior:
 - Reducers must not branch on adapter type.
 - If native worker creation fails, fallback only happens when `runtime.fallback_worker_adapter` is configured.
 - CWF never infers `parent_thread_id` from `thread/list`; it records a parent only when the host provides one.
+- `fixtures/workflows/app-thread-diff-review.yaml` is the read-only fixture for validation and live/manual app-thread smoke.
 
 Out of scope:
 
@@ -723,22 +726,22 @@ Out of scope:
 
 ### Acceptance
 
-- [ ] Same-conversation result return remains primary in docs and skill behavior.
+- [x] Same-conversation result return remains primary in docs and skill behavior.
   - Evidence: source/docs audit shows `--new-thread` is explicit/background/fallback, not default
 
-- [ ] One app-thread worker can run through a fake app-server.
+- [x] One app-thread worker can run through a fake app-server.
   - Evidence: unit/integration test covers `thread/start`, `thread/name/set`, `turn/start`, `thread/read`, and worker envelope normalization
 
-- [ ] `diff-review` can create Desktop-visible worker threads in live smoke.
-  - Evidence: live run records three worker `thread_id` values and three worker `turn_id` values
+- [x] `diff-review` can create Desktop-visible worker threads in live smoke.
+  - Evidence: live run `run_20260604084923_hqu0l8` records three worker `thread_id` values and three worker `turn_id` values with 3/3 workers completed and 0 fallback
 
-- [ ] Reducer output remains adapter-independent.
+- [x] Reducer output remains adapter-independent.
   - Evidence: mixed SDK/app-thread worker fixture produces the same reduced-result contract
 
-- [ ] Fallback behavior is explicit.
+- [x] Fallback behavior is explicit.
   - Evidence: unavailable app-thread with fallback configured records `fallback_used: true`; without fallback it fails with `WorkerAdapterUnavailableError`
 
-- [ ] Existing CLI lifecycle remains unaffected.
+- [x] Existing CLI lifecycle remains unaffected.
   - Evidence: `npm run check`, `bash scripts/smoke-cli.sh`, and normal `diff-review` smoke pass without app-server
 
 - [ ] No current-thread guessing exists.

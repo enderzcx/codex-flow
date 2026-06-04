@@ -223,6 +223,8 @@ async function runCodexParallelPhase(
         timeoutMs: Number(process.env.CWF_WORKER_TIMEOUT_MS || options.spec.defaults.timeout_ms),
         codexPath: process.env.CWF_CODEX_PATH,
         runtime: options.spec.runtime,
+        workflowId: options.spec.id,
+        runId: store.runId,
       };
       const result = options.workerRunner
         ? await options.workerRunner(worker, context, runnerOptions)
@@ -234,7 +236,7 @@ async function runCodexParallelPhase(
   );
 
   if (workerResults.every((result) => result.status === "failed")) {
-    const error = "All Codex SDK workers failed; verify Codex SDK connectivity before changing architecture.";
+    const error = "All Codex workers failed; verify worker adapter connectivity and worker logs before changing workflow design.";
     await store.updatePhase(phase.id, "failed", error);
     throw new Error(error);
   }

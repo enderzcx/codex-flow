@@ -5,6 +5,8 @@ archive_at: 2026-07-04
 
 # v1.7 Worker App Threads Plan
 
+Status: implemented in code with fake app-server tests. Live Desktop acceptance is only proven when the local Codex app-server is available and worker JSON records real `thread_id` / `turn_id` values.
+
 ## Capability Sentence
 
 This phase helps Codex users inspect workflow worker execution in Codex Desktop by adding an optional `codex-app-thread` worker adapter, while keeping final results in the initiating conversation and preserving CLI fallback.
@@ -20,6 +22,8 @@ After v1.7:
 - CWF still saves the same worker JSON and reducer output;
 - the final result still comes back to the Codex conversation that started the workflow;
 - if Desktop/app-server is unavailable, CLI workflows still work.
+
+Worker threads are non-ephemeral inspection surfaces in Codex Desktop. They are intentionally visible after the run; cleanup is a user or host concern until Codex exposes a safe lifecycle API for this use case.
 
 This is not a managed-agent platform. It is the smallest useful bridge between CWF workers and Codex's native thread surface.
 
@@ -202,7 +206,7 @@ Live app-server smoke when available:
 
 ```bash
 cwf desktop check
-cwf run diff-review --target <fixture> --background
+cwf run fixtures/workflows/app-thread-diff-review.yaml --target <fixture> --background
 cwf status <run-id>
 cwf result <run-id>
 ```

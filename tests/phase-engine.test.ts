@@ -73,7 +73,7 @@ describe("executeWorkflow", () => {
         store,
         workerRunner: failedRunner,
       }),
-    ).rejects.toThrow("All Codex SDK workers failed");
+    ).rejects.toThrow("All Codex workers failed");
 
     const state = await store.readState();
     const events = await readFile(join(store.runDir, "events.jsonl"), "utf8");
@@ -88,7 +88,7 @@ describe("executeWorkflow", () => {
     expect(state.phases.find((phase) => phase.id === "reduce")?.status).toBe("pending");
     expect(state.workers.every((worker) => worker.status === "failed")).toBe(true);
     expect(events).toContain("run.failed");
-    expect(events).toContain("All Codex SDK workers failed");
+    expect(events).toContain("All Codex workers failed");
     expect(correctness).toContain("mock Codex SDK unreachable");
   });
 

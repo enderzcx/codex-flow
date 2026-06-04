@@ -135,7 +135,7 @@ cwf show <run-id>
 
 `cwf list` / `latest` / `show` 背后会用 `~/.codex-workflows/index.json`。这个 index 只是可重建缓存；如果缺失、过期或损坏，CLI 会从 `~/.codex-workflows/runs/*/state.json` 自动重建。
 
-worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex-sdk-headless`。workflow 可以用 `runtime.preferred_worker_adapter` 指定 `codex-app-thread`、`codex-subagent` 或 `codex-review-detached`，并用 `runtime.fallback_worker_adapter: codex-sdk-headless` 声明 fallback。宿主没有暴露 native thread/subagent 执行能力时，native adapter 会明确失败；只有配置了 fallback 才会退回 SDK。reducer 不关心 adapter，worker provenance 会保留 runtime metadata。下一阶段计划做 `codex-app-thread`：每个 worker 一个 Desktop 左侧可见线程，但如果 workflow 是从当前 Codex 会话发起，最终总结仍然应该回到这个发起会话。
+worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex-sdk-headless`。workflow 可以用 `runtime.preferred_worker_adapter` 指定 `codex-app-thread`、`codex-subagent` 或 `codex-review-detached`，并用 `runtime.fallback_worker_adapter: codex-sdk-headless` 声明 fallback。`codex-app-thread` 会在 app-server 可用时为每个 read-only worker 创建一个 Desktop 左侧可见线程；只有配置了 fallback 才会退回 SDK。reducer 不关心 adapter，worker provenance 会保留 runtime metadata。如果 workflow 是从当前 Codex 会话发起，最终总结仍然应该回到这个发起会话，worker thread 只是执行和证据面。
 
 带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。内置 `doc-refresh` 走这条路径：approval 前只写 run artifact（`write-plan.md`、`dry-run-preview.md`、`rollback.md`），approval 后才用 Codex SDK `workspace-write` 线程做文档写入。
 

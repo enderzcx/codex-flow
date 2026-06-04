@@ -122,8 +122,8 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Worker app threads have a complete post-v1.7 acceptance contract.
   - Evidence: `docs/WORKER_APP_THREADS_PLAN.md`, `docs/POST_V1_PLAN.md`, `docs/SPEC.md`, and `docs/PHASE_CONTRACTS.md` define app-thread worker execution, metadata, fallback, and no-current-thread-guessing requirements.
 
-- [ ] Future `codex-app-thread` workers create real Desktop worker threads when enabled.
-  - Evidence: v1.7 implementation must provide fake app-server tests and live app-server smoke recording worker `thread_id` and `turn_id` values.
+- [ ] `codex-app-thread` workers create Desktop worker threads when enabled and app-server is available.
+  - Evidence: v1.7 implementation provides fake app-server tests; live app-server smoke must record worker `thread_id` and `turn_id` values when the host app-server is available.
 
 - [ ] GitHub PR artifacts are generated locally and posting is explicit.
   - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.

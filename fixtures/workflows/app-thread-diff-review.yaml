@@ -1,0 +1,42 @@
+id: app-thread-diff-review
+version: 1.7.0-fixture
+title: App-Thread Diff Review Fixture
+description: Read-only diff review fixture that opts into Codex app-thread workers with SDK fallback.
+tags:
+  - review
+  - read-only
+  - app-thread
+inputs:
+  target:
+    type: path
+    required: true
+capabilities:
+  writes: false
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+runtime:
+  preferred_worker_adapter: codex-app-thread
+  fallback_worker_adapter: codex-sdk-headless
+phases:
+  - id: collect
+    kind: command
+  - id: review
+    kind: codex-parallel
+    workers:
+      - id: correctness
+        perspective: correctness
+        prompt: Review this diff for correctness regressions. Return JSON only.
+      - id: tests
+        perspective: tests
+        prompt: Review whether tests should be added or updated for this diff. Return JSON only.
+      - id: safety
+        perspective: safety
+        prompt: Review this diff for safety, security, and operational risk. Return JSON only.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - result.md

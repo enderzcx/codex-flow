@@ -159,7 +159,7 @@ Run artifacts are stored under:
 
 Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
 
-Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. Native adapters fail explicitly when the host runtime does not expose that execution path; reducers keep the same worker envelope and preserve runtime metadata in worker provenance. The next planned native slice is `codex-app-thread`: one Desktop-visible thread per worker, while the final result still returns to the initiating conversation when launched from Codex.
+Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. `codex-app-thread` uses Codex app-server thread lifecycle methods to create one Desktop-visible read-only thread per worker when available; reducers keep the same worker envelope and preserve runtime metadata in worker provenance. The final result still returns to the initiating conversation when launched from Codex; worker threads are inspection/evidence surfaces.
 
 ## Examples
 
@@ -235,7 +235,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Run discovery is local and rebuildable.
 - Workflow registry is local filesystem discovery only; there is no remote marketplace.
 - Gates are safety primitives for specs, fixtures, and the narrow `doc-refresh` workflow.
-- Codex App result handoff is explicit and fallback-safe; native worker agent threads depend on host app-server/subagent availability.
+- Codex App result handoff is explicit and fallback-safe; app-thread workers depend on host app-server availability and fall back only when the workflow config says so.
 
 ## Verification
 

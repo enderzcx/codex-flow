@@ -111,7 +111,8 @@ describe("reduceDiffReview", () => {
     const native = {
       ...worker("tests", "Missing branch check", "src/git.ts", "high"),
       runtime: {
-        adapter: "codex-subagent" as const,
+        adapter: "codex-app-thread" as const,
+        requested_adapter: "codex-app-thread" as const,
         thread_id: "thr_123",
         turn_id: "turn_456",
         agent_role: "tests",
@@ -120,6 +121,7 @@ describe("reduceDiffReview", () => {
         fallback_used: false,
         sandbox: "read-only" as const,
         approval_policy: "never" as const,
+        result_return_path: "worker-envelope" as const,
       },
     };
 
@@ -135,7 +137,7 @@ describe("reduceDiffReview", () => {
         }),
         expect.objectContaining({
           worker_id: "tests",
-          runtime: expect.objectContaining({ adapter: "codex-subagent", thread_id: "thr_123", transcript_read: true }),
+          runtime: expect.objectContaining({ adapter: "codex-app-thread", thread_id: "thr_123", turn_id: "turn_456", transcript_read: true }),
         }),
       ]),
     );

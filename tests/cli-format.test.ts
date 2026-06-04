@@ -129,10 +129,10 @@ describe("CLI output formatting", () => {
   it("shows failure summaries in run detail output", () => {
     const state = createState({
       status: "failed",
-      error: "All Codex SDK workers failed; verify Codex SDK connectivity before changing architecture.",
+      error: "All Codex workers failed; verify worker adapter connectivity and worker logs before changing workflow design.",
       phases: [
         { id: "collect", status: "completed" },
-        { id: "review", status: "failed", error: "All Codex SDK workers failed; verify Codex SDK connectivity before changing architecture." },
+        { id: "review", status: "failed", error: "All Codex workers failed; verify worker adapter connectivity and worker logs before changing workflow design." },
         { id: "reduce", status: "pending" },
       ],
       workers: [
@@ -145,7 +145,7 @@ describe("CLI output formatting", () => {
 
     expect(output).toContain("Failure summary: review phase failed");
     expect(output).toContain("Failed workers: correctness, tests");
-    expect(output).toContain("Check Codex SDK connectivity");
+    expect(output).toContain("Check Codex worker adapter connectivity");
     expect(output).toContain("Discovery:");
     expect(output).toContain("cwf latest --target /tmp/repo");
   });
