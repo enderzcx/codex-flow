@@ -3,80 +3,80 @@ half_life: 7d
 archive_at: 2026-06-11
 ---
 
-# Goal Prompt For v1.7
+# Goal Prompt For v0.3
 
-Use this copy-ready prompt when starting Codex goal mode for the next unfinished slice.
+Use this copy-ready prompt when starting Codex goal mode for the v0.3 run discovery and failure-model slice.
 
 ```text
-Build Codex Flow v1.7 Worker App Threads in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v0.3 Run Discovery And Failure Model in /Users/sunny/Work/CODEX/codex-workflows.
 
 Outcome:
-- Workflows can opt into a live codex-app-thread worker adapter.
-- When app-server is available, each selected worker runs in its own Codex Desktop-visible thread and records thread_id / turn_id metadata.
-- When a workflow is launched from an active Codex conversation, the final result returns to that initiating conversation through the skill wrapper. Worker threads are evidence/execution surfaces, not the default final-result destination.
-- Existing CLI workflows still work without Codex Desktop.
+- Users can discover prior runs without manually browsing ~/.codex-workflows/runs.
+- Codex Flow maintains ~/.codex-workflows/index.json, or an equivalent rebuildable discovery cache, with run id, workflow, status, target, timestamps, artifact paths, and failure metadata.
+- `cwf list [--limit <n>] [--status <status>] [--target <path>]` lists recent runs newest first.
+- `cwf show <run-id>` prints a human-readable run detail view with status, current work, phases, workers, artifacts, failure policy, and failure summary when failed.
+- `cwf latest [--target <path>]` opens the newest run overall or for a resolved target path.
+- If discovery data is missing, stale, or corrupt, it is rebuilt from run folders under ~/.codex-workflows/runs/*/state.json.
+- Failed runs record default failure policy metadata and human-readable failure summaries with failed phase, failed workers when known, and a concrete next step.
+- Existing diff-review foreground, background, watch, result, and cancel behavior still works.
 
 Allowed writes:
 - src/
 - tests/
-- workflows/ or fixtures/ only when needed for v1.7 test fixtures
-- docs/WORKER_APP_THREADS_PLAN.md
+- scripts/ only if smoke coverage needs a small repo-local helper
+- README.md
+- README.zh-CN.md
+- docs/PRD.md
 - docs/SPEC.md
-- docs/POST_V1_PLAN.md only if the v1.7 contract changes
-- ACCEPTANCE.md only if acceptance wording must match implementation
-- README.md / README.zh-CN.md only if user-facing commands or behavior change
+- docs/SKILL_PLAN.md
+- ACCEPTANCE.md
+- docs/FULL_PLAN.md
+- docs/PHASE_CONTRACTS.md
+- GOAL_PROMPT.md
 
 Forbidden:
-- Do not rewrite completed v1.1-v1.6 evidence in GOAL_CHECKLIST.md.
-- Do not build managed-agents-style platform scheduling.
-- Do not build a custom queue, daemon, marketplace, or remote lifecycle service.
-- Do not add non-Codex model routing or private model adapters.
-- Do not enable write-capable app-thread workers.
-- Do not infer the current/parent Codex conversation from thread/list.
-- Do not make CLI-only users depend on Codex Desktop.
-- Do not claim live Desktop worker-thread success unless real thread_id and turn_id values are recorded from a live app-server smoke.
+- Do not add private adapters or non-Codex model routing.
+- Do not add new workflow types.
+- Do not add a workflow registry in this slice.
+- Do not add daemon, web UI, remote service, marketplace, or scheduler behavior.
+- Do not make run folders stop being the source of truth.
+- Do not break existing `diff-review` behavior or public Codex-native core commands.
+- Do not depend on private local files, credentials, or non-public adapters.
 
 Constraints:
-- Reuse the existing app-server transport/capability probe and worker adapter contract where possible.
-- Keep reducer behavior adapter-independent.
-- Fallback to codex-sdk-headless only when runtime.fallback_worker_adapter is configured.
-- Preserve worker runtime metadata in worker JSON and reducer provenance.
-- Keep --new-thread explicit for CLI/background/coordinator use only.
 - Keep public core Codex-native.
-
-Implementation plan:
-- Follow /Users/sunny/Work/CODEX/codex-workflows/IMPLEMENTATION_PLAN.md.
-- Follow /Users/sunny/Work/CODEX/codex-workflows/docs/WORKER_APP_THREADS_PLAN.md.
-- Treat /Users/sunny/Work/CODEX/codex-workflows/PLAN.md as the active roadmap.
+- Keep discovery local and rebuildable.
+- Treat `~/.codex-workflows/index.json` as a cache, not authoritative state.
+- Resolve `--target <path>` before filtering so equivalent relative paths match consistently.
+- Keep failed-run output readable from both `cwf status` and `cwf show`.
+- Update README, README.zh-CN, PRD, SPEC, SKILL_PLAN, ACCEPTANCE, FULL_PLAN, and PHASE_CONTRACTS if behavior changes.
 
 Verification:
-- npm run check
-- bash scripts/smoke-cli.sh
-- git diff --check
-- fake app-server app-thread worker test covering thread/start, thread/name/set, turn/start, result read, and worker envelope normalization
-- mixed SDK/app-thread reducer fixture
-- source audit proving thread/list is never used to select an initiating/current conversation
-- normal CLI diff-review smoke without app-server
-- live app-server diff-review smoke with per-worker thread_id and turn_id when app-server is available; if unavailable, report the exact command/error and mark live Desktop acceptance as not proven
+- `npm run check`
+- `npm pack --dry-run`
+- `node dist/cli.js validate workflows/diff-review.yaml`
+- fixture foreground smoke
+- fixture background smoke
+- `cwf watch` smoke
+- `cwf list/show/latest` smoke
+- mocked failure smoke
+- cancel smoke
+- source audit proving no private adapters, non-Codex model routing, new workflow types, workflow registry implementation, daemon, web UI, marketplace, or scheduler was added for this slice
 
 Iteration policy:
-- Work in small vertical slices: adapter skeleton, fake app-server test, reducer compatibility, CLI regression smoke, live smoke.
-- After each slice, run the nearest targeted test before expanding scope.
-- If app-server behavior is unclear, write a fake test first and then verify live behavior.
-- Keep a short human summary of what changed after each major step.
+- Start by auditing current implementation and docs against this contract.
+- Patch the smallest missing vertical slice first: index/discovery, CLI formatting, failure summaries, docs, then smoke coverage.
+- After each code change, run the nearest targeted test before expanding scope.
+- If a verification smoke fails, state the root-cause hypothesis before retrying.
+- Keep existing run folders and generated smoke evidence out of git unless the repo already tracks that fixture.
 
 Stop/Pause conditions:
-- Stop if app-server methods needed for worker execution are absent or unstable.
-- Stop if deterministic result retrieval cannot be implemented without guessing conversation state.
-- Stop if finishing v1.7 would require a custom scheduler, queue, daemon, or write-capable worker threads.
-- Stop after three repeated no-progress attempts against the same app-server failure and report the blocker.
-- Stop when all required verification passes and either live Desktop smoke is proven or the unavailability is documented honestly.
+- Stop if implementing the requested behavior would require a workflow registry, new workflow type, private adapter, non-Codex model router, daemon, web UI, remote service, marketplace, or scheduler.
+- Stop after three repeated no-progress attempts on the same failing verification command and report the blocker.
+- Stop before destructive changes to user run history under ~/.codex-workflows.
+- Stop when all required verification passes, the worktree is clean except intentional edits, and the commit/push state is reported.
 
 Final response:
-- Explain in plain language what v1.7 can now do.
-- State whether same-conversation result return remains primary.
-- List commands run and pass/fail.
-- List live worker thread ids / turn ids if available.
-- State fallback behavior and whether fallback was used.
-- Include commit hash, push status, CI status if pushed, and any remaining gap.
+- Explain in human terms what users can now do.
+- Include commands run, pass/fail, commit hash, and push status.
 ```
