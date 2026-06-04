@@ -66,6 +66,28 @@ describe("worker adapters", () => {
     expect(appServer.threadName).toBe("CWF diff-review correctness abcdef123456");
   });
 
+  it("runs the app-thread worker only after the fixed JSON execution probe succeeds", async () => {
+    const appServer = new JsonProbeThenWorkerAppServer();
+
+    const result = await runWorkerWithAdapter(worker, context, {
+      target: "/repo",
+      timeoutMs: 1000,
+      workflowId: "diff-review",
+      runId: "run_probe_ok",
+      runtime: {
+        preferred_worker_adapter: "codex-app-thread",
+      },
+      appServerFactory: () => appServer,
+      capability: availableCapability(),
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result.summary).toBe("app-thread ok after probe");
+    expect(result.runtime).toEqual(expect.objectContaining({ adapter: "codex-app-thread", fallback_used: false }));
+    expect(appServer.threadStarts).toBe(2);
+    expect(appServer.workerThreadStarted).toBe(true);
+  });
+
   it("falls back from app-thread to the SDK adapter when configured", async () => {
     const registry: WorkerAdapterRegistry = {
       "codex-app-thread": codexAppThreadAdapter,
@@ -263,6 +285,33 @@ describe("worker adapters", () => {
     expect(result.runtime?.fallback_reason).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
     expect(result.runtime?.fallback_reason).toContain("thread_id=thread_probe");
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_probe");
+    expect(probeServer.workerThreadStarted).toBe(false);
+  });
+
+  it("falls back before worker creation when the probe does not return the fixed JSON response", async () => {
+    const probeServer = new UnexpectedProbeResponseAppServer();
+
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 1000,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => probeServer,
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-execution-unavailable");
+    expect(result.runtime?.fallback_reason).toContain("probe returned an unexpected response");
+    expect(result.runtime?.fallback_reason).toContain("thread_id=thread_bad_probe");
+    expect(result.runtime?.fallback_reason).toContain("turn_id=turn_bad_probe");
     expect(probeServer.workerThreadStarted).toBe(false);
   });
 
@@ -678,6 +727,87 @@ class EmptyWorkerAppServer {
     }
     if (method === "thread/read") {
       return { thread: { id: "thread_empty", turns: [] } };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class JsonProbeThenWorkerAppServer {
+  threadStarts = 0;
+  workerThreadStarted = false;
+
+  async request(method: string, params?: unknown): Promise<unknown> {
+    if (method === "thread/start") {
+      this.threadStarts += 1;
+      if (this.threadStarts > 1) {
+        this.workerThreadStarted = true;
+        return { thread: { id: "thread_worker_after_probe" } };
+      }
+      return { thread: { id: "thread_json_probe" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: this.workerThreadStarted ? "turn_worker_after_probe" : "turn_json_probe" } };
+    }
+    if (method === "thread/read") {
+      const threadId = (params as { threadId?: string }).threadId;
+      if (threadId === "thread_json_probe") {
+        return {
+          thread: {
+            id: "thread_json_probe",
+            turns: [{ id: "turn_json_probe", finalResponse: "{\"probe\":\"cwf-app-thread-ok\"}" }],
+          },
+        };
+      }
+      return {
+        thread: {
+          id: "thread_worker_after_probe",
+          turns: [
+            {
+              id: "turn_worker_after_probe",
+              finalResponse: JSON.stringify({
+                worker_id: "correctness",
+                summary: "app-thread ok after probe",
+                findings: [],
+                verification: ["fixed JSON probe succeeded"],
+                artifacts: [],
+                confidence: "high",
+              }),
+            },
+          ],
+        },
+      };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class UnexpectedProbeResponseAppServer {
+  threadStarts = 0;
+  workerThreadStarted = false;
+
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      this.threadStarts += 1;
+      if (this.threadStarts > 1) {
+        this.workerThreadStarted = true;
+        return { thread: { id: "thread_worker_should_not_start" } };
+      }
+      return { thread: { id: "thread_bad_probe" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: "turn_bad_probe" } };
+    }
+    if (method === "thread/read") {
+      return {
+        thread: {
+          id: "thread_bad_probe",
+          turns: [{ id: "turn_bad_probe", finalResponse: "{\"probe\":\"wrong\"}" }],
+        },
+      };
     }
     return {};
   }

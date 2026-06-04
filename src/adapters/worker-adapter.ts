@@ -349,6 +349,7 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
     if (!raw) {
       throw new WorkerAdapterUnavailableError("codex-app-thread", formatAppThreadExecutionUnavailable("probe did not return an assistant response", threadId, turnId));
     }
+    assertAppThreadProbeResponse(raw, threadId, turnId);
   } catch (error) {
     if (error instanceof WorkerAdapterUnavailableError) {
       throw error;
@@ -478,6 +479,21 @@ function formatAppThreadExecutionUnavailable(reason: string, threadId: string | 
 
 function formatAppThreadProbeSetupFailure(reason: string, threadId: string | undefined): string {
   return `app-thread-probe-setup-failed: thread/model execution preflight could not complete setup; detail: ${reason}${threadId ? ` (thread_id=${threadId})` : ""}`;
+}
+
+function assertAppThreadProbeResponse(raw: string, threadId: string | undefined, turnId: string | undefined): void {
+  try {
+    const parsed = JSON.parse(raw.trim()) as { probe?: unknown };
+    if (parsed.probe === "cwf-app-thread-ok") {
+      return;
+    }
+  } catch {
+    // Fall through to the explicit unavailable error below.
+  }
+  throw new WorkerAdapterUnavailableError(
+    "codex-app-thread",
+    formatAppThreadExecutionUnavailable("probe returned an unexpected response instead of {\"probe\":\"cwf-app-thread-ok\"}", threadId, turnId),
+  );
 }
 
 function buildInitializeParams(): Record<string, unknown> {
