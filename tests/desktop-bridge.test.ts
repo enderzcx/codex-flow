@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,6 +9,7 @@ import {
   buildInitializeRequest,
   buildThreadListRequest,
   buildThreadNameRequest,
+  buildThreadReadRequest,
   buildThreadStartRequest,
   buildTurnStartRequest,
   handleDesktopResult,
@@ -40,7 +43,7 @@ describe("desktop bridge", () => {
     expect(prompt).toContain("Do not claim any file changes were made by this handoff.");
   });
 
-  it("constructs app-server JSON-RPC messages without guessing the current thread", () => {
+  it("constructs app-server requests without guessing the current thread", () => {
     const state = createState();
 
     expect(buildInitializeRequest()).toMatchObject({ method: "initialize" });
@@ -59,6 +62,10 @@ describe("desktop bridge", () => {
     expect(buildThreadListRequest("thread_1", state)).toMatchObject({
       method: "thread/list",
       params: { cwd: state.target, searchTerm: state.id },
+    });
+    expect(buildThreadReadRequest("thread_1")).toMatchObject({
+      method: "thread/read",
+      params: { threadId: "thread_1", includeTurns: false },
     });
   });
 
@@ -82,11 +89,30 @@ describe("desktop bridge", () => {
       runDir: store.runDir,
       indexPath: store.indexPath,
       capability: unavailableCapability(),
+      appServerFactory: () => new FailingAppServer("socket missing"),
     });
-    const handoff = JSON.parse(await readFile(result.desktopHandoffPath ?? "", "utf8")) as { status: string; fallback_reason: string };
+    const handoff = JSON.parse(await readFile(result.desktopHandoffPath ?? "", "utf8")) as { status: string; fallback_reason: string; error: string };
 
     expect(result.record.status).toBe("fallback");
-    expect(handoff.fallback_reason).toContain("daemon is not running");
+    expect(handoff.fallback_reason).toContain("proxy is unavailable");
+    expect(handoff.error).toContain("socket missing");
+  });
+
+  it("tries app-server proxy even when daemon status is not running", async () => {
+    const store = await createCompletedRun();
+    const appServer = new MockAppServer({ threadId: "thread_new", turnId: "turn_new", listedThreadId: "thread_new" });
+
+    const result = await handleDesktopResult(store.runId, {
+      mode: "new-thread",
+      runDir: store.runDir,
+      indexPath: store.indexPath,
+      capability: unavailableCapability(),
+      appServerFactory: () => appServer,
+    });
+
+    expect(result.record.status).toBe("posted");
+    expect(result.record.thread_id).toBe("thread_new");
+    expect(appServer.methods).toEqual(["initialize", "thread/start", "thread/name/set", "turn/start", "thread/read"]);
   });
 
   it("posts to an explicit thread without calling thread/start", async () => {
@@ -105,7 +131,7 @@ describe("desktop bridge", () => {
     expect(result.record.status).toBe("posted");
     expect(result.record.thread_id).toBe("thread_known");
     expect(result.record.turn_id).toBe("turn_explicit");
-    expect(appServer.methods).toEqual(["initialize", "turn/start", "thread/list"]);
+    expect(appServer.methods).toEqual(["initialize", "turn/start"]);
   });
 
   it("creates and verifies a new coordinator thread when app-server succeeds", async () => {
@@ -123,14 +149,64 @@ describe("desktop bridge", () => {
     expect(result.record.status).toBe("posted");
     expect(result.record.thread_id).toBe("thread_new");
     expect(result.record.turn_id).toBe("turn_new");
-    expect(appServer.methods).toEqual(["initialize", "thread/start", "thread/name/set", "turn/start", "thread/list"]);
+    expect(appServer.methods).toEqual(["initialize", "thread/start", "thread/name/set", "turn/start", "thread/read"]);
+  });
+
+  it("posts through the Unix-socket WebSocket app-server transport", async () => {
+    const store = await createCompletedRun();
+    const root = await mkdtemp(join(tmpdir(), "cwf-ws-"));
+    cleanup.push(root);
+    const socketPath = join(root, "app-server.sock");
+    const fakeAppServer = await startFakeWebSocketAppServer(socketPath);
+    const previousSocketPath = process.env.CWF_APP_SERVER_SOCKET;
+    process.env.CWF_APP_SERVER_SOCKET = socketPath;
+
+    try {
+      const result = await handleDesktopResult(store.runId, {
+        mode: "new-thread",
+        runDir: store.runDir,
+        indexPath: store.indexPath,
+        capability: availableCapability(),
+      });
+
+      expect(result.record.status).toBe("posted");
+      expect(result.record.thread_id).toBe("thread_ws");
+      expect(result.record.turn_id).toBe("turn_ws");
+      expect(result.record.warning).toBeUndefined();
+      expect(fakeAppServer.methods).toEqual(["initialize", "thread/start", "thread/name/set", "turn/start", "thread/read"]);
+    } finally {
+      if (previousSocketPath === undefined) {
+        delete process.env.CWF_APP_SERVER_SOCKET;
+      } else {
+        process.env.CWF_APP_SERVER_SOCKET = previousSocketPath;
+      }
+      await fakeAppServer.close();
+    }
+  });
+
+  it("keeps a posted result when thread/list misses the freshly created thread", async () => {
+    const store = await createCompletedRun();
+    const appServer = new MockAppServer({ threadId: "thread_new", turnId: "turn_new", listedThreadId: "thread_other", readThreadId: "thread_other" });
+
+    const result = await handleDesktopResult(store.runId, {
+      mode: "new-thread",
+      runDir: store.runDir,
+      indexPath: store.indexPath,
+      appServer,
+      capability: availableCapability(),
+    });
+
+    expect(result.record.status).toBe("posted");
+    expect(result.record.thread_id).toBe("thread_new");
+    expect(result.record.turn_id).toBe("turn_new");
+    expect(result.record.warning).toContain("thread/read did not confirm");
   });
 });
 
 class MockAppServer implements AppServerTransport {
   readonly methods: string[] = [];
 
-  constructor(private readonly ids: { threadId?: string; turnId: string; listedThreadId: string }) {}
+  constructor(private readonly ids: { threadId?: string; turnId: string; listedThreadId: string; readThreadId?: string }) {}
 
   async request(method: string): Promise<unknown> {
     this.methods.push(method);
@@ -143,8 +219,170 @@ class MockAppServer implements AppServerTransport {
     if (method === "thread/list") {
       return { data: [{ id: this.ids.listedThreadId }] };
     }
+    if (method === "thread/read") {
+      return { thread: { id: this.ids.readThreadId ?? this.ids.threadId } };
+    }
     return {};
   }
+}
+
+class FailingAppServer implements AppServerTransport {
+  constructor(private readonly message: string) {}
+
+  async request(): Promise<unknown> {
+    throw new Error(this.message);
+  }
+}
+
+async function startFakeWebSocketAppServer(socketPath: string): Promise<{ methods: string[]; close(): Promise<void> }> {
+  const methods: string[] = [];
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    sockets.add(socket);
+    socket.on("close", () => sockets.delete(socket));
+    handleFakeWebSocket(socket, methods);
+  });
+  await listen(server, socketPath);
+  return {
+    methods,
+    async close() {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await closeServer(server);
+    },
+  };
+}
+
+function handleFakeWebSocket(socket: Socket, methods: string[]): void {
+  let buffer = Buffer.alloc(0);
+  let handshaken = false;
+
+  socket.on("data", (chunk) => {
+    buffer = Buffer.concat([buffer, chunk]);
+    if (!handshaken) {
+      const headerEnd = buffer.indexOf("\r\n\r\n");
+      if (headerEnd < 0) {
+        return;
+      }
+      const header = buffer.subarray(0, headerEnd).toString("utf8");
+      buffer = buffer.subarray(headerEnd + 4);
+      const key = /^Sec-WebSocket-Key:\s*(.+)\s*$/im.exec(header)?.[1]?.trim();
+      const accept = createHash("sha1")
+        .update(`${key ?? ""}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+        .digest("base64");
+      socket.write([
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        `Sec-WebSocket-Accept: ${accept}`,
+        "",
+        "",
+      ].join("\r\n"));
+      handshaken = true;
+    }
+    buffer = readFakeFrames(socket, buffer, methods);
+  });
+}
+
+function readFakeFrames(socket: Socket, input: Buffer, methods: string[]): Buffer {
+  let buffer = input;
+  while (buffer.length >= 2) {
+    const opcode = buffer[0] & 0x0f;
+    const masked = (buffer[1] & 0x80) !== 0;
+    let length = buffer[1] & 0x7f;
+    let offset = 2;
+    if (length === 126) {
+      if (buffer.length < offset + 2) {
+        return buffer;
+      }
+      length = buffer.readUInt16BE(offset);
+      offset += 2;
+    } else if (length === 127) {
+      if (buffer.length < offset + 8) {
+        return buffer;
+      }
+      length = Number(buffer.readBigUInt64BE(offset));
+      offset += 8;
+    }
+    const mask = masked ? buffer.subarray(offset, offset + 4) : undefined;
+    offset += masked ? 4 : 0;
+    if (buffer.length < offset + length) {
+      return buffer;
+    }
+    const payload = Buffer.from(buffer.subarray(offset, offset + length));
+    buffer = buffer.subarray(offset + length);
+    if (mask) {
+      for (let index = 0; index < payload.length; index += 1) {
+        payload[index] ^= mask[index % 4];
+      }
+    }
+    if (opcode === 0x1) {
+      handleFakeMessage(socket, payload.toString("utf8"), methods);
+    } else if (opcode === 0x8) {
+      writeFakeFrame(socket, 0x8, Buffer.alloc(0));
+      socket.end();
+      return buffer;
+    }
+  }
+  return buffer;
+}
+
+function handleFakeMessage(socket: Socket, raw: string, methods: string[]): void {
+  const message = JSON.parse(raw) as { id?: number; method?: string };
+  if (typeof message.id !== "number" || !message.method) {
+    return;
+  }
+  methods.push(message.method);
+  const result = fakeResult(message.method);
+  writeFakeFrame(socket, 0x1, Buffer.from(JSON.stringify({ id: message.id, result }), "utf8"));
+}
+
+function fakeResult(method: string): unknown {
+  if (method === "thread/start") {
+    return { thread: { id: "thread_ws" } };
+  }
+  if (method === "turn/start") {
+    return { turn: { id: "turn_ws" } };
+  }
+  if (method === "thread/read") {
+    return { thread: { id: "thread_ws" } };
+  }
+  return {};
+}
+
+function writeFakeFrame(socket: Socket, opcode: number, payload: Buffer): void {
+  let header: Buffer;
+  if (payload.length < 126) {
+    header = Buffer.from([0x80 | opcode, payload.length]);
+  } else if (payload.length <= 0xffff) {
+    header = Buffer.alloc(4);
+    header[0] = 0x80 | opcode;
+    header[1] = 126;
+    header.writeUInt16BE(payload.length, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x80 | opcode;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(payload.length), 2);
+  }
+  socket.write(Buffer.concat([header, payload]));
+}
+
+async function listen(server: Server, socketPath: string): Promise<void> {
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once("error", rejectListen);
+    server.listen(socketPath, () => {
+      server.off("error", rejectListen);
+      resolveListen();
+    });
+  });
+}
+
+async function closeServer(server: Server): Promise<void> {
+  await new Promise<void>((resolveClose) => {
+    server.close(() => resolveClose());
+  });
 }
 
 async function createCompletedRun(): Promise<RunStore> {

@@ -224,7 +224,7 @@ Out of scope:
   - Evidence: `cwf desktop result <run-id> --print` prints a concise result prompt and `cwf desktop result <run-id>` creates `artifacts/handoff-prompt.md`
 
 - [ ] A visible Codex coordinator thread can be created in Desktop mode.
-  - Evidence: `cwf desktop result <run-id> --new-thread` creates a named thread, records `thread_id`, and `thread/list` can read it back
+  - Evidence: `cwf desktop result <run-id> --new-thread` creates a named thread, records `thread_id`, and confirms it through `thread/read` or `thread/list` fallback
 
 - [ ] Result can return to a known Codex conversation.
   - Evidence: `cwf desktop result <run-id> --thread <thread-id>` records a posted/steered turn id, or the Codex skill wrapper returns the same result in the active conversation
@@ -254,7 +254,7 @@ Required:
 - Add cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print].
 - Generate artifacts/handoff-prompt.md from a completed run.
 - Write artifacts/desktop-handoff.json when app-server integration is attempted.
-- Implement app-server initialize, thread/start, thread/name/set, turn/start, thread/list verification, and fallback handling.
+- Implement app-server initialize, thread/start, thread/name/set, turn/start, thread/read confirmation, thread/list fallback, and fallback handling.
 - Add optional --desktop-result to cwf run for completed runs.
 - Keep result output structured enough for a Codex skill wrapper to return it in the current conversation.
 - Add native runtime metadata fields that future worker agent threads can reuse.

@@ -142,6 +142,7 @@ export type DesktopHandoffRecord = {
   result_return_path: "stdout" | "handoff-prompt" | "app-server-thread";
   fallback_reason?: string;
   error?: string;
+  warning?: string;
 };
 
 export type DesktopCapabilitySummary = {

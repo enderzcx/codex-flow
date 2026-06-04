@@ -117,7 +117,14 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. The bundled `doc-refresh` workflow uses this path: it writes `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approval, then runs its write phase through a Codex SDK `workspace-write` thread only after approval.
 
-`cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. With an available Codex app-server daemon, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow never guesses the current thread from `thread/list`.
+`cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. `--new-thread` and `--thread <thread-id>` require a Codex CLI with app-server support, a running app-server daemon, and remote control enabled:
+
+```bash
+codex app-server daemon start
+codex app-server daemon enable-remote-control
+```
+
+If multiple Codex CLIs are installed, set `CWF_CODEX_PATH=/path/to/codex` for the app-server-capable CLI. With app-server available, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow confirms new threads with `thread/read`, falls back to `thread/list`, and never guesses the current thread from `thread/list`.
 
 `cwf github-pr <run-id>` turns a completed local run into PR-ready artifacts. Without `--post`, it only writes `artifacts/github-pr-comment.md` and `artifacts/github-pr-review.json`. Posting to GitHub requires explicit `--post --repo <owner/repo> --pr <number>` and uses the local `gh` CLI.
 

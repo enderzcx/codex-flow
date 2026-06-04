@@ -584,7 +584,7 @@ Contract:
 - write-capable workflows reuse Codex sandbox, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses; CWF gates provide the explicit human approval boundary in the current SDK path
 - experimental protocol behavior is documented and tested separately from core run-store behavior
 
-`cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and `thread/list` verification. `--thread <thread-id>` attempts `initialize`, `turn/start`, and `thread/list` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow.
+`cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and confirmation through `thread/read` with `thread/list` as a fallback. `--thread <thread-id>` attempts `initialize` and `turn/start` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow.
 
 ## Safety Invariants
 

@@ -139,7 +139,14 @@ worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex
 
 带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。内置 `doc-refresh` 走这条路径：approval 前只写 run artifact（`write-plan.md`、`dry-run-preview.md`、`rollback.md`），approval 后才用 Codex SDK `workspace-write` 线程做文档写入。
 
-`cwf desktop result` 用来把已完成的文件系统 run 带回 Codex。`--print` 会打印一段适合贴回当前对话的简洁 handoff prompt；不依赖 app-server 时也会写 `artifacts/handoff-prompt.md`。如果本机 Codex app-server daemon 可用，`--new-thread` 会尝试创建命名 coordinator thread，`--thread <thread-id>` 会发到明确指定的 thread。Codex Flow 不会从 `thread/list` 猜“当前线程”。
+`cwf desktop result` 用来把已完成的文件系统 run 带回 Codex。`--print` 会打印一段适合贴回当前对话的简洁 handoff prompt；不依赖 app-server 时也会写 `artifacts/handoff-prompt.md`。`--new-thread` 和 `--thread <thread-id>` 需要支持 app-server 的 Codex CLI、运行中的 app-server daemon，以及已开启 remote control：
+
+```bash
+codex app-server daemon start
+codex app-server daemon enable-remote-control
+```
+
+如果本机有多个 Codex CLI，用 `CWF_CODEX_PATH=/path/to/codex` 指向支持 app-server 的那个。app-server 可用时，`--new-thread` 会创建命名 coordinator thread，`--thread <thread-id>` 会发到明确指定的 thread。Codex Flow 会优先用 `thread/read` 确认新线程，失败时再用 `thread/list` 兜底，但不会从 `thread/list` 猜“当前线程”。
 
 `cwf github-pr <run-id>` 会把本地 run 转成适合 PR 的 artifact。默认只写 `artifacts/github-pr-comment.md` 和 `artifacts/github-pr-review.json`，不会发到 GitHub。只有显式加 `--post --repo <owner/repo> --pr <number>` 时才会调用本机 `gh` CLI。
 

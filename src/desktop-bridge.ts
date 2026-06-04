@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
+import { connect, type Socket } from "node:net";
 import { join } from "node:path";
 import type { ArtifactManifest, DesktopCapabilitySummary, DesktopHandoffRecord, RunState } from "./types.js";
 import { RunStore } from "./run-store.js";
@@ -13,6 +15,9 @@ export const DESKTOP_REQUIRED_METHODS = [
   "turn/start",
 ] as const;
 
+const APP_SERVER_HANDSHAKE_TIMEOUT_MS = 5000;
+const APP_SERVER_MAX_FRAME_BYTES = 5 * 1024 * 1024;
+
 export type DesktopResultMode = "handoff" | "print" | "new-thread" | "thread";
 
 export type DesktopResultOptions = {
@@ -20,6 +25,7 @@ export type DesktopResultOptions = {
   threadId?: string;
   codexPath?: string;
   appServer?: AppServerTransport;
+  appServerFactory?: (codexPath: string) => AppServerTransport;
   capability?: DesktopCapabilitySummary;
   runDir?: string;
   indexPath?: string;
@@ -32,8 +38,7 @@ export type DesktopResult = {
   record: DesktopHandoffRecord;
 };
 
-export type JsonRpcRequest = {
-  jsonrpc: "2.0";
+export type AppServerRequest = {
   id: number;
   method: string;
   params?: unknown;
@@ -158,10 +163,14 @@ export async function handleDesktopResult(runId: string, options: DesktopResultO
   }
 
   const nextState = await store.readState();
+  const manifestPath = join(store.runDir, "artifacts", "manifest.json");
   nextState.native_runtime = {
     ...(nextState.native_runtime ?? {}),
     desktop_handoff: record,
   };
+  if (!nextState.artifact_manifest_path && await fileExists(manifestPath)) {
+    nextState.artifact_manifest_path = manifestPath;
+  }
   await store.writeState(nextState);
 
   return { prompt, handoffPromptPath, desktopHandoffPath: record.desktop_handoff_path, record };
@@ -203,9 +212,8 @@ export function buildDesktopResultPrompt(state: RunState, resultMarkdown: string
   return `${lines.join("\n")}\n`;
 }
 
-export function buildInitializeRequest(id = 1): JsonRpcRequest {
+export function buildInitializeRequest(id = 1): AppServerRequest {
   return {
-    jsonrpc: "2.0",
     id,
     method: "initialize",
     params: {
@@ -219,9 +227,8 @@ export function buildInitializeRequest(id = 1): JsonRpcRequest {
   };
 }
 
-export function buildThreadStartRequest(state: RunState, id = 2): JsonRpcRequest {
+export function buildThreadStartRequest(state: RunState, id = 2): AppServerRequest {
   return {
-    jsonrpc: "2.0",
     id,
     method: "thread/start",
     params: {
@@ -235,9 +242,8 @@ export function buildThreadStartRequest(state: RunState, id = 2): JsonRpcRequest
   };
 }
 
-export function buildThreadNameRequest(threadId: string, state: RunState, id = 3): JsonRpcRequest {
+export function buildThreadNameRequest(threadId: string, state: RunState, id = 3): AppServerRequest {
   return {
-    jsonrpc: "2.0",
     id,
     method: "thread/name/set",
     params: {
@@ -247,9 +253,8 @@ export function buildThreadNameRequest(threadId: string, state: RunState, id = 3
   };
 }
 
-export function buildTurnStartRequest(threadId: string, prompt: string, state: RunState, id = 4): JsonRpcRequest {
+export function buildTurnStartRequest(threadId: string, prompt: string, state: RunState, id = 4): AppServerRequest {
   return {
-    jsonrpc: "2.0",
     id,
     method: "turn/start",
     params: {
@@ -262,9 +267,8 @@ export function buildTurnStartRequest(threadId: string, prompt: string, state: R
   };
 }
 
-export function buildThreadListRequest(threadId: string, state: RunState, id = 5): JsonRpcRequest {
+export function buildThreadListRequest(threadId: string, state: RunState, id = 5): AppServerRequest {
   return {
-    jsonrpc: "2.0",
     id,
     method: "thread/list",
     params: {
@@ -277,13 +281,25 @@ export function buildThreadListRequest(threadId: string, state: RunState, id = 5
   };
 }
 
+export function buildThreadReadRequest(threadId: string, id = 6): AppServerRequest {
+  return {
+    id,
+    method: "thread/read",
+    params: {
+      threadId,
+      includeTurns: false,
+    },
+  };
+}
+
 async function attemptAppServerResult(
   state: RunState,
   prompt: string,
   handoffPromptPath: string,
   options: DesktopResultOptions,
 ): Promise<DesktopHandoffRecord> {
-  const appServer = options.appServer ?? new ProxyAppServerTransport(options.codexPath ?? process.env.CWF_CODEX_PATH ?? "codex");
+  const codexPath = options.codexPath ?? process.env.CWF_CODEX_PATH ?? "codex";
+  const appServer = options.appServer ?? (options.appServerFactory ?? (() => new UnixSocketWebSocketAppServerTransport()))(codexPath);
   const capability = options.capability ?? await checkDesktopCapability(options.codexPath);
   const base: DesktopHandoffRecord = {
     adapter: "codex-app-server",
@@ -297,9 +313,6 @@ async function attemptAppServerResult(
 
   if (!capability.thread_apis_available) {
     return { ...base, fallback_reason: "Codex app-server schema does not expose all required thread APIs." };
-  }
-  if (!capability.app_server_running && !options.appServer) {
-    return { ...base, fallback_reason: "Codex app-server daemon is not running." };
   }
 
   try {
@@ -322,10 +335,9 @@ async function attemptAppServerResult(
 
     const turn = await appServer.request("turn/start", buildTurnStartRequest(threadId, prompt, state).params) as { turn?: { id?: string } };
     const turnId = turn.turn?.id;
-    const listed = await appServer.request("thread/list", buildThreadListRequest(threadId, state).params) as { data?: Array<{ id?: string }> };
-    const confirmed = Array.isArray(listed.data) && listed.data.some((thread) => thread.id === threadId);
-    if (options.mode === "new-thread" && !confirmed) {
-      throw new Error(`thread/list did not confirm created thread ${threadId}`);
+    let warning: string | undefined;
+    if (options.mode === "new-thread") {
+      warning = await confirmCreatedThread(appServer, threadId, state);
     }
     return {
       ...base,
@@ -334,11 +346,14 @@ async function attemptAppServerResult(
       turn_id: turnId,
       result_return_path: "app-server-thread",
       fallback_reason: undefined,
+      warning,
     };
   } catch (error) {
     return {
       ...base,
-      fallback_reason: "App-server result return failed; use handoff-prompt.md manually.",
+      fallback_reason: capability.app_server_running
+        ? "App-server result return failed; use handoff-prompt.md manually."
+        : "App-server proxy is unavailable; use handoff-prompt.md manually or start the Codex app-server daemon.",
       error: errorMessage(error),
     };
   } finally {
@@ -346,39 +361,46 @@ async function attemptAppServerResult(
   }
 }
 
-class ProxyAppServerTransport implements AppServerTransport {
+class UnixSocketWebSocketAppServerTransport implements AppServerTransport {
   private nextId = 1;
-  private readonly child;
-  private buffer = "";
+  private readonly socket: Socket;
+  private readonly ready: Promise<void>;
+  private readonly handshakeTimer: ReturnType<typeof setTimeout>;
+  private readyResolve!: () => void;
+  private readyReject!: (error: Error) => void;
+  private buffer = Buffer.alloc(0);
+  private handshaken = false;
+  private readonly key = randomBytes(16).toString("base64");
   private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
 
-  constructor(codexPath: string) {
-    this.child = spawn(codexPath, ["app-server", "proxy"], { stdio: ["pipe", "pipe", "pipe"] });
-    this.child.stdout.setEncoding("utf8");
-    this.child.stdout.on("data", (chunk: string) => this.onData(chunk));
-    this.child.stderr.setEncoding("utf8");
-    this.child.stderr.on("data", (chunk: string) => {
-      for (const waiter of this.pending.values()) {
-        waiter.reject(new Error(chunk.trim()));
-      }
-      this.pending.clear();
+  constructor(socketPath = process.env.CWF_APP_SERVER_SOCKET || defaultAppServerSocketPath()) {
+    this.ready = new Promise<void>((resolve, reject) => {
+      this.readyResolve = resolve;
+      this.readyReject = reject;
     });
-    this.child.on("error", (error) => {
-      for (const waiter of this.pending.values()) {
-        waiter.reject(error);
-      }
-      this.pending.clear();
+    this.handshakeTimer = setTimeout(() => {
+      this.fail(new Error(`Timed out waiting for app-server websocket upgrade: ${socketPath}`));
+    }, APP_SERVER_HANDSHAKE_TIMEOUT_MS);
+    this.socket = connect(socketPath);
+    this.socket.on("connect", () => this.sendHandshake());
+    this.socket.on("data", (chunk) => this.onData(chunk));
+    this.socket.on("error", (error) => {
+      this.fail(error);
+    });
+    this.socket.on("close", () => {
+      const error = new Error(`app-server websocket closed before completing pending requests: ${socketPath}`);
+      this.fail(error);
     });
   }
 
   async request(method: string, params?: unknown): Promise<unknown> {
     const id = this.nextId++;
-    const message = { jsonrpc: "2.0", id, method, params };
+    const message = { id, method, params };
     const response = new Promise<unknown>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pending.delete(id);
         reject(new Error(`Timed out waiting for app-server response to ${method}`));
-      }, 15000);
+      }, 30000);
       this.pending.set(id, {
         resolve: (value) => {
           clearTimeout(timeout);
@@ -390,36 +412,140 @@ class ProxyAppServerTransport implements AppServerTransport {
         },
       });
     });
-    this.child.stdin.write(`${JSON.stringify(message)}\n`);
+    await this.ready;
+    this.writeTextFrame(JSON.stringify(message));
     return response;
   }
 
   async notify(method: string, params?: unknown): Promise<void> {
-    this.child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method, params })}\n`);
+    await this.ready;
+    this.writeTextFrame(JSON.stringify({ method, params }));
   }
 
   async close(): Promise<void> {
-    this.child.stdin.end();
-    this.child.kill();
+    clearTimeout(this.handshakeTimer);
+    if (this.socket.destroyed) {
+      return;
+    }
+    if (this.handshaken) {
+      this.writeFrame(0x8, Buffer.alloc(0));
+    }
+    this.socket.end();
   }
 
-  private onData(chunk: string): void {
-    this.buffer += chunk;
-    let newline = this.buffer.indexOf("\n");
-    while (newline >= 0) {
-      const line = this.buffer.slice(0, newline).trim();
-      this.buffer = this.buffer.slice(newline + 1);
-      if (line) {
-        this.handleLine(line);
+  private sendHandshake(): void {
+    const request = [
+      "GET / HTTP/1.1",
+      "Host: localhost",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      `Sec-WebSocket-Key: ${this.key}`,
+      "Sec-WebSocket-Version: 13",
+      "",
+      "",
+    ].join("\r\n");
+    this.socket.write(request);
+  }
+
+  private onData(chunk: Buffer): void {
+    this.buffer = Buffer.concat([this.buffer, chunk]);
+    if (!this.handshaken) {
+      if (!this.tryReadHandshake()) {
+        return;
       }
-      newline = this.buffer.indexOf("\n");
+    }
+    this.readFrames();
+  }
+
+  private tryReadHandshake(): boolean {
+    const headerEnd = this.buffer.indexOf("\r\n\r\n");
+    if (headerEnd < 0) {
+      return false;
+    }
+    const header = this.buffer.subarray(0, headerEnd).toString("utf8");
+    this.buffer = this.buffer.subarray(headerEnd + 4);
+    if (!/^HTTP\/1\.1 101\b/i.test(header)) {
+      const error = new Error(`app-server websocket upgrade failed: ${header.split(/\r?\n/)[0] || "empty response"}`);
+      this.fail(error);
+      return false;
+    }
+    const expectedAccept = createHash("sha1")
+      .update(`${this.key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+      .digest("base64");
+    if (!new RegExp(`^Sec-WebSocket-Accept:\\s*${escapeRegExp(expectedAccept)}\\s*$`, "im").test(header)) {
+      const error = new Error("app-server websocket upgrade returned an invalid Sec-WebSocket-Accept header");
+      this.fail(error);
+      return false;
+    }
+    this.handshaken = true;
+    clearTimeout(this.handshakeTimer);
+    this.readyResolve();
+    return true;
+  }
+
+  private readFrames(): void {
+    while (this.buffer.length >= 2) {
+      const first = this.buffer[0];
+      const second = this.buffer[1];
+      const opcode = first & 0x0f;
+      const masked = (second & 0x80) !== 0;
+      let length = second & 0x7f;
+      let offset = 2;
+      if (length === 126) {
+        if (this.buffer.length < offset + 2) {
+          return;
+        }
+        length = this.buffer.readUInt16BE(offset);
+        offset += 2;
+      } else if (length === 127) {
+        if (this.buffer.length < offset + 8) {
+          return;
+        }
+        const longLength = this.buffer.readBigUInt64BE(offset);
+        if (longLength > BigInt(Number.MAX_SAFE_INTEGER)) {
+          this.fail(new Error("app-server websocket frame is too large"));
+          return;
+        }
+        length = Number(longLength);
+        offset += 8;
+      }
+      if (length > APP_SERVER_MAX_FRAME_BYTES) {
+        this.fail(new Error(`app-server websocket frame exceeds ${APP_SERVER_MAX_FRAME_BYTES} bytes`));
+        return;
+      }
+      let mask: Buffer | undefined;
+      if (masked) {
+        if (this.buffer.length < offset + 4) {
+          return;
+        }
+        mask = this.buffer.subarray(offset, offset + 4);
+        offset += 4;
+      }
+      if (this.buffer.length < offset + length) {
+        return;
+      }
+      const payload = Buffer.from(this.buffer.subarray(offset, offset + length));
+      this.buffer = this.buffer.subarray(offset + length);
+      if (mask) {
+        for (let index = 0; index < payload.length; index += 1) {
+          payload[index] ^= mask[index % 4];
+        }
+      }
+      if (opcode === 0x1) {
+        this.handleMessage(payload.toString("utf8"));
+      } else if (opcode === 0x8) {
+        this.socket.end();
+        return;
+      } else if (opcode === 0x9) {
+        this.writeFrame(0xA, payload);
+      }
     }
   }
 
-  private handleLine(line: string): void {
+  private handleMessage(raw: string): void {
     let message: { id?: number; result?: unknown; error?: { message?: string } };
     try {
-      message = JSON.parse(line) as { id?: number; result?: unknown; error?: { message?: string } };
+      message = JSON.parse(raw) as { id?: number; result?: unknown; error?: { message?: string } };
     } catch {
       return;
     }
@@ -437,6 +563,49 @@ class ProxyAppServerTransport implements AppServerTransport {
       waiter.resolve(message.result);
     }
   }
+
+  private writeTextFrame(value: string): void {
+    this.writeFrame(0x1, Buffer.from(value, "utf8"));
+  }
+
+  private writeFrame(opcode: number, payload: Buffer): void {
+    const mask = randomBytes(4);
+    let header: Buffer;
+    if (payload.length < 126) {
+      header = Buffer.from([0x80 | opcode, 0x80 | payload.length]);
+    } else if (payload.length <= 0xffff) {
+      header = Buffer.alloc(4);
+      header[0] = 0x80 | opcode;
+      header[1] = 0x80 | 126;
+      header.writeUInt16BE(payload.length, 2);
+    } else {
+      header = Buffer.alloc(10);
+      header[0] = 0x80 | opcode;
+      header[1] = 0x80 | 127;
+      header.writeBigUInt64BE(BigInt(payload.length), 2);
+    }
+    const maskedPayload = Buffer.from(payload);
+    for (let index = 0; index < maskedPayload.length; index += 1) {
+      maskedPayload[index] ^= mask[index % 4];
+    }
+    this.socket.write(Buffer.concat([header, mask, maskedPayload]));
+  }
+
+  private rejectPending(error: Error): void {
+    for (const waiter of this.pending.values()) {
+      waiter.reject(error);
+    }
+    this.pending.clear();
+  }
+
+  private fail(error: Error): void {
+    clearTimeout(this.handshakeTimer);
+    this.readyReject(error);
+    this.rejectPending(error);
+    if (!this.socket.destroyed) {
+      this.socket.destroy();
+    }
+  }
 }
 
 async function appendManifestArtifact(runDir: string, id: string, path: string, description: string): Promise<void> {
@@ -451,6 +620,74 @@ async function appendManifestArtifact(runDir: string, id: string, path: string, 
   } catch {
     // A completed run should have a manifest, but handoff prompt remains useful without one.
   }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await readFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function defaultAppServerSocketPath(): string {
+  return join(process.env.CODEX_HOME || join(homedir(), ".codex"), "app-server-control", "app-server-control.sock");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function threadListIncludes(value: unknown, threadId: string): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const data = (value as { data?: unknown }).data;
+  return Array.isArray(data) && data.some((thread) =>
+    Boolean(thread)
+    && typeof thread === "object"
+    && (thread as { id?: unknown }).id === threadId,
+  );
+}
+
+async function confirmCreatedThread(appServer: AppServerTransport, threadId: string, state: RunState): Promise<string | undefined> {
+  try {
+    const read = await appServer.request("thread/read", buildThreadReadRequest(threadId).params);
+    if (threadReadMatches(read, threadId)) {
+      return undefined;
+    }
+  } catch (error) {
+    const readError = errorMessage(error);
+    try {
+      const listed = await appServer.request("thread/list", buildThreadListRequest(threadId, state).params);
+      if (threadListIncludes(listed, threadId)) {
+        return undefined;
+      }
+      return `thread/read failed (${readError}) and thread/list did not confirm created thread ${threadId}; thread/start and turn/start already succeeded.`;
+    } catch (listError) {
+      return `thread/read failed (${readError}) and thread/list confirmation also failed: ${errorMessage(listError)}`;
+    }
+  }
+  try {
+    const listed = await appServer.request("thread/list", buildThreadListRequest(threadId, state).params);
+    if (threadListIncludes(listed, threadId)) {
+      return undefined;
+    }
+    return `thread/read did not confirm created thread ${threadId}; thread/start and turn/start already succeeded.`;
+  } catch (error) {
+    return `thread/read did not confirm created thread ${threadId}; thread/list confirmation failed: ${errorMessage(error)}`;
+  }
+}
+
+function threadReadMatches(value: unknown, threadId: string): boolean {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const maybeThread = (value as { thread?: unknown }).thread ?? value;
+  return Boolean(maybeThread)
+    && typeof maybeThread === "object"
+    && (maybeThread as { id?: unknown }).id === threadId;
 }
 
 function firstMatch(value: string, pattern: RegExp): string | undefined {

@@ -917,8 +917,8 @@ Rules:
 
 - `--print` writes and prints the handoff prompt.
 - No app-server is required for local prompt handoff.
-- `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and `thread/list`.
-- `--thread <thread-id>` attempts `initialize`, `turn/start`, and `thread/list` against an explicit thread id.
+- `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and confirmation through `thread/read` with `thread/list` as fallback.
+- `--thread <thread-id>` attempts `initialize` and `turn/start` against an explicit thread id.
 - Failed app-server attempts write fallback metadata and do not invalidate the completed run.
 - Codex Flow never guesses the current thread from `thread/list`.
 
