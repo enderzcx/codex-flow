@@ -204,7 +204,7 @@ async function runCodexAppThreadWorker(
     transcriptRead = readResult.transcriptRead;
 
     if (!raw) {
-      throw new Error("app-thread worker did not return a readable final response");
+      throw new Error(formatAppThreadExecutionUnavailable("worker did not return an assistant response", threadId, turnId));
     }
 
     const parsed = parseWorkerOutput(worker.id, raw);
@@ -310,7 +310,7 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
   let turnId: string | undefined;
   try {
     await appServerRequestWithTimeout(appServer, "initialize", buildInitializeParams(), remainingProbeTimeoutMs(deadline, probeTimeoutMs));
-    await appServer.notify?.("initialized");
+    await appServerNotifyWithTimeout(appServer, "initialized", remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     const thread = await appServerRequestWithTimeout(appServer, "thread/start", {
       cwd: context.target,
       approvalPolicy: "never",
@@ -321,7 +321,7 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
     }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     threadId = extractId(thread, "thread");
     if (!threadId) {
-      throw new WorkerAdapterUnavailableError("codex-app-thread", "turn execution probe could not start a thread");
+      throw new Error("thread/start did not return thread.id");
     }
     await appServerRequestWithTimeout(appServer, "thread/name/set", {
       threadId,
@@ -335,6 +335,9 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
       sandboxPolicy: { type: "readOnly", networkAccess: false },
     }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     turnId = extractId(turn, "turn");
+    if (!turnId) {
+      throw new Error("turn/start did not return turn.id");
+    }
     const raw = await readAppThreadProbeRaw(
       appServer,
       threadId,
@@ -344,15 +347,21 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
       probeTimeoutMs,
     );
     if (!raw) {
-      throw new WorkerAdapterUnavailableError("codex-app-thread", formatProbeFailure("turn execution probe did not return a readable response", threadId, turnId));
+      throw new WorkerAdapterUnavailableError("codex-app-thread", formatAppThreadExecutionUnavailable("probe did not return an assistant response", threadId, turnId));
     }
   } catch (error) {
     if (error instanceof WorkerAdapterUnavailableError) {
       throw error;
     }
-    throw new WorkerAdapterUnavailableError("codex-app-thread", formatProbeFailure(error instanceof Error ? error.message : String(error), threadId, turnId));
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new WorkerAdapterUnavailableError(
+      "codex-app-thread",
+      turnId
+        ? formatAppThreadExecutionUnavailable(reason, threadId, turnId)
+        : formatAppThreadProbeSetupFailure(reason, threadId),
+    );
   } finally {
-    await appServer.close?.();
+    await appServerCloseWithTimeout(appServer, Math.min(1000, probeTimeoutMs)).catch(() => {});
   }
 }
 
@@ -413,7 +422,7 @@ async function readAppThreadProbeRaw(
       await sleep(Math.min(250, remaining));
     }
   }
-  throw new Error(`app-thread worker did not return a readable final response${lastError ? `; last thread/read error: ${lastError}` : ""}`);
+  throw new Error(`model execution channel did not return a readable assistant response${lastError ? `; last thread/read error: ${lastError}` : ""}`);
 }
 
 async function appServerRequestWithTimeout(
@@ -422,14 +431,36 @@ async function appServerRequestWithTimeout(
   params: unknown,
   timeoutMs: number,
 ): Promise<unknown> {
+  return promiseWithTimeout(appServer.request(method, params), method, timeoutMs);
+}
+
+async function appServerNotifyWithTimeout(
+  appServer: AppServerTransport,
+  method: string,
+  timeoutMs: number,
+): Promise<void> {
+  if (!appServer.notify) {
+    return;
+  }
+  await promiseWithTimeout(Promise.resolve(appServer.notify(method)), `notify/${method}`, timeoutMs);
+}
+
+async function appServerCloseWithTimeout(appServer: AppServerTransport, timeoutMs: number): Promise<void> {
+  if (!appServer.close) {
+    return;
+  }
+  await promiseWithTimeout(Promise.resolve(appServer.close()), "app-server close", timeoutMs);
+}
+
+async function promiseWithTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      reject(new Error(`${method} timed out after ${timeoutMs}ms`));
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
     }, Math.max(1, timeoutMs));
   });
   try {
-    return await Promise.race([appServer.request(method, params), timeout]);
+    return await Promise.race([promise, timeout]);
   } finally {
     if (timer) {
       clearTimeout(timer);
@@ -437,12 +468,16 @@ async function appServerRequestWithTimeout(
   }
 }
 
-function formatProbeFailure(reason: string, threadId: string | undefined, turnId: string | undefined): string {
+function formatAppThreadExecutionUnavailable(reason: string, threadId: string | undefined, turnId: string | undefined): string {
   const ids = [
     threadId ? `thread_id=${threadId}` : undefined,
     turnId ? `turn_id=${turnId}` : undefined,
   ].filter(Boolean);
-  return `turn execution probe failed: ${reason}${ids.length > 0 ? ` (${ids.join(", ")})` : ""}`;
+  return `app-thread-execution-unavailable: thread APIs are available, but the model execution channel did not return a readable assistant response; detail: ${reason}${ids.length > 0 ? ` (${ids.join(", ")})` : ""}`;
+}
+
+function formatAppThreadProbeSetupFailure(reason: string, threadId: string | undefined): string {
+  return `app-thread-probe-setup-failed: thread/model execution preflight could not complete setup; detail: ${reason}${threadId ? ` (thread_id=${threadId})` : ""}`;
 }
 
 function buildInitializeParams(): Record<string, unknown> {
@@ -516,9 +551,9 @@ async function readAppThreadWorkerRaw(
     await sleep(1000);
   }
   if (lastError) {
-    throw new Error(`app-thread worker did not return a readable final response; last thread/read error: ${lastError}`);
+    throw new Error(formatAppThreadExecutionUnavailable(`worker read failed; last thread/read error: ${lastError}`, threadId, turnId));
   }
-  throw new Error("app-thread worker did not return a readable final response");
+  throw new Error(formatAppThreadExecutionUnavailable("worker did not return an assistant response", threadId, turnId));
 }
 
 function shortRunId(runId?: string): string | undefined {

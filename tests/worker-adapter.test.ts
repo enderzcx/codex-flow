@@ -160,9 +160,56 @@ describe("worker adapters", () => {
         fallback_used: true,
       }),
     );
-    expect(result.runtime?.fallback_reason).toContain("app-thread worker did not return a readable final response");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-execution-unavailable");
+    expect(result.runtime?.fallback_reason).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
     expect(result.runtime?.fallback_reason).toContain("thread_id=thread_empty");
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_empty");
+  });
+
+  it("preserves thread/read errors in app-thread execution-unavailable fallback reasons", async () => {
+    const registry: WorkerAdapterRegistry = {
+      "codex-app-thread": codexAppThreadAdapter,
+      "codex-sdk-headless": {
+        name: "codex-sdk-headless",
+        async run(worker, _context, options) {
+          return completed(worker.id, {
+            adapter: "codex-sdk-headless",
+            requested_adapter: options.requestedAdapter,
+            fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+            fallback_used: Boolean(options.fallbackUsed),
+            fallback_reason: options.fallbackReason,
+            agent_role: worker.id,
+            transcript_read: false,
+            sandbox: "read-only",
+            approval_policy: "never",
+          });
+        },
+      },
+    };
+
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 10,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServer: new ThrowingReadWorkerAppServer(),
+        capability: availableCapability(),
+      },
+      registry,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-execution-unavailable");
+    expect(result.runtime?.fallback_reason).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
+    expect(result.runtime?.fallback_reason).toContain("last thread/read error");
+    expect(result.runtime?.fallback_reason).toContain("fake thread/read failed");
+    expect(result.runtime?.fallback_reason).toContain("thread_id=thread_read_error");
+    expect(result.runtime?.fallback_reason).toContain("turn_id=turn_read_error");
   });
 
   it("falls back before worker creation when the live app-thread probe cannot produce output", async () => {
@@ -212,10 +259,214 @@ describe("worker adapters", () => {
         fallback_used: true,
       }),
     );
-    expect(result.runtime?.fallback_reason).toContain("turn execution probe failed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-execution-unavailable");
+    expect(result.runtime?.fallback_reason).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
     expect(result.runtime?.fallback_reason).toContain("thread_id=thread_probe");
     expect(result.runtime?.fallback_reason).toContain("turn_id=turn_probe");
     expect(probeServer.workerThreadStarted).toBe(false);
+  });
+
+  it("keeps probe setup failures separate from model execution failures", async () => {
+    const probeServer = new SetupFailingProbeAppServer();
+    const registry: WorkerAdapterRegistry = {
+      "codex-app-thread": codexAppThreadAdapter,
+      "codex-sdk-headless": {
+        name: "codex-sdk-headless",
+        async run(worker, _context, options) {
+          return completed(worker.id, {
+            adapter: "codex-sdk-headless",
+            requested_adapter: options.requestedAdapter,
+            fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+            fallback_used: Boolean(options.fallbackUsed),
+            fallback_reason: options.fallbackReason,
+            agent_role: worker.id,
+            transcript_read: false,
+            sandbox: "read-only",
+            approval_policy: "never",
+          });
+        },
+      },
+    };
+
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 1000,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => probeServer,
+        capability: availableCapability(),
+      },
+      registry,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+    expect(result.runtime?.fallback_reason).toContain("fake thread/start failed");
+    expect(result.runtime?.fallback_reason).not.toContain("app-thread-execution-unavailable");
+  });
+
+  it("labels missing probe thread ids as setup failures", async () => {
+    const registry: WorkerAdapterRegistry = {
+      "codex-app-thread": codexAppThreadAdapter,
+      "codex-sdk-headless": {
+        name: "codex-sdk-headless",
+        async run(worker, _context, options) {
+          return completed(worker.id, {
+            adapter: "codex-sdk-headless",
+            requested_adapter: options.requestedAdapter,
+            fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+            fallback_used: Boolean(options.fallbackUsed),
+            fallback_reason: options.fallbackReason,
+            agent_role: worker.id,
+            transcript_read: false,
+            sandbox: "read-only",
+            approval_policy: "never",
+          });
+        },
+      },
+    };
+
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 1000,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => new MissingThreadIdProbeAppServer(),
+        capability: availableCapability(),
+      },
+      registry,
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+    expect(result.runtime?.fallback_reason).toContain("thread/start did not return thread.id");
+    expect(result.runtime?.fallback_reason).not.toContain("app-thread-execution-unavailable");
+  });
+
+  it("labels probe turn/start failures before a turn id as setup failures", async () => {
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 1000,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => new TurnStartFailingProbeAppServer(),
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+    expect(result.runtime?.fallback_reason).toContain("fake turn/start failed");
+    expect(result.runtime?.fallback_reason).toContain("thread_id=thread_turn_start_error");
+    expect(result.runtime?.fallback_reason).not.toContain("app-thread-execution-unavailable");
+  });
+
+  it("labels missing probe turn ids as setup failures", async () => {
+    const result = await runWorkerWithAdapter(
+      worker,
+      context,
+      {
+        target: "/repo",
+        timeoutMs: 1000,
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        appServerFactory: () => new MissingTurnIdProbeAppServer(),
+        capability: availableCapability(),
+      },
+      fallbackRegistry(),
+    );
+
+    expect(result.status).toBe("completed");
+    expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+    expect(result.runtime?.fallback_reason).toContain("turn/start did not return turn.id");
+    expect(result.runtime?.fallback_reason).toContain("thread_id=thread_missing_turn_id");
+    expect(result.runtime?.fallback_reason).not.toContain("turn_id=");
+    expect(result.runtime?.fallback_reason).not.toContain("app-thread-execution-unavailable");
+  });
+
+  it("times out hanging probe notify as a setup failure", async () => {
+    const previousProbeTimeout = process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = "5";
+    try {
+      const result = await runWorkerWithAdapter(
+        worker,
+        context,
+        {
+          target: "/repo",
+          timeoutMs: 1000,
+          runtime: {
+            preferred_worker_adapter: "codex-app-thread",
+            fallback_worker_adapter: "codex-sdk-headless",
+          },
+          appServerFactory: () => new HangingNotifyProbeAppServer(),
+          capability: availableCapability(),
+        },
+        fallbackRegistry(),
+      );
+
+      expect(result.status).toBe("completed");
+      expect(result.runtime?.fallback_reason).toContain("app-thread-probe-setup-failed");
+      expect(result.runtime?.fallback_reason).toContain("notify/initialized timed out");
+      expect(result.runtime?.fallback_reason).not.toContain("app-thread-execution-unavailable");
+    } finally {
+      if (previousProbeTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = previousProbeTimeout;
+      }
+    }
+  });
+
+  it("does not expose hanging probe close as the fallback reason", async () => {
+    const previousProbeTimeout = process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+    process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = "5";
+    try {
+      const startedAt = Date.now();
+      const result = await runWorkerWithAdapter(
+        worker,
+        context,
+        {
+          target: "/repo",
+          timeoutMs: 1000,
+          runtime: {
+            preferred_worker_adapter: "codex-app-thread",
+            fallback_worker_adapter: "codex-sdk-headless",
+          },
+          appServerFactory: () => new HangingCloseNoOutputProbeAppServer(),
+          capability: availableCapability(),
+        },
+        fallbackRegistry(),
+      );
+
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+      expect(result.status).toBe("completed");
+      expect(result.runtime?.fallback_reason).toContain("app-thread-execution-unavailable");
+      expect(result.runtime?.fallback_reason).not.toContain("app-server close");
+    } finally {
+      if (previousProbeTimeout === undefined) {
+        delete process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS;
+      } else {
+        process.env.CWF_APP_THREAD_PROBE_TIMEOUT_MS = previousProbeTimeout;
+      }
+    }
   });
 
   it("fails explicitly when app-thread is unavailable and no fallback is configured", async () => {
@@ -434,6 +685,23 @@ class EmptyWorkerAppServer {
   async notify(_method: string): Promise<void> {}
 }
 
+class ThrowingReadWorkerAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: { id: "thread_read_error" } };
+    }
+    if (method === "turn/start") {
+      return { turn: { id: "turn_read_error" } };
+    }
+    if (method === "thread/read") {
+      throw new Error("fake thread/read failed");
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
 class NoOutputProbeAppServer {
   threadStarts = 0;
   workerThreadStarted = false;
@@ -457,6 +725,97 @@ class NoOutputProbeAppServer {
   }
 
   async notify(_method: string): Promise<void> {}
+}
+
+class SetupFailingProbeAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      throw new Error("fake thread/start failed");
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class MissingThreadIdProbeAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: {} };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class TurnStartFailingProbeAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: { id: "thread_turn_start_error" } };
+    }
+    if (method === "turn/start") {
+      throw new Error("fake turn/start failed");
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class MissingTurnIdProbeAppServer {
+  async request(method: string): Promise<unknown> {
+    if (method === "thread/start") {
+      return { thread: { id: "thread_missing_turn_id" } };
+    }
+    if (method === "turn/start") {
+      return { turn: {} };
+    }
+    if (method === "thread/read") {
+      return { thread: { id: "thread_missing_turn_id", turns: [] } };
+    }
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {}
+}
+
+class HangingNotifyProbeAppServer {
+  async request(_method: string): Promise<unknown> {
+    return {};
+  }
+
+  async notify(_method: string): Promise<void> {
+    return new Promise(() => {});
+  }
+}
+
+class HangingCloseNoOutputProbeAppServer extends NoOutputProbeAppServer {
+  async close(): Promise<void> {
+    return new Promise(() => {});
+  }
+}
+
+function fallbackRegistry(): WorkerAdapterRegistry {
+  return {
+    "codex-app-thread": codexAppThreadAdapter,
+    "codex-sdk-headless": {
+      name: "codex-sdk-headless",
+      async run(worker, _context, options) {
+        return completed(worker.id, {
+          adapter: "codex-sdk-headless",
+          requested_adapter: options.requestedAdapter,
+          fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+          fallback_used: Boolean(options.fallbackUsed),
+          fallback_reason: options.fallbackReason,
+          agent_role: worker.id,
+          transcript_read: false,
+          sandbox: "read-only",
+          approval_policy: "never",
+        });
+      },
+    },
+  };
 }
 
 function completed(workerId: string, runtime?: WorkerResult["runtime"]): WorkerResult {

@@ -106,7 +106,7 @@ describe("CLI output formatting", () => {
           requested_adapter: "codex-app-thread",
           fallback_adapter: "codex-sdk-headless",
           fallback_used: true,
-          fallback_reason: "app-thread worker did not return a readable final response",
+          fallback_reason: "app-thread-execution-unavailable: thread APIs are available, but the model execution channel did not return a readable assistant response",
           agent_role: "correctness",
           transcript_read: false,
         },
@@ -117,7 +117,8 @@ describe("CLI output formatting", () => {
 
     expect(output).toContain("Workers: 1/1 completed, 0 raw fallback, 1 adapter fallback");
     expect(output).toContain("adapter_fallback=codex-app-thread->codex-sdk-headless");
-    expect(output).toContain("app-thread worker did not return a readable final response");
+    expect(output).toContain("app-thread-execution-unavailable");
+    expect(output).toContain("thread APIs are available, but the model execution channel did not return a readable assistant response");
   });
 
   it("points completed runs at their final report", () => {

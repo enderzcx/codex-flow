@@ -160,10 +160,13 @@ If app-server starts the worker but result reading fails:
 
 If app-server thread APIs exist but turn execution cannot produce an assistant response:
 
+- status/fallback reason must use `app-thread-execution-unavailable` and say plainly that thread APIs are available, but the model execution channel did not return a readable assistant response;
 - treat `codex-app-thread` as execution-unavailable, not merely slow;
 - run the configured fallback worker adapter before creating real worker threads;
 - keep probe thread/turn ids in the fallback reason for diagnosis;
 - continue to distinguish `created/listed` evidence from `executed/responded` evidence.
+
+If the probe cannot complete setup before a turn exists, keep that separate as `app-thread-probe-setup-failed`; do not label initialize, thread creation, naming, transport timeout, or app-server setup failures as model-channel execution failures.
 
 ### Safety Invariants
 
