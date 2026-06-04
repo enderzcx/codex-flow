@@ -6,7 +6,7 @@ Codex Flow is a Codex-native workflow layer for repeatable multi-agent engineeri
 
 v1.0 is the stable CLI engine: read-only workflows, filesystem run store, worker envelopes, gates, and reducer output. v1.4 adds one narrow gated documentation write workflow.
 
-Post-v1 should move closer to Codex's native product model: a coordinator thread starts workflow work, worker agents run in their own threads, results return to a Codex conversation, and write-capable work uses Codex's own sandbox, approvals, permissions, and worktrees.
+Post-v1 should move closer to Codex's native product model: a Codex conversation starts workflow work, worker agents can run in their own Desktop-visible threads, results return to the initiating conversation when one exists, and write-capable work uses Codex's own sandbox, approvals, permissions, and worktrees.
 
 ## Problem
 
@@ -53,6 +53,8 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Document when to use and when not to use each bundled workflow.
 - Keep the public v1.0 core free of private adapters or third-party model routing.
 - Define the post-v1 native runtime bridge: coordinator thread, worker agent threads, result return, and Codex safety inheritance.
+- Treat same-conversation result return as the primary UX when a workflow is started from Codex.
+- Treat Desktop coordinator/result threads as explicit CLI/background paths, not the default destination for an active conversation.
 - Keep Codex Flow-owned pieces limited to workflow specs, run-store evidence, gates, artifact manifests, and reducers.
 
 ## Non-Goals
@@ -61,6 +63,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - No non-Codex model routing.
 - No UI.
 - No custom subagent scheduler that duplicates Codex's own subagent mechanism.
+- No Claude Managed Agents-style platform scheduler in the worker-thread phase.
 - No custom sandbox or approval system that bypasses Codex permissions.
 - No generated workflow scripts.
 - No auto-running generated workflow suggestions.
@@ -92,15 +95,16 @@ Codex is strong in a single session, but complex engineering work benefits from 
 16. As a user, I can run either `cwf run diff-review --target <repo>` or `cwf run workflows/diff-review.yaml --target <repo>`.
 17. As a reviewer, I can trust the final output because it preserves worker provenance, raw fallback status, and the artifact evidence used to render the report.
 18. As a user, I can choose `repo-audit`, `implementation-plan`, `research-crosscheck`, or `release-review` from the catalog when my review goal is broader than a code diff review.
-19. As a Codex App user, I can ask a workflow to create a visible supervisor thread instead of hiding all progress in a detached CLI process.
+19. As a Codex App user, I can explicitly ask a workflow to create a visible supervisor/result thread instead of hiding all progress in a detached CLI process.
 20. As a Codex user in an active conversation, I can get the workflow result back in this conversation through the Codex skill wrapper.
 21. As a workflow author, I can describe worker roles while Codex Flow decides whether the current runtime uses SDK headless workers, app-server threads, or Codex subagents.
-22. As a cautious user, I can allow write-capable workflows only when they pass a workflow gate and then run through Codex's own sandbox, approval, and worktree/thread boundaries.
-23. As a documentation maintainer, I can run `doc-refresh`, review the dry-run artifacts, explicitly approve, and receive rollback plus verification evidence.
-24. As a maintainer, I can generate a PR-ready comment or review artifact without posting anything.
-25. As a maintainer, I can explicitly post with `--post --repo --pr`, and failures leave local artifacts behind.
-26. As a workflow author, I can run `cwf suggest-workflow --goal "<task>"` to draft a valid YAML spec.
-27. As a cautious user, I can verify suggestions are not installed or run unless I explicitly use their path.
+22. As a Codex Desktop user, I can ask for worker app threads and inspect each worker's left-sidebar thread while still receiving the final result in the initiating conversation.
+23. As a cautious user, I can allow write-capable workflows only when they pass a workflow gate and then run through Codex's own sandbox, approval, and worktree/thread boundaries.
+24. As a documentation maintainer, I can run `doc-refresh`, review the dry-run artifacts, explicitly approve, and receive rollback plus verification evidence.
+25. As a maintainer, I can generate a PR-ready comment or review artifact without posting anything.
+26. As a maintainer, I can explicitly post with `--post --repo --pr`, and failures leave local artifacts behind.
+27. As a workflow author, I can run `cwf suggest-workflow --goal "<task>"` to draft a valid YAML spec.
+28. As a cautious user, I can verify suggestions are not installed or run unless I explicitly use their path.
 
 ## Success Criteria
 
@@ -134,10 +138,11 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - `cwf workflows validate` validates all bundled workflows.
 - Each bundled example workflow has fixture coverage and at least one real smoke.
 - Workflow catalog documents when to use and when not to use each bundled workflow.
-- Post-v1 native mode can create a named Codex App supervisor thread and record its thread id.
-- Post-v1 result return works through the skill wrapper or an explicit app-server thread id; it must not guess the current thread from a thread list.
+- Post-v1 native mode can create a named Codex App supervisor/result thread when `--new-thread` is explicitly used and record its thread id.
+- Post-v1 result return works through the skill wrapper as the primary active-conversation path, or through an explicit app-server thread id/new-thread flag for CLI/background use; it must not guess the current thread from a thread list.
 - Post-v1 worker execution treats "agent" as the role/config and "thread" as the run instance.
 - Post-v1 worker runtime adapters are Codex-only, validate public adapter names, preserve runtime metadata, and fall back to SDK headless only when configured.
+- Post-v1 worker app threads can record per-worker thread ids, turn ids, parent/coordinator ids when known, transcript-read status, adapter metadata, and fallback status.
 - Post-v1 write-capable phases run only after a gate and use Codex sandbox/permissions behavior; the CWF gate is the explicit human approval boundary for the current SDK write path.
 - `doc-refresh` pauses before writing, rejects cleanly, and after approval produces write plan, dry-run preview, diff summary, rollback, verification, worker JSON, reduced result, and manifest artifacts.
 - Release CI runs build, tests, package dry-run, and non-live CLI smoke on push to `main` and pull requests.
@@ -163,6 +168,8 @@ Codex owns the agent execution boundary: threads, subagents, sandbox, permission
 
 ## Future: Codex App Thread Integration
 
-Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. v1.2 adds explicit result handoff and coordinator-thread attempts for completed runs. v1.3 adds the worker adapter contract, SDK fallback, and runtime metadata preservation; live app-thread/subagent/detached-review execution remains host-dependent and fails explicitly when unavailable. v1.4 adds a gated docs-only write workflow through Codex SDK `workspace-write`; broader native write workflows should continue to reuse Codex's thread, worktree, sandbox, approval, and subagent boundaries when those interactive host surfaces are available.
+Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. v1.2 adds explicit result handoff and coordinator-thread attempts for completed runs. v1.3 adds the worker adapter contract, SDK fallback, and runtime metadata preservation. v1.7 should turn `codex-app-thread` into a live worker path now that app-server thread creation and result turns have been proven locally. v1.4 adds a gated docs-only write workflow through Codex SDK `workspace-write`; broader native write workflows should continue to reuse Codex's thread, worktree, sandbox, approval, and subagent boundaries when those interactive host surfaces are available.
+
+Managed-Agents-style platform scheduling remains deferred. Codex Flow should first prove visible worker threads, reducer-compatible worker envelopes, same-conversation result return, and safe fallback before considering any scheduler, queue, remote lifecycle service, or agent marketplace.
 
 The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.

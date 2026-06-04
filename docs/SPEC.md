@@ -120,21 +120,22 @@ Codex Flow has two runtime modes:
 1. **CLI engine mode**: v1.0 stable behavior. The runner uses local workflow specs, a filesystem run store, and Codex SDK workers. This mode is reliable for CLI and CI-like usage, but worker activity is not guaranteed to appear as Codex App left-sidebar threads.
 2. **Native Codex runtime mode**: post-v1 behavior. The runner reuses Codex App Server threads, turns, review threads, subagents, sandbox, approvals, permissions profiles, and worktrees where available.
 
-These native capabilities are delivered incrementally: v1.2 adds coordinator/result return, v1.3 maps worker agents to threads/subagents, and v1.4 introduces gated write-capable workflows.
+These native capabilities are delivered incrementally: v1.2 adds explicit result return, v1.3 adds the worker adapter contract, v1.4 introduces gated write-capable workflows, and v1.7 turns `codex-app-thread` into the first live Desktop-visible worker-thread adapter.
 
 The product model is:
 
 ```text
 Codex current conversation or cwf CLI
   -> CWF coordinator
-      -> optional Codex App supervisor thread
+      -> active Codex conversation when launched by a skill
+      -> optional Codex App coordinator/result thread only when explicitly requested
       -> phase engine
           -> worker agent thread(s)
           -> native detached review thread(s)
           -> gate
           -> reducer
       -> run store / events / artifacts
-      -> result returned to current Codex conversation or explicit thread id
+      -> result returned to initiating Codex conversation, explicit thread id, explicit new thread, or CLI artifacts
 ```
 
 Supported phase kinds:
@@ -159,8 +160,9 @@ Therefore, a workflow declares workers as agents, but the runtime should execute
 
 Native mode should create or use one coordinator surface:
 
-- skill path: the active Codex conversation is the coordinator, and the skill returns `cwf result` into the same conversation;
-- app-server path: `cwf` creates a named supervisor thread with `thread/start`, `thread/name/set`, and `turn/start`;
+- skill path: the active Codex conversation is the primary coordinator, and the skill returns `cwf result` into the same conversation;
+- explicit app-server thread path: `cwf` posts to a known host/user-provided thread id;
+- explicit new-thread path: `cwf` creates a named coordinator/result thread with `thread/start`, `thread/name/set`, and `turn/start`;
 - CLI-only path: no coordinator thread is required; the run store and CLI output remain the source of truth.
 
 Codex Flow must not guess the current conversation from `thread/list`. Posting back to a thread requires a newly created thread id, an explicit user-provided thread id, or a host-provided current thread id.
@@ -176,12 +178,16 @@ Worker execution should be pluggable:
 
 All adapters must normalize output into the same worker envelope. Adapter-specific metadata belongs under an optional runtime metadata field, not in reducer logic.
 
+`codex-app-thread` in v1.7 creates one Desktop-visible thread per worker. Those worker threads are execution and evidence surfaces; they do not replace the initiating conversation as the default final result destination.
+
 ### Result Return
 
-Result return has two supported paths:
+Result return has four supported paths, in priority order:
 
-- Skill wrapper return: the Codex skill runs `cwf`, reads `result.md` or structured result JSON, and responds in the active Codex conversation.
-- Explicit thread return: `cwf desktop result <run-id> --thread <thread-id>` posts or steers the result into that known thread through App Server.
+1. Skill wrapper return: the Codex skill runs `cwf`, reads `result.md` or structured result JSON, and responds in the active Codex conversation.
+2. Explicit thread return: `cwf desktop result <run-id> --thread <thread-id>` posts or steers the result into that known thread through App Server.
+3. Explicit new-thread return: `cwf desktop result <run-id> --new-thread` creates a separate coordinator/result thread for CLI/background use or when explicitly requested.
+4. CLI artifact return: `cwf result`, `handoff-prompt.md`, `result.md`, and run artifacts remain available without Desktop.
 
 No implicit "current thread" detection is allowed until Codex exposes a stable current-thread contract to external tools.
 
@@ -392,6 +398,8 @@ Worker result envelope persisted at `workers/<worker-id>.json`:
     "fallback_adapter": "codex-sdk-headless",
     "fallback_used": true,
     "fallback_reason": "codex-subagent unavailable: native API missing",
+    "parent_thread_id": null,
+    "coordinator_thread_id": null,
     "agent_role": "correctness",
     "transcript_read": false,
     "sandbox": "read-only",
@@ -413,7 +421,7 @@ runtime:
 Supported public worker adapters:
 
 - `codex-sdk-headless`: current CLI-safe worker execution path.
-- `codex-app-thread`: explicit native-thread adapter, unavailable unless the host exposes app-server worker execution.
+- `codex-app-thread`: explicit native-thread adapter; v1.7 uses app-server thread lifecycle methods to create one Desktop-visible thread per worker when available.
 - `codex-subagent`: explicit native-subagent adapter, unavailable unless the host exposes subagent execution to this CLI process.
 - `codex-review-detached`: explicit detached-review adapter, unavailable unless app-server review execution is available.
 
@@ -557,7 +565,7 @@ Artifact entries contain `id`, `type`, `path`, and `description`. The default `d
 
 ## Native Codex Runtime Bridge
 
-The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Codex Flow v1.2 uses this only for explicit result handoff. Worker execution as native Codex threads/subagents remains a later phase.
+The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Codex Flow v1.2 uses this only for explicit result handoff. v1.7 should reuse the same app-server transport for explicit worker app threads.
 
 Commands:
 
@@ -577,14 +585,14 @@ Contract:
 
 - app-server integration is optional for CLI-only users and guarded by an explicit flag or command
 - normal `diff-review` must still work without Codex Desktop running
-- Desktop mode creates a real Codex coordinator thread intended for left-sidebar visibility
-- result posting requires a newly created thread or an explicit known thread id
+- Desktop result mode creates a real Codex coordinator/result thread only when `--new-thread` is explicitly requested
+- result posting requires a skill wrapper return, a newly created thread, an explicit known thread id, or CLI artifact fallback
 - coordinator thread ids, worker thread ids, turn ids, app-server version, adapter names, and fallback status are recorded in the run folder
 - failures fall back to a local prompt/session handoff instead of failing the workflow result
 - write-capable workflows reuse Codex sandbox, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses; CWF gates provide the explicit human approval boundary in the current SDK path
 - experimental protocol behavior is documented and tested separately from core run-store behavior
 
-`cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and confirmation through `thread/read` with `thread/list` as a fallback. `--thread <thread-id>` attempts `initialize` and `turn/start` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow.
+`cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and confirmation through `thread/read` with `thread/list` as a fallback. `--thread <thread-id>` attempts `initialize` and `turn/start` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow. When a Codex skill launches CWF, the skill should return the final summary in the active conversation and use app-server worker threads only as optional evidence/execution surfaces.
 
 ## Safety Invariants
 
@@ -600,6 +608,8 @@ Contract:
 - Write-capable phases must run through Codex thread/worktree sandbox controls after CWF gate approval, not direct custom file writes.
 - `doc-refresh` is the only bundled write-capable workflow; it is documentation-only, gated, and reversible.
 - Public v1.0 has no private adapters or third-party model routing.
+- `thread/list` must never be used to infer the initiating/current Codex conversation.
+- v1.7 worker app threads must not introduce a global scheduler, remote queue, recursive fan-out, or agent marketplace.
 
 ## Known Limitations
 
@@ -609,4 +619,4 @@ Contract:
 - No workflow plugin system yet.
 - Run discovery is a local index only.
 - Workflow registry is local filesystem discovery only; no remote marketplace.
-- No stable Codex App thread integration yet.
+- No live worker app-thread implementation yet; v1.7 is the planned implementation slice.

@@ -938,3 +938,62 @@ Rules:
 
 - [ ] No current-thread guessing.
   - Evidence: tests cover explicit-thread posting and thread-list verification only
+
+## v1.7: Worker App Threads
+
+### PRD
+
+v1.7 makes workflow workers visible in Codex Desktop when explicitly requested. It does not change the primary result-return UX: a workflow launched from an active Codex conversation should return its final summary to that same conversation through the skill wrapper.
+
+The worker app threads are execution and evidence surfaces. They let users inspect each worker's prompt, context, and result in the Codex left sidebar while CWF still owns the run store, reducer, artifact manifest, and final report.
+
+### Goals
+
+- Add a live `codex-app-thread` worker adapter.
+- Create one app-server thread per worker.
+- Normalize app-thread output into the existing worker envelope.
+- Record native runtime metadata for each worker.
+- Keep result return to the initiating conversation primary.
+- Keep `--new-thread` explicit for CLI/background/coordinator use.
+- Defer managed-agent platform scheduling.
+
+### SPEC
+
+Runtime opt-in:
+
+```yaml
+runtime:
+  preferred_worker_adapter: codex-app-thread
+  fallback_worker_adapter: codex-sdk-headless
+```
+
+Rules:
+
+- `codex-app-thread` uses app-server `thread/start`, `thread/name/set`, `turn/start`, and `thread/read` or equivalent result retrieval.
+- Each worker gets its own thread id and turn id.
+- Worker JSON remains the stable contract consumed by reducers.
+- Runtime metadata records adapter, requested adapter, fallback adapter, fallback status, parent/coordinator ids when provided, worker thread id, turn id, transcript-read status, sandbox, and approval policy.
+- Fallback to SDK headless happens only when configured.
+- CWF never guesses parent/current thread id from `thread/list`.
+- Write-capable app-thread workers are out of scope.
+- Claude Managed Agents-style scheduling, queues, remote lifecycle, and marketplaces are out of scope.
+
+### Acceptance
+
+- [ ] One app-thread worker can run through app-server.
+  - Evidence: fake app-server test covers thread creation, turn start, and worker envelope normalization
+
+- [ ] A live multi-worker run records Desktop worker threads.
+  - Evidence: live `diff-review` smoke records worker `thread_id` and `turn_id` for correctness/tests/safety
+
+- [ ] Same-conversation result return remains primary.
+  - Evidence: skill wrapper or documented manual path returns final result to the initiating conversation; `--new-thread` remains explicit
+
+- [ ] Reducer remains adapter-independent.
+  - Evidence: mixed SDK/app-thread fixture passes
+
+- [ ] Fallback is explicit.
+  - Evidence: tests cover configured fallback and no-fallback failure
+
+- [ ] Existing CLI lifecycle remains unaffected.
+  - Evidence: `npm run check`, CLI smoke, and normal `diff-review` smoke pass without app-server

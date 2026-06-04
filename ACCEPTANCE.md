@@ -116,6 +116,15 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Desktop result handoff is explicit and fallback-safe.
   - Evidence: `cwf desktop check`, `cwf desktop result <run-id> --print`, handoff artifacts, app-server fallback metadata, and tests proving no current-thread guessing.
 
+- [ ] Active Codex conversation result return is the primary UX.
+  - Evidence: docs and skill guidance say a workflow launched from Codex returns its final result to the initiating conversation; `--new-thread` is explicit/background/fallback behavior only.
+
+- [ ] Worker app threads have a complete post-v1.7 acceptance contract.
+  - Evidence: `docs/WORKER_APP_THREADS_PLAN.md`, `docs/POST_V1_PLAN.md`, `docs/SPEC.md`, and `docs/PHASE_CONTRACTS.md` define app-thread worker execution, metadata, fallback, and no-current-thread-guessing requirements.
+
+- [ ] Future `codex-app-thread` workers create real Desktop worker threads when enabled.
+  - Evidence: v1.7 implementation must provide fake app-server tests and live app-server smoke recording worker `thread_id` and `turn_id` values.
+
 - [ ] GitHub PR artifacts are generated locally and posting is explicit.
   - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.
 
@@ -134,7 +143,8 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 ## Explicit Non-Goals For v1.0
 
 - Native Codex Desktop task panel.
-- Codex app-server Desktop handoff. This is planned for a later guarded integration.
+- Default result return to a new Desktop thread when a workflow was launched from an active Codex conversation.
+- Claude Managed Agents-style platform scheduling, remote queueing, recursive fan-out, or an agent marketplace.
 - Auto-trigger from the word `workflow`.
 - Generated JavaScript workflow scripts.
 - Auto-installing or auto-running generated workflow suggestions.

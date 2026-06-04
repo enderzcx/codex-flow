@@ -105,6 +105,6 @@ For `codex-workflows`, this should be a guarded integration on top of the stable
 - stable core: `cwf run`, `cwf status`, `cwf watch`, `cwf result`
 - native bridge: create named visible Codex coordinator threads from a workflow result
 - worker agent threads: run workers as Codex threads/subagents where available
-- current conversation return: use a Codex skill wrapper or an explicit app-server thread id
+- current conversation return: use a Codex skill wrapper as the primary path; use an explicit app-server thread id or `--new-thread` only when requested
 - write-capable workflows: reuse Codex worktrees, sandbox, approvals, permissions profiles, and subagents
 - fallback: generate a local prompt/session handoff when app-server is unavailable

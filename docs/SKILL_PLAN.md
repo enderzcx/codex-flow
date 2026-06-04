@@ -122,7 +122,9 @@ After running:
 
 - summarize final findings
 - point to `result.md`
-- when the user wants the result returned to Codex, use `cwf desktop result <run-id> --print` or read `artifacts/handoff-prompt.md`; use `--new-thread` or `--thread <thread-id>` only when Desktop/app-server return is explicitly requested
+- when a workflow was launched from this Codex conversation, read `result.md` or structured result JSON and answer in this same conversation by default
+- use `cwf desktop result <run-id> --print` or read `artifacts/handoff-prompt.md` as the local handoff path
+- use `--new-thread` or `--thread <thread-id>` only when Desktop/app-server return is explicitly requested
 - mention worker failures or raw fallback if any
 - mention worker runtime adapter/fallback metadata when native worker mode was requested
 - mention failure summary and next step for failed runs
@@ -158,7 +160,7 @@ The skill should ask Codex to report:
 
 Only after v1.0 release readiness is stable:
 
-- live worker agent thread integration when app-server/subagent execution is exposed
+- live worker app-thread integration through app-server as described in v1.7
 - migration plan workflow
 - richer generated workflow spec suggestions
 
