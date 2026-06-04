@@ -197,7 +197,35 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 
 ## v1.5 GitHub PR Review Artifacts
 
-- [ ] Not started.
+- [x] PR comment artifact is generated.
+  - Evidence: `bash scripts/smoke-cli.sh` runs `cwf github-pr <run-id> --format comment` and verifies `artifacts/github-pr-comment.md`.
+
+- [x] PR review JSON artifact is generated.
+  - Evidence: `bash scripts/smoke-cli.sh` runs `cwf github-pr <run-id> --format review` and verifies `artifacts/github-pr-review.json`.
+
+- [x] Posting is explicit only.
+  - Evidence: `tests/github-pr.test.ts` verifies artifact generation without `--post` does not invoke `gh`; source audit confirms the only `gh` path is gated by explicit `--post --repo --pr`.
+
+- [x] Mocked `gh` post success works.
+  - Evidence: test injects a fake `gh` executor and verifies command args require `--repo` and `--pr`.
+
+- [x] Mocked `gh` post failure is clear.
+  - Evidence: test injects a failing executor and verifies local artifacts remain plus error mentions `gh`.
+
+- [x] Verification: `npm run check`
+  - Evidence: passed locally; `tsc` build plus 65 Vitest tests.
+
+- [x] Verification: `npm pack --dry-run`
+  - Evidence: passed locally; dry-run tarball includes `dist/github-pr.js`.
+
+- [x] Verification: artifact generation smoke
+  - Evidence: `bash scripts/smoke-cli.sh` passed; `github-pr artifact smoke` generated comment/review artifacts and printed `Posted: no`.
+
+- [x] Verification: v1.5 final review
+  - Evidence: Reasonix final-review returned `approve`; no findings after completed-run guard.
+
+- [x] Commit v1.5.
+  - Evidence: commit `7dfda33` in git history.
 
 ## v1.6 Workflow Spec Suggestion
 

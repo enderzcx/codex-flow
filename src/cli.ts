@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { checkDesktopCapability, formatDesktopCheck, handleDesktopResult } from "./desktop-bridge.js";
+import { handleGithubPr, type GitHubPrFormat } from "./github-pr.js";
 import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { describeFailurePolicy, latestRun, listRuns, normalizeRunState, showRun } from "./run-index.js";
@@ -40,6 +41,10 @@ type ParsedArgs = {
   status?: PhaseStatus;
   gateId?: string;
   reason?: string;
+  githubFormat?: GitHubPrFormat;
+  post?: boolean;
+  repo?: string;
+  pr?: string;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -162,6 +167,25 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
     throw new Error("Usage: cwf desktop <check|result> [args]");
+  }
+
+  if (args.command === "github-pr") {
+    if (!args.runId) {
+      throw new Error("Usage: cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]");
+    }
+    const result = await handleGithubPr(args.runId, {
+      format: args.githubFormat,
+      post: args.post,
+      repo: args.repo,
+      pr: args.pr,
+    });
+    console.log(`GitHub PR comment artifact: ${result.comment_path}`);
+    console.log(`GitHub PR review artifact: ${result.review_path}`);
+    console.log(`Posted: ${result.posted ? "yes" : "no"}`);
+    if (result.post_command) {
+      console.log(`Command: ${result.post_command.join(" ")}`);
+    }
+    return;
   }
 
   if (args.command === "status") {
@@ -360,6 +384,23 @@ function parseArgs(argv: string[]): ParsedArgs {
     }
   } else if (command === "show") {
     parsed.runId = first;
+  } else if (command === "github-pr") {
+    parsed.runId = first;
+    for (let index = 0; index < rest.length; index += 1) {
+      const token = rest[index];
+      if (token === "--format") {
+        parsed.githubFormat = parseGithubFormat(rest[index + 1]);
+        index += 1;
+      } else if (token === "--post") {
+        parsed.post = true;
+      } else if (token === "--repo") {
+        parsed.repo = rest[index + 1];
+        index += 1;
+      } else if (token === "--pr") {
+        parsed.pr = rest[index + 1];
+        index += 1;
+      }
+    }
   } else if (command === "list" || command === "latest") {
     const tokens = [first, ...rest].filter((value): value is string => Boolean(value));
     for (let index = 0; index < tokens.length; index += 1) {
@@ -392,6 +433,7 @@ Usage:
   cwf run <workflow-id-or-path> --target <repo> [--background]
   cwf desktop check
   cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
+  cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
   cwf status <run-id>
   cwf watch <run-id> [--interval <ms>] [--once]
   cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -411,6 +453,7 @@ Common flow:
   cwf latest
   cwf result <run-id>
   cwf desktop result <run-id> --print
+  cwf github-pr <run-id> --format comment
 
 Current workflow:
   diff-review (or workflows/diff-review.yaml)
@@ -666,6 +709,13 @@ function parseStatus(value?: string): PhaseStatus {
     throw new Error(`Invalid --status value: ${value ?? ""}`);
   }
   return value as PhaseStatus;
+}
+
+function parseGithubFormat(value?: string): GitHubPrFormat {
+  if (value !== "comment" && value !== "review") {
+    throw new Error(`Invalid --format value: ${value ?? ""}. Expected comment or review.`);
+  }
+  return value;
 }
 
 function pad(value: string, width: number): string {

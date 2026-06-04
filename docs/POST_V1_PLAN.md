@@ -493,6 +493,8 @@ Codex Flow produces useful reports, but maintainers often need to paste them int
 - Keep posting disabled by default.
 - Preserve local artifacts as source of truth.
 
+Status: implemented. `cwf github-pr` writes local comment/review artifacts by default and invokes `gh` only with explicit `--post --repo --pr`.
+
 ### SPEC
 
 New command:
@@ -526,19 +528,19 @@ Out of scope:
 
 ### Acceptance
 
-- [ ] PR comment artifact is generated.
+- [x] PR comment artifact is generated.
   - Evidence: `cwf github-pr <run-id> --format comment`
 
-- [ ] PR review JSON artifact is generated.
+- [x] PR review JSON artifact is generated.
   - Evidence: `cwf github-pr <run-id> --format review`
 
-- [ ] Posting is explicit.
+- [x] Posting is explicit.
   - Evidence: no network/write happens without `--post`
 
-- [ ] Missing `gh` or auth failure is clear.
+- [x] Missing `gh` or auth failure is clear.
   - Evidence: mocked `gh` failure test
 
-- [ ] Local artifacts remain available.
+- [x] Local artifacts remain available.
   - Evidence: generated files under `artifacts/`
 
 ### Goal Prompt

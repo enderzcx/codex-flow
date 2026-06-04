@@ -13,6 +13,7 @@ cwf run <workflow-id-or-path> --target <repo> [--background]
 cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
 cwf desktop check
 cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
+cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
 cwf status <run-id>
 cwf watch <run-id> [--interval <ms>] [--once]
 cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -475,6 +476,25 @@ Final sections:
 - Suggested Next Actions
 - Worker Summary
 - Artifacts
+
+## GitHub PR Output Contract
+
+`cwf github-pr <run-id> --format comment|review` converts a completed local run into PR-ready artifacts:
+
+```text
+artifacts/github-pr-comment.md
+artifacts/github-pr-review.json
+```
+
+Rules:
+
+- Without `--post`, the command only writes local artifacts and prints their paths.
+- With `--post`, callers must pass both `--repo <owner/repo>` and `--pr <number>`.
+- Posting uses the local `gh` CLI.
+- Comment format posts with `gh pr comment`.
+- Review format posts with `gh pr review --comment`.
+- Missing `gh`, auth failure, or command failure leaves local artifacts in place and returns a clear error.
+- Codex Flow never posts automatically after a workflow run.
 
 ## Artifact Manifest Contract
 

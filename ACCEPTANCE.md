@@ -116,6 +116,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Desktop result handoff is explicit and fallback-safe.
   - Evidence: `cwf desktop check`, `cwf desktop result <run-id> --print`, handoff artifacts, app-server fallback metadata, and tests proving no current-thread guessing.
 
+- [ ] GitHub PR artifacts are generated locally and posting is explicit.
+  - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.
@@ -135,6 +138,7 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - Ungated automatic code modification workflows.
 - Remote workflow marketplace.
 - Broad production write-capable workflow beyond gated documentation refresh.
+- Automatic GitHub posting.
 - Publishing to npm from this task.
 
 ## Stop Conditions

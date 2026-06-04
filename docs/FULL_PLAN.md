@@ -513,6 +513,9 @@ v1.4 status: the first write-capable pack is `doc-refresh`, a documentation-only
 - [ ] A reducer produces one actionable final answer.
   - Evidence: final result contains verdict, findings, evidence, verification gaps, next actions, worker provenance
 
+- [ ] A user can generate PR-ready local artifacts without posting.
+  - Evidence: `cwf github-pr <run-id> --format comment|review`
+
 - [ ] Public core remains Codex-native.
   - Evidence: dependency and source audit shows no third-party model routers or private adapters
 

@@ -35,6 +35,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Show readable status during long runs, including current work, worker progress, fallback count, and artifact paths.
 - Provide a live-refresh CLI view for background runs.
 - Let users list, show, and reopen the latest run without remembering run ids.
+- Generate GitHub PR-ready comment and review artifacts from completed local runs.
 - Rebuild discovery data from run folders when the local index is missing, stale, or corrupt.
 - Record default failure policy metadata and summarize failures in human-readable terms.
 - Persist standardized worker envelopes, a standardized reduced result envelope, and an artifact manifest for each completed run.
@@ -47,6 +48,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Run workflows by id or direct path.
 - Ship read-only example workflows for repo audit, implementation-plan review, research cross-check, and release review.
 - Ship one narrow gated documentation write workflow with pre-write preview, explicit approval, diff summary, rollback, and verification evidence.
+- Keep GitHub posting disabled by default and require explicit `--post --repo --pr` before invoking `gh`.
 - Document when to use and when not to use each bundled workflow.
 - Keep the public v1.0 core free of private adapters or third-party model routing.
 - Define the post-v1 native runtime bridge: coordinator thread, worker agent threads, result return, and Codex safety inheritance.
@@ -64,6 +66,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - No broad production write-capable workflow beyond gated documentation refresh.
 - No remote workflow marketplace.
 - No generated JavaScript workflows.
+- No automatic GitHub posting.
 - No exact parity with Claude Dynamic Workflows.
 - No mandatory Codex Desktop integration in v1.0.
 
@@ -92,6 +95,8 @@ Codex is strong in a single session, but complex engineering work benefits from 
 21. As a workflow author, I can describe worker roles while Codex Flow decides whether the current runtime uses SDK headless workers, app-server threads, or Codex subagents.
 22. As a cautious user, I can allow write-capable workflows only when they pass a workflow gate and then run through Codex's own sandbox, approval, and worktree/thread boundaries.
 23. As a documentation maintainer, I can run `doc-refresh`, review the dry-run artifacts, explicitly approve, and receive rollback plus verification evidence.
+24. As a maintainer, I can generate a PR-ready comment or review artifact without posting anything.
+25. As a maintainer, I can explicitly post with `--post --repo --pr`, and failures leave local artifacts behind.
 
 ## Success Criteria
 
@@ -136,6 +141,8 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - `cwf desktop check` reports whether the local Codex CLI, app-server schema, daemon, and required thread methods are available.
 - `cwf desktop result <run-id> --print` can return a completed run through a local prompt without Desktop.
 - `cwf desktop result <run-id> --new-thread` or `--thread <thread-id>` attempts explicit app-server result return and records fallback metadata if unavailable.
+- `cwf github-pr <run-id> --format comment|review` writes local PR artifacts without posting.
+- `cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>` is the only GitHub posting path and uses `gh`.
 
 ## Public Positioning
 

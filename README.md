@@ -92,6 +92,9 @@ cwf desktop result <run-id> --print
 cwf desktop result <run-id>
 cwf desktop result <run-id> --new-thread
 cwf desktop result <run-id> --thread <thread-id>
+cwf github-pr <run-id> --format comment
+cwf github-pr <run-id> --format review
+cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>
 ```
 
 Workflow discovery searches these local paths in order:
@@ -114,6 +117,8 @@ Gated workflows can pause before a risky or write-capable phase. `cwf status` an
 
 `cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. With an available Codex app-server daemon, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow never guesses the current thread from `thread/list`.
 
+`cwf github-pr <run-id>` turns a completed local run into PR-ready artifacts. Without `--post`, it only writes `artifacts/github-pr-comment.md` and `artifacts/github-pr-review.json`. Posting to GitHub requires explicit `--post --repo <owner/repo> --pr <number>` and uses the local `gh` CLI.
+
 Run artifacts are stored under:
 
 ```text
@@ -134,6 +139,8 @@ Run artifacts are stored under:
     diff-summary.md
     rollback.md
     verification.md
+    github-pr-comment.md
+    github-pr-review.json
     reduced-result.json
     manifest.json
   result.md
@@ -208,6 +215,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 
 - Bundled review workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
 - `doc-refresh` is the only bundled write-capable workflow. It is documentation-only, gated, reversible, and writes through Codex SDK `workspace-write` execution after explicit approval.
+- GitHub PR output is local by default. Nothing is posted unless `cwf github-pr` is run with explicit `--post --repo <owner/repo> --pr <number>`.
 - Reviews tracked git diffs; untracked file contents are not included.
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
@@ -243,6 +251,7 @@ The v1.0 release has been smoke-tested on:
 - workflow validation and human-readable status formatting
 - bundled workflow catalog and example workflow registry validation
 - gated doc-refresh preview, approve/resume, reject, rollback, and verification artifact coverage
+- GitHub PR comment/review artifact generation and mocked `gh` post success/failure
 - documented command surface and install/build/link flow
 
 For release preparation, use [Release checklist](docs/RELEASE_CHECKLIST.md).

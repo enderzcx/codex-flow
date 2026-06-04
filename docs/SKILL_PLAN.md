@@ -26,6 +26,7 @@ Use this skill when the user asks to:
 - coordinate multiple Codex workers
 - run a repeatable repo review
 - run a gated documentation refresh
+- generate GitHub PR-ready artifacts from a completed run
 - compare Codex workflow behavior with Claude Dynamic Workflows
 
 ## Non-Trigger Cases
@@ -59,6 +60,8 @@ cwf latest --target <repo>
 cwf show <run-id>
 cwf desktop check
 cwf desktop result <run-id> --print
+cwf github-pr <run-id> --format comment
+cwf github-pr <run-id> --format review
 cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id> --reason <text>
 cwf resume <run-id>
@@ -94,6 +97,8 @@ During running:
 - inspect `artifacts/reduced-result.json` for machine-readable verdict, worker provenance, verification gaps, and degraded status
 - inspect `artifacts/manifest.json` when you need to reconstruct the run evidence
 - inspect `events.jsonl` when status looks stale
+- use `cwf github-pr <run-id> --format comment|review` when a PR-ready artifact is needed
+- use `cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>` only when the user explicitly asks to post
 - cancel only when the user asks or when the run clearly cannot complete
 
 When the run id is unknown:
@@ -142,13 +147,13 @@ The skill should ask Codex to report:
 - package/version when release readiness matters
 - release smoke status when release readiness matters: `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`
 - desktop handoff path and app-server fallback status when result return matters
+- GitHub PR artifact paths and whether anything was posted when PR output matters
 
 ## Future Skill Expansions
 
 Only after v1.0 release readiness is stable:
 
 - live worker agent thread integration when app-server/subagent execution is exposed
-- GitHub PR review output
 - migration plan workflow
 - generated workflow spec suggestions
 

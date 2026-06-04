@@ -44,6 +44,7 @@ Codex Flow 1.0.0 intentionally does not include:
 - remote workflow marketplace
 - generated JavaScript workflow execution
 - broad production write-capable workflows beyond gated documentation refresh
+- automatic GitHub posting
 - deployment automation
 - full Codex Desktop task-panel parity
 

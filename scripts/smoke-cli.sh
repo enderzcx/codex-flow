@@ -33,4 +33,37 @@ if node dist/cli.js validate fixtures/workflows/write-without-gate.yaml >/tmp/cw
 fi
 grep -q "writes:true" /tmp/cwf-write-without-gate.txt
 
+echo "==> github-pr artifact smoke"
+tmp_target=$(mktemp -d /tmp/cwf-gh-target-XXXXXX)
+mkdir -p "$tmp_target/src"
+printf 'export const ok = true;\n' > "$tmp_target/src/app.js"
+run_id=$(TARGET="$tmp_target" node --input-type=module <<'NODE'
+import { RunStore } from "./dist/run-store.js";
+const spec = {
+  id: "diff-review",
+  version: "1.0.0",
+  title: "Diff Review",
+  tags: ["review", "read-only"],
+  inputs: { target: { type: "path", required: true } },
+  capabilities: { writes: false },
+  requires: { target: "git-repo" },
+  defaults: { sandbox: "read-only", timeout_ms: 300000 },
+  phases: [
+    { id: "collect", kind: "command" },
+    { id: "review", kind: "codex-parallel", workers: [{ id: "correctness", perspective: "correctness", prompt: "review" }] },
+    { id: "reduce", kind: "reducer", reducer: "diff-review" },
+  ],
+  artifacts: ["result.md"],
+};
+const store = await RunStore.create(spec, process.env.TARGET);
+await store.writeResult("# Review\n\nSmoke result.\n");
+console.log(store.runId);
+NODE
+)
+node dist/cli.js github-pr "$run_id" --format comment
+node dist/cli.js github-pr "$run_id" --format review
+test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-comment.md"
+test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-review.json"
+rm -rf "$tmp_target" "$HOME/.codex-workflows/runs/$run_id"
+
 echo "cwf CLI smoke passed without live Codex worker calls."
