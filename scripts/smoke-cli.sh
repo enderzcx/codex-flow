@@ -23,6 +23,7 @@ node dist/cli.js workflows validate
 echo "==> workflow validation smoke"
 node dist/cli.js validate workflows/diff-review.yaml
 node dist/cli.js validate fixtures/workflows/gated-diff-review.yaml
+node dist/cli.js validate fixtures/workflows/gated-doc-refresh.yaml
 
 echo "==> write-gate validation smoke"
 if node dist/cli.js validate fixtures/workflows/write-without-gate.yaml >/tmp/cwf-write-without-gate.txt 2>&1; then

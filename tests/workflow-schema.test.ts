@@ -55,12 +55,32 @@ describe("validateWorkflowSpec", () => {
     expect(() =>
       validateWorkflowSpec({
         ...validSpec,
+        capabilities: { writes: true },
         phases: [{ id: "collect", kind: "command", writes: true }, ...validSpec.phases.slice(1)],
       }),
     ).toThrow("phase collect has writes:true but no prior gate phase");
   });
 
   it("accepts writes:true after a gate", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        capabilities: { writes: true },
+        phases: [
+          { id: "collect", kind: "command" },
+          { id: "approve-write", kind: "gate", prompt: "Approve write-capable phase.", requires_approval: true },
+          {
+            id: "review",
+            kind: "codex-parallel",
+            workers: [{ id: "correctness", perspective: "correctness", prompt: "review correctness", writes: true }],
+          },
+          { id: "reduce", kind: "reducer", reducer: "diff-review" },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects writes:true when workflow capabilities claim read-only", () => {
     expect(() =>
       validateWorkflowSpec({
         ...validSpec,
@@ -75,7 +95,55 @@ describe("validateWorkflowSpec", () => {
           { id: "reduce", kind: "reducer", reducer: "diff-review" },
         ],
       }),
-    ).not.toThrow();
+    ).toThrow("capabilities.writes must be true");
+  });
+
+  it("accepts a gated Codex write phase", () => {
+    const spec = validateWorkflowSpec({
+      ...validSpec,
+      capabilities: { writes: true },
+      phases: [
+        { id: "collect", kind: "command" },
+        { id: "preview-write", kind: "write-preview", prompt: "Preview docs write." },
+        { id: "approve-write", kind: "gate", prompt: "Approve docs write.", requires_approval: true },
+        {
+          id: "review",
+          kind: "codex-write",
+          writes: true,
+          worker: {
+            id: "doc-refresh",
+            perspective: "documentation write",
+            prompt: "Update docs only.",
+          },
+        },
+        { id: "reduce", kind: "reducer", reducer: "diff-review" },
+      ],
+    });
+
+    expect(spec.phases.map((phase) => phase.kind)).toEqual(["command", "write-preview", "gate", "codex-write", "reducer"]);
+  });
+
+  it("rejects a Codex write phase before a gate", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        capabilities: { writes: true },
+        phases: [
+          { id: "collect", kind: "command" },
+          {
+            id: "review",
+            kind: "codex-write",
+            writes: true,
+            worker: {
+              id: "doc-refresh",
+              perspective: "documentation write",
+              prompt: "Update docs only.",
+            },
+          },
+          { id: "reduce", kind: "reducer", reducer: "diff-review" },
+        ],
+      }),
+    ).toThrow("phase review has writes:true but no prior gate phase");
   });
 
   it("accepts public Codex worker runtime adapter preferences", () => {

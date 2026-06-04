@@ -19,7 +19,7 @@ The full product is not "Claude Dynamic Workflows, copied line by line." It shou
 - unsafe steps can pause for approval
 - a reducer turns worker output into one actionable result
 
-The important phrase is **thin workflow layer**. Codex Flow owns the repeatable workflow contract and evidence trail, while Codex owns threads, subagents, sandbox, approvals, permissions, and worktrees.
+The important phrase is **thin workflow layer**. Codex Flow owns the repeatable workflow contract, gates, and evidence trail, while Codex owns threads, subagents, sandbox, permissions, and worktrees.
 
 ## What "Dynamic" Means
 
@@ -461,6 +461,8 @@ These are valuable but not core v1.0:
 
 Detailed post-v1 PRDs, specs, acceptance criteria, and goal prompts live in [POST_V1_PLAN.md](POST_V1_PLAN.md).
 
+v1.4 status: the first write-capable pack is `doc-refresh`, a documentation-only workflow that writes preview artifacts, pauses at a gate, then uses Codex SDK `workspace-write` after explicit approval.
+
 ## Product Rules
 
 ### Do
@@ -505,6 +507,9 @@ Detailed post-v1 PRDs, specs, acceptance criteria, and goal prompts live in [POS
 - [ ] A user can pause and resume gated work.
   - Evidence: gate fixture approve/reject/resume smoke
 
+- [ ] A user can run a narrow gated documentation write workflow.
+  - Evidence: `doc-refresh` preview/approve/reject fixture smoke and artifact manifest entries
+
 - [ ] A reducer produces one actionable final answer.
   - Evidence: final result contains verdict, findings, evidence, verification gaps, next actions, worker provenance
 
@@ -519,7 +524,7 @@ The next useful implementation slice is the native runtime bridge:
 2. Add app-server coordinator thread creation and result return.
 3. Record native runtime metadata in artifacts.
 4. Then map workers to native agent threads/subagents.
-5. Only after that, add write-capable workflows behind Codex-native gates.
+5. Continue expanding write-capable workflows only behind Codex-native gates.
 
 Exact v1.x numbering lives in [POST_V1_PLAN.md](POST_V1_PLAN.md).
 

@@ -47,7 +47,11 @@ export class RunStore {
       failure_policy: DEFAULT_FAILURE_POLICY,
       phases: spec.phases.map<PhaseState>((phase) => ({ id: phase.id, status: "pending" })),
       workers: spec.phases.flatMap<WorkerState>((phase) =>
-        phase.kind === "codex-parallel" ? phase.workers.map((worker) => ({ id: worker.id, status: "pending" })) : [],
+        phase.kind === "codex-parallel"
+          ? phase.workers.map((worker) => ({ id: worker.id, status: "pending" }))
+          : phase.kind === "codex-write"
+            ? [{ id: phase.worker.id, status: "pending" }]
+            : [],
       ),
       gate_decisions: [],
       created_at: now,

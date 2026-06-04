@@ -23,12 +23,16 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
 
   const phasesRaw = expectArray(spec.phases, "phases");
   const phases = phasesRaw.map((phase, index) => validatePhase(phase, `phases[${index}]`));
+  validateWriteCapabilities(capabilities, phases);
   validateWriteGates(phases);
   const phaseIds = phases.map((phase) => phase.id);
-  for (const required of ["collect", "review", "reduce"]) {
+  for (const required of ["collect", "reduce"]) {
     if (!phaseIds.includes(required)) {
       throw new Error(`phases must include ${required}`);
     }
+  }
+  if (!phases.some((phase) => phase.kind === "codex-parallel" || phase.kind === "codex-write")) {
+    throw new Error("phases must include a codex-parallel or codex-write phase");
   }
 
   const artifacts = expectArray(spec.artifacts, "artifacts").map((artifact, index) =>
@@ -110,6 +114,10 @@ function validatePhase(value: unknown, path: string): WorkflowPhase {
     return { id, kind, writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
   }
 
+  if (kind === "write-preview") {
+    return { id, kind, prompt: expectString(phase.prompt, `${path}.prompt`) };
+  }
+
   if (kind === "codex-parallel") {
     const workers = expectArray(phase.workers, `${path}.workers`).map((worker, index) => {
       const workerRecord = asRecord(worker, `${path}.workers[${index}]`);
@@ -124,6 +132,21 @@ function validatePhase(value: unknown, path: string): WorkflowPhase {
       throw new Error(`${path}.workers must not be empty`);
     }
     return { id, kind, workers, writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
+  }
+
+  if (kind === "codex-write") {
+    const workerRecord = asRecord(phase.worker, `${path}.worker`);
+    return {
+      id,
+      kind,
+      writes: true,
+      worker: {
+        id: expectString(workerRecord.id, `${path}.worker.id`),
+        perspective: expectString(workerRecord.perspective, `${path}.worker.perspective`),
+        prompt: expectString(workerRecord.prompt, `${path}.worker.prompt`),
+        writes: true,
+      },
+    };
   }
 
   if (kind === "gate") {
@@ -145,7 +168,7 @@ function validatePhase(value: unknown, path: string): WorkflowPhase {
     return { id, kind, reducer: "diff-review", writes: expectOptionalBoolean(phase.writes, `${path}.writes`) };
   }
 
-  throw new Error(`${path}.kind must be command, codex-parallel, gate, or reducer`);
+  throw new Error(`${path}.kind must be command, write-preview, codex-parallel, codex-write, gate, or reducer`);
 }
 
 function validateWriteGates(phases: WorkflowPhase[]): void {
@@ -157,10 +180,25 @@ function validateWriteGates(phases: WorkflowPhase[]): void {
     }
     const phaseWrites = "writes" in phase && phase.writes === true;
     const workerWrites = phase.kind === "codex-parallel" && phase.workers.some((worker) => worker.writes === true);
-    if ((phaseWrites || workerWrites) && !hasPriorGate) {
+    const codexWrite = phase.kind === "codex-write";
+    if ((phaseWrites || workerWrites || codexWrite) && !hasPriorGate) {
       throw new Error(`phase ${phase.id} has writes:true but no prior gate phase`);
     }
   }
+}
+
+function validateWriteCapabilities(capabilities: WorkflowCapabilities, phases: WorkflowPhase[]): void {
+  if (hasWritePhase(phases) && !capabilities.writes) {
+    throw new Error("capabilities.writes must be true when any phase or worker declares writes:true");
+  }
+}
+
+function hasWritePhase(phases: WorkflowPhase[]): boolean {
+  return phases.some((phase) => {
+    const phaseWrites = "writes" in phase && phase.writes === true;
+    const workerWrites = phase.kind === "codex-parallel" && phase.workers.some((worker) => worker.writes === true);
+    return phaseWrites || workerWrites || phase.kind === "codex-write";
+  });
 }
 
 function asRecord(value: unknown, path: string): Record<string, unknown> {

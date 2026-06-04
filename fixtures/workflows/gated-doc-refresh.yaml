@@ -1,0 +1,48 @@
+id: doc-refresh
+version: 1.4.0-fixture
+title: Gated Doc Refresh Fixture
+description: Fixture workflow that pauses before a documentation-only write phase.
+tags:
+  - write-capable
+  - docs
+  - gated
+  - fixture
+capabilities:
+  writes: true
+inputs:
+  target:
+    type: path
+    required: true
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+  - id: preview-write
+    kind: write-preview
+    prompt: Prepare fixture documentation refresh.
+  - id: approve-write
+    kind: gate
+    prompt: Approve fixture documentation write.
+    requires_approval: true
+  - id: review
+    kind: codex-write
+    writes: true
+    worker:
+      id: doc-refresh
+      perspective: documentation write
+      prompt: Create docs/codex-flow-v14-fixture.md with a short fixture note.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - artifacts/write-plan.md
+  - artifacts/dry-run-preview.md
+  - artifacts/diff-summary.md
+  - artifacts/rollback.md
+  - artifacts/verification.md
+  - workers/doc-refresh.json
+  - result.md

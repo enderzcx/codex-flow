@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
-import { executeWorkflow, type WorkerRunner } from "../src/phase-engine.js";
+import { executeWorkflow, type WorkerRunner, type WriteRunner } from "../src/phase-engine.js";
 import { RunStore } from "../src/run-store.js";
 import type { ArtifactManifest, WorkflowSpec } from "../src/types.js";
 
@@ -226,6 +226,143 @@ describe("executeWorkflow", () => {
     ]);
     expect(events).toContain("gate.rejected");
   });
+
+  it("pauses a write-capable workflow after producing preview artifacts", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createGatedWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+      target,
+      store,
+    });
+
+    const state = await store.readState();
+    const writePlan = await readFile(join(store.runDir, "artifacts", "write-plan.md"), "utf8");
+    const preview = await readFile(join(store.runDir, "artifacts", "dry-run-preview.md"), "utf8");
+    const status = await gitOutput(target, ["status", "--short"]);
+
+    expect(state.status).toBe("waiting");
+    expect(state.phases.map((phase) => [phase.id, phase.status])).toEqual([
+      ["collect", "completed"],
+      ["preview-write", "completed"],
+      ["approve-write", "waiting"],
+      ["review", "pending"],
+      ["reduce", "pending"],
+    ]);
+    expect(writePlan).toContain("This preview phase does not modify target files.");
+    expect(preview).toContain("No target files were modified by this preview.");
+    expect(status).not.toContain("docs/codex-flow-v14-fixture.md");
+  });
+
+  it("approves and resumes a write-capable workflow with rollback evidence", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createGatedWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+      target,
+      store,
+      resume: true,
+      writeRunner: fixtureWriteRunner,
+    });
+
+    const state = await store.readState();
+    const writtenDoc = await readFile(join(target, "docs", "codex-flow-v14-fixture.md"), "utf8");
+    const manifest = JSON.parse(await readFile(join(store.runDir, "artifacts", "manifest.json"), "utf8")) as ArtifactManifest;
+    const worker = await readFile(join(store.runDir, "workers", "doc-refresh.json"), "utf8");
+    const rollback = await readFile(join(store.runDir, "artifacts", "rollback.md"), "utf8");
+    const verification = await readFile(join(store.runDir, "artifacts", "verification.md"), "utf8");
+
+    expect(state.status).toBe("completed");
+    expect(writtenDoc).toContain("Codex Flow v1.4 fixture");
+    expect(worker).toContain('"sandbox": "workspace-write"');
+    expect(worker).toContain('"approval_policy": "never"');
+    expect(rollback).toContain("git restore <changed-file>");
+    expect(verification).toContain("test -f docs/codex-flow-v14-fixture.md");
+    expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual(
+      expect.arrayContaining(["write-plan", "dry-run-preview", "diff-summary", "rollback", "verification", "worker:doc-refresh"]),
+    );
+  });
+
+  it("rejects a write-capable workflow before target writes", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createGatedWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+      target,
+      store,
+    });
+    await store.rejectGate("approve-write", "skip write");
+
+    await expect(
+      executeWorkflow({
+        spec: writeSpec,
+        specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+        target,
+        store,
+        resume: true,
+        writeRunner: fixtureWriteRunner,
+      }),
+    ).rejects.toThrow("was rejected and cannot be resumed");
+
+    const state = await store.readState();
+    const status = await gitOutput(target, ["status", "--short"]);
+
+    expect(state.status).toBe("rejected");
+    expect(status).not.toContain("docs/codex-flow-v14-fixture.md");
+  });
+
+  it("fails a write-capable workflow if the target diff changed after preview", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createGatedWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+    await writeFile(join(target, "src", "calc.js"), "export const answer = 99;\n");
+
+    await expect(
+      executeWorkflow({
+        spec: writeSpec,
+        specPath: "fixtures/workflows/gated-doc-refresh.yaml",
+        target,
+        store,
+        resume: true,
+        writeRunner: fixtureWriteRunner,
+      }),
+    ).rejects.toThrow("Target repo diff changed after write preview");
+
+    const status = await gitOutput(target, ["status", "--short"]);
+    expect(status).not.toContain("docs/codex-flow-v14-fixture.md");
+  });
 });
 
 async function createGitRepoWithDiff(): Promise<string> {
@@ -247,6 +384,11 @@ async function git(cwd: string, args: string[]): Promise<void> {
   await execFileAsync("git", args, { cwd });
 }
 
+async function gitOutput(cwd: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd });
+  return stdout;
+}
+
 function createGatedSpec(): WorkflowSpec {
   return {
     ...spec,
@@ -256,6 +398,39 @@ function createGatedSpec(): WorkflowSpec {
       { id: "approve-review", kind: "gate", prompt: "Review the collected diff before continuing.", requires_approval: true },
       ...spec.phases.slice(1),
     ],
+  };
+}
+
+function createGatedWriteSpec(): WorkflowSpec {
+  return {
+    id: "doc-refresh",
+    version: "1.4.0-fixture",
+    title: "Gated Doc Refresh Fixture",
+    tags: ["write-capable", "fixture"],
+    inputs: {
+      target: { type: "path", required: true },
+    },
+    capabilities: { writes: true },
+    requires: { target: "git-repo" },
+    defaults: { sandbox: "read-only", timeout_ms: 300000 },
+    phases: [
+      { id: "collect", kind: "command" },
+      { id: "preview-write", kind: "write-preview", prompt: "Prepare fixture documentation refresh." },
+      { id: "approve-write", kind: "gate", prompt: "Approve fixture documentation write.", requires_approval: true },
+      {
+        id: "review",
+        kind: "codex-write",
+        writes: true,
+        worker: {
+          id: "doc-refresh",
+          perspective: "documentation write",
+          prompt: "Create docs/codex-flow-v14-fixture.md with a short fixture note.",
+          writes: true,
+        },
+      },
+      { id: "reduce", kind: "reducer", reducer: "diff-review" },
+    ],
+    artifacts: ["result.md"],
   };
 }
 
@@ -282,3 +457,40 @@ const successfulRunner: WorkerRunner = async (worker) => ({
   raw_fallback: false,
   retry_count: 0,
 });
+
+const fixtureWriteRunner: WriteRunner = async (worker, _context, options) => {
+  await mkdir(join(options.target, "docs"), { recursive: true });
+  await writeFile(join(options.target, "docs", "codex-flow-v14-fixture.md"), "# Codex Flow v1.4 fixture\n\nApproved write smoke.\n");
+  return {
+    worker_id: worker.id,
+    status: "completed",
+    confidence: "high",
+    summary: "fixture write completed",
+    findings: [],
+    verification: ["test -f docs/codex-flow-v14-fixture.md"],
+    artifacts: ["docs/codex-flow-v14-fixture.md"],
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:00:01.000Z",
+    duration_ms: 1000,
+    prompt: `mock write ${worker.id}`,
+    raw: JSON.stringify({
+      worker_id: worker.id,
+      summary: "fixture write completed",
+      findings: [],
+      verification: ["test -f docs/codex-flow-v14-fixture.md"],
+      artifacts: ["docs/codex-flow-v14-fixture.md"],
+      confidence: "high",
+    }),
+    raw_fallback: false,
+    retry_count: 0,
+    runtime: {
+      adapter: "codex-sdk-headless",
+      fallback_used: false,
+      agent_role: worker.perspective,
+      transcript_read: false,
+      sandbox: "workspace-write",
+      approval_policy: "never",
+      worktree_path: options.target,
+    },
+  };
+};

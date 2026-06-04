@@ -14,9 +14,20 @@ export type WorkflowPhase =
     }
   | {
       id: string;
+      kind: "write-preview";
+      prompt: string;
+    }
+  | {
+      id: string;
       kind: "codex-parallel";
       workers: WorkflowWorker[];
       writes?: boolean;
+    }
+  | {
+      id: string;
+      kind: "codex-write";
+      worker: WorkflowWorker;
+      writes: true;
     }
   | {
       id: string;
@@ -250,6 +261,7 @@ export type WorkerRuntimeMetadata = {
   transcript_read: boolean;
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   approval_policy?: "never" | "on-request" | "on-failure" | "untrusted";
+  worktree_path?: string;
 };
 
 export type ReducedFinding = Finding & {

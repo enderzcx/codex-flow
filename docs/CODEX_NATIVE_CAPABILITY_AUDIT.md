@@ -24,7 +24,7 @@ Plain Chinese summary:
 | Visible left-sidebar work | App Server `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`; generated schema includes `thread/started` and `thread/status/changed` notifications | Official manual plus local `codex app-server generate-ts --experimental`; read-only `thread/list` smoke passed | Build an app-server coordinator-thread adapter instead of inventing a sidebar/task UI |
 | Result back into Codex | App Server can start/steer turns and inject items into a known thread with `thread/inject_items`; Codex skill calls can also read `cwf result` and answer in the current conversation | Generated schema includes `thread/inject_items`; current session can return CLI output through normal Codex response | Support both: structured CLI result for skill return, and explicit app-server post to a known thread id |
 | Parallel subagents | Codex subagents are enabled by default, surfaced in Codex app and CLI, and inherit sandbox/approval controls | Official Subagents manual; current tool surface exposes `spawn_agent`, `wait_agent`, `send_input`, `close_agent` | Prefer Codex subagents/threads for future worker execution instead of only SDK headless workers |
-| Code/file edits | Codex App, CLI, SDK, and app-server support workspace-write/full-access sandbox modes, approval policy, permissions profiles, worktrees, file-change events, and diff updates | Official approvals/sandbox/app-server schema; schema includes file-change notifications and sandbox/permissions params | Write-capable workflows must run as Codex threads/worktrees with approvals, not as raw `fs.writeFile` workflow steps |
+| Code/file edits | Codex App, CLI, SDK, and app-server support workspace-write/full-access sandbox modes, approval policy, permissions profiles, worktrees, file-change events, and diff updates | Official approvals/sandbox/app-server schema; schema includes file-change notifications and sandbox/permissions params | Write-capable workflows must run as Codex threads/worktrees after a CWF approval gate, not as raw `fs.writeFile` workflow steps |
 | Workflow source | Codex skills are repo/user/admin/system scoped; plugins distribute skills and integrations | Official Skills/Plugins manual | Keep built-in YAML workflows, support user workflows, and later package Codex Flow as a Codex skill/plugin |
 | Safety boundary | Codex sandbox, permissions profiles, approval policy, auto-review, protected paths, network policy, and subagent inheritance | Official security and permissions docs | Reuse Codex safety controls; Codex Flow adds spec validation/gates but does not replace the sandbox |
 | Git review | App Server exposes `review/start` with `delivery: "inline"` or `"detached"` and returns `reviewThreadId` | Generated local schema | Use detached native review threads where a workflow is really just Codex review |
@@ -35,7 +35,7 @@ Codex Flow v1.2 still uses `@openai/codex-sdk` to start read-only SDK threads fo
 
 - worker activity is not guaranteed to appear as left-sidebar Codex App threads;
 - result return is explicit handoff or app-server attempt based, not implicit current-conversation detection;
-- write workflows are intentionally blocked and cannot yet reuse Codex worktree/thread safety.
+- broad write workflows remain blocked; v1.4 enables only gated docs refresh through Codex SDK `workspace-write`.
 
 So the next integrations should stay additive:
 
@@ -97,7 +97,7 @@ Write workflows must follow the subagent safety shape:
 - workflow spec declares `capabilities.writes: true`;
 - a gate appears before any write phase;
 - write phase runs in a Codex thread or worktree with `workspace-write` or a named permissions profile;
-- approval policy comes from Codex, not a custom bypass;
+- CWF gate approval happens before the SDK write phase; future interactive native writers may also use per-action Codex approval;
 - final artifact includes diff summary, changed files, tests run, and rollback note;
 - no credentials, production deploy, database mutation, or irreversible external write in the public default pack.
 
@@ -116,7 +116,7 @@ User-created workflows must be YAML/JSON specs that pass validation before execu
 
 - Do not create a separate Desktop UI.
 - Do not clone the Codex subagent scheduler.
-- Do not bypass Codex approvals or sandboxing.
+- Do not bypass CWF gates or Codex sandboxing.
 - Do not silently post into arbitrary Codex threads.
 - Do not make CLI-only usage depend on Codex Desktop.
 

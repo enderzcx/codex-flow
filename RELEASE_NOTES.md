@@ -43,7 +43,7 @@ Codex Flow 1.0.0 intentionally does not include:
 - private adapters
 - remote workflow marketplace
 - generated JavaScript workflow execution
-- production write-capable workflows
+- broad production write-capable workflows beyond gated documentation refresh
 - deployment automation
 - full Codex Desktop task-panel parity
 

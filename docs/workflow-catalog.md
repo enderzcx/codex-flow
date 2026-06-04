@@ -1,8 +1,8 @@
 # Codex Flow Workflow Catalog
 
-This catalog covers the public read-only workflows bundled with Codex Flow v1.0.
+This catalog covers the public workflows bundled with Codex Flow.
 
-All bundled workflows:
+Bundled review workflows:
 
 - use only Codex SDK workers
 - run through the local workflow registry
@@ -11,6 +11,8 @@ All bundled workflows:
 - use the shared reduced result envelope
 - preserve worker provenance, verification gaps, and artifact references
 - write no files in the target repo
+
+The `doc-refresh` workflow is the exception: it is write-capable, documentation-only, gated, and requires preview artifacts plus explicit approval before its Codex write phase.
 
 ## diff-review
 
@@ -122,6 +124,31 @@ Run:
 cwf run release-review --target <repo>
 ```
 
+## doc-refresh
+
+Run a gated documentation-only write workflow.
+
+Use when:
+
+- you want Codex to refresh Markdown/text documentation
+- the change is reversible and can be reviewed in git diff
+- you want pre-write preview, explicit approval, diff summary, rollback, and verification artifacts
+
+Do not use when:
+
+- the task touches source code, credentials, databases, deployments, payment, permissions, or irreversible external systems
+- you want an ungated automatic edit
+- you need a broad multi-file implementation workflow
+
+Run:
+
+```bash
+cwf run doc-refresh --target <repo>
+cwf status <run-id>
+cwf approve <run-id> approve-write
+cwf resume <run-id>
+```
+
 ## Choosing Quickly
 
-Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, and `release-review` for ship readiness.
+Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, and `doc-refresh` only for gated documentation writes.

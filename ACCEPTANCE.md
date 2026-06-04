@@ -26,8 +26,8 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Workflows can run by id or direct path.
   - Evidence: `cwf run diff-review --target <fixture-or-real-repo>` and `cwf run workflows/diff-review.yaml --target <fixture-or-real-repo>`.
 
-- [ ] Bundled example workflows are discoverable and read-only.
-  - Evidence: `cwf workflows list` includes `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`; specs have `capabilities.writes: false`.
+- [ ] Bundled workflows are discoverable and capability-scoped.
+  - Evidence: `cwf workflows list` includes `repo-audit`, `implementation-plan`, `research-crosscheck`, `release-review`, and `doc-refresh`; review specs have `capabilities.writes: false`, while `doc-refresh` has `capabilities.writes: true` plus a gate before writes.
 
 - [ ] Workflow catalog explains when to use and when not to use each bundled workflow.
   - Evidence: `docs/workflow-catalog.md` includes entries for all bundled workflows.
@@ -67,6 +67,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 
 - [ ] Write-capable workflow specs require a prior gate.
   - Evidence: `cwf validate fixtures/workflows/write-without-gate.yaml` fails with a `writes:true` gate error.
+
+- [ ] Gated write-capable documentation workflow has preview, approval, rollback, and verification evidence.
+  - Evidence: `doc-refresh` fixture tests cover preview artifacts, approve/resume writing scoped docs, reject writing nothing, worker sandbox metadata, diff summary, rollback, verification, and manifest entries.
 
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
@@ -129,9 +132,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - Auto-trigger from the word `workflow`.
 - Generated JavaScript workflow scripts.
 - Non-Codex model adapters.
-- Automatic code modification workflows.
+- Ungated automatic code modification workflows.
 - Remote workflow marketplace.
-- Production write-capable workflow.
+- Broad production write-capable workflow beyond gated documentation refresh.
 - Publishing to npm from this task.
 
 ## Stop Conditions

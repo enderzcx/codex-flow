@@ -25,6 +25,7 @@ Use this skill when the user asks to:
 - audit a branch or PR-like diff
 - coordinate multiple Codex workers
 - run a repeatable repo review
+- run a gated documentation refresh
 - compare Codex workflow behavior with Claude Dynamic Workflows
 
 ## Non-Trigger Cases
@@ -45,12 +46,14 @@ cwf validate workflows/diff-review.yaml
 cwf workflows list
 cwf workflows show diff-review
 cwf workflows show repo-audit
+cwf workflows show doc-refresh
 cwf workflows validate
 cwf run diff-review --target <repo> --background
 cwf run repo-audit --target <repo> --background
 cwf run implementation-plan --target <repo> --background
 cwf run research-crosscheck --target <repo> --background
 cwf run release-review --target <repo> --background
+cwf run doc-refresh --target <repo>
 cwf status <run-id>
 cwf latest --target <repo>
 cwf show <run-id>
@@ -77,6 +80,7 @@ Before running:
 - run `cwf workflows validate` or `cwf validate <workflow-id-or-path>` before starting workers
 - prefer workflow ids like `diff-review` when the registry can resolve them
 - choose from `docs/workflow-catalog.md` when the user asks for audit, planning, research, or release review
+- choose `doc-refresh` only for documentation-only writes after the user accepts a gate
 - prefer background mode for large diffs
 
 During running:
@@ -84,6 +88,7 @@ During running:
 - use `cwf status <run-id>` instead of waiting blindly
 - read the `Now:` line first; it is the plain-language summary of current work
 - if status is `waiting`, use the printed approve/reject commands; do not edit `state.json`
+- for `doc-refresh`, inspect `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approving
 - after approval, use `cwf resume <run-id>` so completed phases are skipped
 - check fallback count before trusting structured findings blindly
 - inspect `artifacts/reduced-result.json` for machine-readable verdict, worker provenance, verification gaps, and degraded status
@@ -113,6 +118,7 @@ After running:
 - mention worker runtime adapter/fallback metadata when native worker mode was requested
 - mention failure summary and next step for failed runs
 - mention gate decisions for waiting/approved/rejected runs
+- for write-capable runs, mention write plan, dry-run preview, diff summary, rollback, verification, and changed files
 - verify the target diff hash did not change when read-only review was expected
 
 ## Completion Evidence
@@ -130,6 +136,7 @@ The skill should ask Codex to report:
 - worker runtime adapter, requested adapter, fallback status, and transcript-read status when native worker mode was requested
 - failure policy and summary when status is `failed`
 - gate id, gate status, and decision reason when relevant
+- write artifact paths and rollback note when `capabilities.writes` is true
 - whether the target diff changed
 - short human summary of what the run did, not only raw artifact paths
 - package/version when release readiness matters

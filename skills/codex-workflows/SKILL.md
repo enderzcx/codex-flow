@@ -1,7 +1,7 @@
 ---
 name: codex-workflows
-description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks.
-when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, compare Codex workflow behavior to Claude Dynamic Workflows"
+description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks, including gated documentation refresh.
+when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, gated documentation refresh, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
   version: "1.0.0"
 ---
@@ -29,19 +29,21 @@ This public skill is Codex-native:
 
 ## Current Workflows
 
-The bundled workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`.
+The bundled review workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`. The bundled write-capable workflow is `doc-refresh`, which is documentation-only and must pause at a gate before writing.
 
 ```bash
 cwf validate workflows/diff-review.yaml
 cwf workflows list
 cwf workflows show diff-review
 cwf workflows show repo-audit
+cwf workflows show doc-refresh
 cwf workflows validate
 cwf run diff-review --target <repo>
 cwf run repo-audit --target <repo>
 cwf run implementation-plan --target <repo>
 cwf run research-crosscheck --target <repo>
 cwf run release-review --target <repo>
+cwf run doc-refresh --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 cwf run workflows/diff-review.yaml --target <repo> --background
 cwf status <run-id>
@@ -56,9 +58,9 @@ cwf result <run-id>
 cwf cancel <run-id>
 ```
 
-All bundled workflows are read-only by default. They review a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result.
+Bundled workflows are read-only by default. Review workflows inspect a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result. `doc-refresh` is the narrow exception: it creates pre-write artifacts, waits for explicit approval, then runs a Codex SDK `workspace-write` thread for documentation-only edits.
 
-Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, and `release-review` for ship readiness.
+Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, and `doc-refresh` only for gated documentation writes.
 
 Prefer `cwf run diff-review --target <repo>` when the local workflow registry can resolve it. Direct path usage remains supported with `cwf run workflows/diff-review.yaml --target <repo>`.
 
@@ -71,6 +73,8 @@ Completed runs include `artifacts/reduced-result.json` and `artifacts/manifest.j
 If the run id is unknown, use `cwf latest --target <repo>` or `cwf list`. Discovery uses `~/.codex-workflows/index.json`, and the CLI rebuilds it from run folders when the index is missing, stale, or corrupt.
 
 If status is `waiting`, read the printed gate line and use `cwf approve` or `cwf reject`. After approval, use `cwf resume`; do not manually edit state. Completed phases are skipped on resume and gate decisions are saved in `state.json` plus `events.jsonl`.
+
+For `doc-refresh`, inspect `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approving. After resume, report `artifacts/diff-summary.md`, `artifacts/verification.md`, `workers/doc-refresh.json`, and the rollback note.
 
 For failed runs, read the failure summary in `cwf status` or `cwf show` before opening raw JSON. It names the failed phase, failed workers when known, the default failure policy, and the next artifact or connectivity check.
 

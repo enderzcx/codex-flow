@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The v1.0 public pack ships read-only CLI workflows that start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 also ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval.
 
 The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
@@ -21,6 +21,7 @@ The default catalog includes:
 - `implementation-plan`: scope, sequencing, and verification review for plan or implementation diffs
 - `research-crosscheck`: source fidelity and unsupported-claim review for research or documentation diffs
 - `release-review`: ship readiness, rollout, rollback, and regression review
+- `doc-refresh`: gated documentation-only write workflow with dry-run preview, approval, diff summary, rollback, and verification artifacts
 
 The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
 
@@ -63,6 +64,7 @@ cwf run repo-audit --target <repo>
 cwf run implementation-plan --target <repo>
 cwf run research-crosscheck --target <repo>
 cwf run release-review --target <repo>
+cwf run doc-refresh --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 ```
 
@@ -108,7 +110,7 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 `cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
 
-Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. This is a safety primitive only; the public package ships read-only workflows and no production write-capable workflow.
+Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. The bundled `doc-refresh` workflow uses this path: it writes `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approval, then runs its write phase through a Codex SDK `workspace-write` thread only after approval.
 
 `cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. With an available Codex app-server daemon, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow never guesses the current thread from `thread/list`.
 
@@ -127,6 +129,11 @@ Run artifacts are stored under:
     tests.json
     safety.json
   artifacts/
+    write-plan.md
+    dry-run-preview.md
+    diff-summary.md
+    rollback.md
+    verification.md
     reduced-result.json
     manifest.json
   result.md
@@ -199,15 +206,16 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 
 ## Current Limitations
 
-- Bundled workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
+- Bundled review workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
+- `doc-refresh` is the only bundled write-capable workflow. It is documentation-only, gated, reversible, and writes through Codex SDK `workspace-write` execution after explicit approval.
 - Reviews tracked git diffs; untracked file contents are not included.
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
 - Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
 - Run discovery is local and rebuildable.
 - Workflow registry is local filesystem discovery only; there is no remote marketplace.
-- Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
-- Codex App result handoff is explicit and fallback-safe; worker agent threads are planned for a later phase.
+- Gates are safety primitives for specs, fixtures, and the narrow `doc-refresh` workflow.
+- Codex App result handoff is explicit and fallback-safe; native worker agent threads depend on host app-server/subagent availability.
 
 ## Verification
 
@@ -217,7 +225,7 @@ npm pack --dry-run
 bash scripts/smoke-cli.sh
 ```
 
-Release CI runs the same non-live command smoke on push to `main` and on pull requests. The smoke validates the local workflow registry, validates `diff-review`, and confirms write-capable specs still require a prior gate without starting live Codex workers.
+Release CI runs the same non-live command smoke on push to `main` and on pull requests. The smoke validates the local workflow registry, validates `diff-review` plus gated write fixtures, and confirms write-capable specs still require a prior gate without starting live Codex workers.
 
 The v1.0 release has been smoke-tested on:
 
@@ -234,6 +242,7 @@ The v1.0 release has been smoke-tested on:
 - workflow registry list/show/validate, duplicate-id detection, and id-or-path runs
 - workflow validation and human-readable status formatting
 - bundled workflow catalog and example workflow registry validation
+- gated doc-refresh preview, approve/resume, reject, rollback, and verification artifact coverage
 - documented command surface and install/build/link flow
 
 For release preparation, use [Release checklist](docs/RELEASE_CHECKLIST.md).

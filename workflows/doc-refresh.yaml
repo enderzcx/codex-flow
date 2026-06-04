@@ -1,0 +1,55 @@
+id: doc-refresh
+version: 1.4.0
+title: Doc Refresh
+description: Gated documentation refresh workflow with pre-write preview, explicit approval, rollback evidence, and Codex workspace-write execution.
+tags:
+  - write-capable
+  - docs
+  - gated
+capabilities:
+  writes: true
+inputs:
+  target:
+    type: path
+    required: true
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+  - id: preview-write
+    kind: write-preview
+    prompt: |
+      Prepare a reversible documentation-only refresh. The write phase may update Markdown or text documentation, but must not touch credentials, source code, database files, deployment config, payment, permission, or irreversible external systems.
+  - id: approve-write
+    kind: gate
+    prompt: Review artifacts/write-plan.md, artifacts/dry-run-preview.md, and artifacts/rollback.md before allowing documentation writes.
+    requires_approval: true
+  - id: review
+    kind: codex-write
+    writes: true
+    worker:
+      id: doc-refresh
+      perspective: documentation write
+      prompt: |
+        Refresh documentation only. Keep changes narrow and reversible. Prefer updating or creating a small Markdown note that summarizes the current tracked diff, verification expectations, and rollback note. Do not modify source code, credentials, database files, deployment config, payment, permission, or irreversible external systems.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - workflow.json
+  - state.json
+  - events.jsonl
+  - context.json
+  - artifacts/write-plan.md
+  - artifacts/dry-run-preview.md
+  - artifacts/diff-summary.md
+  - artifacts/rollback.md
+  - artifacts/verification.md
+  - workers/doc-refresh.json
+  - artifacts/reduced-result.json
+  - artifacts/manifest.json
+  - result.md

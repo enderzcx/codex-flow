@@ -11,7 +11,7 @@ import { listWorkflowEntries, resolveWorkflowReference } from "../src/workflow-r
 
 const execFileAsync = promisify(execFile);
 const cleanup: string[] = [];
-const bundledWorkflowIds = ["diff-review", "implementation-plan", "release-review", "repo-audit", "research-crosscheck"];
+const bundledWorkflowIds = ["diff-review", "doc-refresh", "implementation-plan", "release-review", "repo-audit", "research-crosscheck"];
 const exampleWorkflowIds = ["implementation-plan", "release-review", "repo-audit", "research-crosscheck"];
 
 afterEach(async () => {
@@ -28,7 +28,10 @@ describe("bundled workflow pack", () => {
     const entries = await listWorkflowEntries({ cwd: process.cwd(), homeDir: await emptyHome() });
 
     expect(entries.map((entry) => entry.id)).toEqual(bundledWorkflowIds);
-    for (const entry of entries) {
+    const docRefresh = entries.find((entry) => entry.id === "doc-refresh");
+    expect(docRefresh?.capabilities.writes).toBe(true);
+    expect(docRefresh?.tags).toContain("gated");
+    for (const entry of entries.filter((entry) => entry.id !== "doc-refresh")) {
       expect(entry.capabilities.writes).toBe(false);
       expect(entry.tags).toContain("read-only");
     }

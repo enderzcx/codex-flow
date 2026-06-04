@@ -60,7 +60,7 @@ Registry commands:
 
 ## Workflow
 
-The public package ships these read-only workflows:
+The public package ships these read-only review workflows:
 
 ```text
 workflows/diff-review.yaml
@@ -68,6 +68,12 @@ workflows/repo-audit.yaml
 workflows/implementation-plan.yaml
 workflows/research-crosscheck.yaml
 workflows/release-review.yaml
+```
+
+It also ships one gated write-capable workflow:
+
+```text
+workflows/doc-refresh.yaml
 ```
 
 Required phases:
@@ -102,7 +108,7 @@ Required metadata fields:
 - `inputs.<name>.type`
 - `inputs.<name>.required`
 
-Bundled example workflows must keep `capabilities.writes: false`, `defaults.sandbox: read-only`, and the same shared `collect -> review -> reduce` contract. Example-specific behavior belongs in workflow YAML prompts and catalog docs, not in the runtime.
+Bundled review workflows must keep `capabilities.writes: false`, `defaults.sandbox: read-only`, and the same shared `collect -> review -> reduce` contract. The bundled `doc-refresh` workflow declares `capabilities.writes: true`, writes preview artifacts before a gate, and runs its write phase through Codex SDK `workspace-write` execution after approval. Example-specific behavior belongs in workflow YAML prompts and catalog docs, not in the runtime.
 
 ## Runtime Model
 
@@ -127,6 +133,15 @@ Codex current conversation or cwf CLI
       -> run store / events / artifacts
       -> result returned to current Codex conversation or explicit thread id
 ```
+
+Supported phase kinds:
+
+- `command`: local context collection.
+- `write-preview`: run-folder-only preview artifacts before a gate.
+- `gate`: explicit approve/reject pause.
+- `codex-parallel`: read-only Codex worker fan-out.
+- `codex-write`: one gated write worker using Codex SDK `workspace-write` execution after CWF gate approval.
+- `reducer`: merge worker envelopes and artifact evidence into final result.
 
 ### Agent vs Thread
 
@@ -309,6 +324,12 @@ Gate phase shape:
 ```
 
 Write-capable phases and workers declare `writes: true`. Validation fails if any phase or worker has `writes: true` before a prior gate phase. Read-only `diff-review` does not require gates.
+
+`write-preview` is not a write phase: it writes only run-folder artifacts such as `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and an initial `artifacts/rollback.md`. It must not modify the target repo.
+
+`codex-write` is a write phase. The default runner starts a Codex SDK thread with `sandboxMode: "workspace-write"` after CWF gate approval and records runtime metadata in the worker JSON. The current noninteractive SDK writer sets `approvalPolicy: "never"` because the CWF gate is the human approval boundary for this phase; future host-native writers may use per-action Codex approval when an interactive approval surface is available. Test fixtures may inject a write runner, but production target writes must not be performed directly by the workflow runner.
+
+Before a `codex-write` phase starts, Codex Flow re-checks the target diff hash captured during `collect`. If the diff changed after preview/gate, the run fails and the user must rerun the workflow before writing.
 
 Execution rules:
 
@@ -517,7 +538,7 @@ Contract:
 - result posting requires a newly created thread or an explicit known thread id
 - coordinator thread ids, worker thread ids, turn ids, app-server version, adapter names, and fallback status are recorded in the run folder
 - failures fall back to a local prompt/session handoff instead of failing the workflow result
-- future write-capable workflows reuse Codex sandbox, approvals, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses
+- write-capable workflows reuse Codex sandbox, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses; CWF gates provide the explicit human approval boundary in the current SDK path
 - experimental protocol behavior is documented and tested separately from core run-store behavior
 
 `cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and `thread/list` verification. `--thread <thread-id>` attempts `initialize`, `turn/start`, and `thread/list` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow.
@@ -532,8 +553,9 @@ Contract:
 - If all Codex workers fail, the run fails with a failure summary that points users at Codex SDK connectivity and worker logs.
 - Workflow ids discovered in local search paths must be unique.
 - Write-capable phases or workers must be preceded by a gate.
-- Write-capable phases must run through Codex thread/worktree sandbox and approval controls, not direct custom file writes.
-- Gates only pause and resume workflow phases; this release does not ship a production write-capable workflow.
+- Write-capable phases fail before writing if the target diff changed after preview.
+- Write-capable phases must run through Codex thread/worktree sandbox controls after CWF gate approval, not direct custom file writes.
+- `doc-refresh` is the only bundled write-capable workflow; it is documentation-only, gated, and reversible.
 - Public v1.0 has no private adapters or third-party model routing.
 
 ## Known Limitations

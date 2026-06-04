@@ -203,7 +203,7 @@ Desktop result prompt should include:
 Native safety contract:
 
 - Read-only workflows keep `read-only` sandbox defaults.
-- Write-capable workflows are not enabled in v1.2; their future contract must declare `capabilities.writes: true`, include a prior gate, and run write phases through Codex thread/worktree execution.
+- Write-capable workflows are not enabled in v1.2; v1.4 enables the first gated docs-only write workflow. Any write-capable workflow must declare `capabilities.writes: true`, include a prior gate, and run write phases through Codex thread/worktree execution.
 - Approval policy, permissions profile, sandbox mode, and network access come from Codex, not from a custom bypass.
 - Worker-sidebar behavior is deferred to v1.3 and should use Codex subagents/threads, not custom process logs pretending to be agents.
 
@@ -437,18 +437,20 @@ Out of scope:
 - irreversible external writes
 - payment/permission/security-sensitive flows
 
+Implementation status: v1.4 ships `doc-refresh`, a documentation-only workflow with `write-preview`, `approve-write`, and `codex-write` phases. The default write runner uses Codex SDK `workspace-write`; fixture tests inject a deterministic writer for approve/reject smoke.
+
 ### Acceptance
 
-- [ ] Write-capable specs without a gate fail validation.
+- [x] Write-capable specs without a gate fail validation.
   - Evidence: fixture test
 
-- [ ] Write workflow pauses before write phase.
+- [x] Write workflow pauses before write phase.
   - Evidence: `cwf status` shows gate and exact approve/reject commands
 
-- [ ] Write phase uses Codex sandbox/approval/worktree boundary.
+- [x] Write phase uses Codex sandbox/approval/worktree boundary.
   - Evidence: worker metadata records permission profile or sandbox and changed files
 
-- [ ] Result includes rollback and verification evidence.
+- [x] Result includes rollback and verification evidence.
   - Evidence: artifact manifest includes write plan, diff summary, rollback, and test output
 
 ### Goal Prompt
@@ -661,11 +663,13 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v1.5: Gated Write-Capable Workflow Pack
+## Superseded: Gated Write-Capable Workflow Pack
 
-### PRD
+This section was the older post-v1 numbering for the write-capable workflow pack. It is superseded by v1.4 `doc-refresh` above. The active v1.5 scope is GitHub PR review artifacts.
 
-Codex Flow has gate primitives, but v1.0 ships only read-only workflows. v1.5 can introduce write-capable workflows safely, starting with narrow, reversible tasks.
+### Historical PRD
+
+Codex Flow had gate primitives, but v1.0 shipped only read-only workflows. The write-capable pack introduced in v1.4 starts with a narrow, reversible documentation workflow.
 
 ### Goals
 

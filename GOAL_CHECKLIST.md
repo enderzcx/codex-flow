@@ -151,7 +151,49 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 
 ## v1.4 Gated Write-Capable Workflow Pack
 
-- [ ] Not started.
+- [x] Write-capable specs without a gate fail validation.
+  - Evidence: `node dist/cli.js validate fixtures/workflows/write-without-gate.yaml` failed with `phase collect has writes:true but no prior gate phase`.
+  - Evidence: `tests/workflow-schema.test.ts` covers `codex-write` before gate and `capabilities.writes` mismatch.
+
+- [x] A narrow write-capable workflow ships with preview and approval gate.
+  - Evidence: `workflows/doc-refresh.yaml` has `capabilities.writes: true`, `write-preview`, `approve-write`, and gated `codex-write`.
+  - Evidence: `node dist/cli.js workflows show doc-refresh` reports `Capabilities: writes=true`.
+
+- [x] Write workflow pauses before write phase.
+  - Evidence: CLI reject smoke on disposable repo reached `Status: waiting` and printed exact `Approve:` / `Reject:` commands before any write.
+  - Evidence: phase-engine test fails before writing if the target diff changes after preview/gate.
+
+- [x] Approved write workflow fixture smoke passes.
+  - Evidence: `npx vitest run tests/phase-engine.test.ts tests/workflow-schema.test.ts tests/workflow-pack.test.ts` passed 25 tests; approved fixture writes only `docs/codex-flow-v14-fixture.md` after approval/resume and manifest includes write evidence.
+
+- [x] Rejected write workflow fixture smoke passes.
+  - Evidence: phase-engine reject fixture blocks resume and writes no target file.
+  - Evidence: CLI reject smoke on disposable repo ended `Status: rejected` and did not create `docs/codex-flow-v14-fixture.md`.
+
+- [x] Write phase uses Codex sandbox/approval/worktree boundary.
+  - Evidence: `src/adapters/codex-write.ts` starts Codex SDK with `sandboxMode: "workspace-write"` and records `sandbox`, `approval_policy`, and `worktree_path` metadata.
+  - Evidence: approved fixture worker JSON includes `"sandbox": "workspace-write"` and `"approval_policy": "never"`.
+
+- [x] Result includes rollback and verification evidence.
+  - Evidence: approved fixture manifest includes `write-plan`, `dry-run-preview`, `diff-summary`, `rollback`, `verification`, and `worker:doc-refresh`.
+
+- [x] Verification: `npm run check`
+  - Evidence: passed locally; `tsc` build plus 60 Vitest tests.
+
+- [x] Verification: `npm pack --dry-run`
+  - Evidence: passed locally; dry-run tarball includes `dist/adapters/codex-write.js`, `workflows/doc-refresh.yaml`, and `fixtures/workflows/gated-doc-refresh.yaml`.
+
+- [x] Verification: `bash scripts/smoke-cli.sh`
+  - Evidence: passed locally; validates registry, `diff-review`, gated diff fixture, gated doc-refresh fixture, and write-without-gate failure without live Codex worker calls.
+
+- [x] Verification: source audit
+  - Evidence: `rg` found no runtime private model routing, generated JavaScript execution, auto-post, or GitHub posting commands in `src package.json workflows scripts .github`.
+
+- [x] Verification: v1.4 final review
+  - Evidence: Reasonix final-review returned `approve`; only advisory was optional future post-write diff hash locking.
+
+- [x] Commit v1.4.
+  - Evidence: v1.4 phase commit in git history; final response reports the exact hash after commit.
 
 ## v1.5 GitHub PR Review Artifacts
 

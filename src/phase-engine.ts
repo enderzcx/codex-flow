@@ -1,5 +1,9 @@
+import { execFile } from "node:child_process";
+import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { collectDiffContext, currentDiffHash } from "./adapters/command-step.js";
+import { runCodexWriteWorker, type RunCodexWriteOptions } from "./adapters/codex-write.js";
 import { runWorkerWithAdapter, type WorkerAdapterOptions, type WorkerAdapterRegistry } from "./adapters/worker-adapter.js";
 import { reduceDiffReview } from "./reducers/diff-review-reducer.js";
 import { renderMarkdownResult } from "./renderers/markdown-result.js";
@@ -7,10 +11,18 @@ import { buildFailureSummary } from "./run-index.js";
 import { RunStore } from "./run-store.js";
 import type { ArtifactManifest, ArtifactRef, DiffContext, PhaseState, WorkerResult, WorkflowPhase, WorkflowSpec, WorkflowWorker } from "./types.js";
 
+const execFileAsync = promisify(execFile);
+
 export type WorkerRunner = (
   worker: WorkflowWorker,
   context: DiffContext,
   options: WorkerAdapterOptions,
+) => Promise<WorkerResult>;
+
+export type WriteRunner = (
+  worker: WorkflowWorker,
+  context: DiffContext,
+  options: RunCodexWriteOptions,
 ) => Promise<WorkerResult>;
 
 export type RunWorkflowOptions = {
@@ -18,6 +30,7 @@ export type RunWorkflowOptions = {
   specPath: string;
   target: string;
   workerRunner?: WorkerRunner;
+  writeRunner?: WriteRunner;
   workerAdapters?: WorkerAdapterRegistry;
   resume?: boolean;
 };
@@ -65,6 +78,12 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         return store;
       }
 
+      if (phase.kind === "write-preview") {
+        context = context ?? (await loadContextForRun(store, target));
+        await runWritePreviewPhase(store, phase, context);
+        continue;
+      }
+
       if (phase.kind === "codex-parallel") {
         context = context ?? (await loadContextForRun(store, target));
         await assertTargetDiffUnchanged(target, expectedTrackedDiffHash(context), "Target repo diff changed before Codex workers resumed.");
@@ -72,9 +91,18 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
         continue;
       }
 
+      if (phase.kind === "codex-write") {
+        context = context ?? (await loadContextForRun(store, target));
+        await assertTargetDiffUnchanged(target, expectedTrackedDiffHash(context), "Target repo diff changed after write preview; rerun the workflow before writing.");
+        await runCodexWritePhase(store, phase, context, target, options);
+        continue;
+      }
+
       if (phase.kind === "reducer") {
         context = context ?? (await loadContextForRun(store, target));
-        await assertTargetDiffUnchanged(target, expectedTrackedDiffHash(context), "Target repo diff changed during read-only diff-review run.");
+        if (!options.spec.capabilities?.writes) {
+          await assertTargetDiffUnchanged(target, expectedTrackedDiffHash(context), "Target repo diff changed during read-only diff-review run.");
+        }
         await runReducerPhase(store, phase, context);
       }
     }
@@ -110,6 +138,69 @@ async function runCollectPhase(store: RunStore, target: string): Promise<DiffCon
   });
   await store.updatePhase("collect", "completed");
   return context;
+}
+
+async function runWritePreviewPhase(
+  store: RunStore,
+  phase: Extract<WorkflowPhase, { kind: "write-preview" }>,
+  context: DiffContext,
+): Promise<void> {
+  await store.updatePhase(phase.id, "running");
+  await writeRunArtifact(
+    store,
+    "write-plan.md",
+    [
+      "# Write Plan",
+      "",
+      phase.prompt,
+      "",
+      "## Scope",
+      "",
+      `Target: ${context.target}`,
+      `Branch: ${context.branch}`,
+      "",
+      "## Pre-write Changed Files",
+      "",
+      ...(context.changed_files.length > 0 ? context.changed_files.map((file) => `- ${file}`) : ["- none"]),
+      "",
+      "## Safety",
+      "",
+      "- This preview phase does not modify target files.",
+      "- The workflow must pause at a gate before any phase with `writes:true` runs.",
+      "- Rollback evidence is generated before and after the write phase.",
+    ].join("\n"),
+  );
+  await writeRunArtifact(
+    store,
+    "dry-run-preview.md",
+    [
+      "# Dry Run Preview",
+      "",
+      "No target files were modified by this preview.",
+      "",
+      "The approved write worker will receive the collected diff context and must keep edits scoped to the workflow prompt.",
+      "",
+      "Pre-write diff hash:",
+      "",
+      `\`${context.diff_hash}\``,
+    ].join("\n"),
+  );
+  await writeRunArtifact(
+    store,
+    "rollback.md",
+    [
+      "# Rollback",
+      "",
+      "Before approval, no target-file rollback is required because the preview phase only wrote run artifacts.",
+      "",
+      "After approval, inspect `artifacts/diff-summary.md` for changed files and use normal git rollback commands on the disposable or working repo if needed.",
+    ].join("\n"),
+  );
+  await store.appendEvent("write.preview", {
+    phase: phase.id,
+    artifacts: ["artifacts/write-plan.md", "artifacts/dry-run-preview.md", "artifacts/rollback.md"],
+  });
+  await store.updatePhase(phase.id, "completed");
 }
 
 function expectedTrackedDiffHash(context: DiffContext): string {
@@ -150,6 +241,32 @@ async function runCodexParallelPhase(
   await store.updatePhase(phase.id, "completed");
 }
 
+async function runCodexWritePhase(
+  store: RunStore,
+  phase: Extract<WorkflowPhase, { kind: "codex-write" }>,
+  context: DiffContext,
+  target: string,
+  options: ExecuteWorkflowOptions,
+): Promise<void> {
+  await store.updatePhase(phase.id, "running");
+  await store.updateWorker(phase.worker.id, "running");
+  const runner = options.writeRunner ?? runCodexWriteWorker;
+  const result = await runner(phase.worker, context, {
+    target,
+    timeoutMs: Number(process.env.CWF_WORKER_TIMEOUT_MS || options.spec.defaults.timeout_ms),
+    codexPath: process.env.CWF_CODEX_PATH,
+  });
+  await store.writeWorkerResult(result);
+  await store.updateWorker(phase.worker.id, result.status, result.error);
+  await writePostWriteArtifacts(store, target, context, result);
+  if (result.status === "failed") {
+    const error = result.error ?? `Write worker ${phase.worker.id} failed.`;
+    await store.updatePhase(phase.id, "failed", error);
+    throw new Error(error);
+  }
+  await store.updatePhase(phase.id, "completed");
+}
+
 async function runReducerPhase(
   store: RunStore,
   phase: Extract<WorkflowPhase, { kind: "reducer" }>,
@@ -158,7 +275,7 @@ async function runReducerPhase(
   await store.updatePhase(phase.id, "running");
   const workerResults = await store.readWorkerResults();
   const state = await store.readState();
-  const artifacts = buildArtifactRefs(store, workerResults, state.log_path);
+  const artifacts = [...buildArtifactRefs(store, workerResults, state.log_path), ...(await buildGeneratedArtifactRefs(store))];
   const workflow = await store.readWorkflow();
   const reduced = reduceDiffReview(workerResults, artifacts, workflow.id);
   await store.writeReducedResult(reduced);
@@ -230,6 +347,24 @@ function buildArtifactRefs(store: RunStore, workerResults: WorkerResult[], logPa
   return artifacts;
 }
 
+async function buildGeneratedArtifactRefs(store: RunStore): Promise<ArtifactRef[]> {
+  let files: string[];
+  try {
+    files = await readdir(join(store.runDir, "artifacts"));
+  } catch {
+    return [];
+  }
+  return files
+    .filter((file) => file.endsWith(".md") && file !== "result.md")
+    .sort()
+    .map<ArtifactRef>((file) => ({
+      id: artifactIdForFile(file),
+      type: "generated",
+      path: join(store.runDir, "artifacts", file),
+      description: generatedArtifactDescription(file),
+    }));
+}
+
 function buildArtifactManifest(store: RunStore, workflow: string, artifacts: ArtifactRef[]): ArtifactManifest {
   return {
     version: 1,
@@ -238,6 +373,87 @@ function buildArtifactManifest(store: RunStore, workflow: string, artifacts: Art
     generated_at: new Date().toISOString(),
     artifacts,
   };
+}
+
+async function writeRunArtifact(store: RunStore, fileName: string, markdown: string): Promise<string> {
+  await mkdir(join(store.runDir, "artifacts"), { recursive: true });
+  const path = join(store.runDir, "artifacts", fileName);
+  await writeFile(path, `${markdown.trimEnd()}\n`);
+  await store.appendEvent("artifact.generated", { path });
+  return path;
+}
+
+async function writePostWriteArtifacts(
+  store: RunStore,
+  target: string,
+  context: DiffContext,
+  result: WorkerResult,
+): Promise<void> {
+  const [statusShort, diffStat] = await Promise.all([gitOutput(target, ["status", "--short"]), gitOutput(target, ["diff", "--stat"])]);
+  const changedFiles = statusShort
+    .split(/\r?\n/)
+    .map((line) => line.trim().slice(2).trim())
+    .filter(Boolean);
+  await writeRunArtifact(
+    store,
+    "diff-summary.md",
+    [
+      "# Diff Summary",
+      "",
+      `Pre-write diff hash: \`${context.diff_hash}\``,
+      `Write worker: \`${result.worker_id}\``,
+      "",
+      "## Git Status",
+      "",
+      "```text",
+      statusShort.trim() || "(clean)",
+      "```",
+      "",
+      "## Diff Stat",
+      "",
+      "```text",
+      diffStat.trim() || "(no diff)",
+      "```",
+      "",
+      "## Changed Files",
+      "",
+      ...(changedFiles.length > 0 ? changedFiles.map((file) => `- ${file}`) : ["- none"]),
+    ].join("\n"),
+  );
+  await writeRunArtifact(
+    store,
+    "verification.md",
+    [
+      "# Verification Evidence",
+      "",
+      `Worker status: \`${result.status}\``,
+      `Worker confidence: \`${result.confidence}\``,
+      "",
+      "## Worker Verification",
+      "",
+      ...(result.verification.length > 0 ? result.verification.map((item) => `- ${item}`) : ["- No verification evidence returned by worker."]),
+    ].join("\n"),
+  );
+  await writeRunArtifact(
+    store,
+    "rollback.md",
+    [
+      "# Rollback",
+      "",
+      "The write phase is intentionally scoped to git-tracked workspace changes.",
+      "",
+      "Review changed files in `artifacts/diff-summary.md`, then use normal git rollback commands if needed:",
+      "",
+      "```bash",
+      "git diff",
+      "git restore <changed-file>",
+      "```",
+      "",
+      "Changed files recorded after write:",
+      "",
+      ...(changedFiles.length > 0 ? changedFiles.map((file) => `- ${file}`) : ["- none"]),
+    ].join("\n"),
+  );
 }
 
 async function loadContextForRun(store: RunStore, target: string): Promise<DiffContext> {
@@ -283,4 +499,36 @@ async function readPhaseState(store: RunStore, id: string): Promise<PhaseState> 
 
 function isPhaseCompleteForExecution(phase: PhaseState): boolean {
   return phase.status === "completed" || phase.status === "approved";
+}
+
+async function gitOutput(cwd: string, args: string[]): Promise<string> {
+  try {
+    const { stdout } = await execFileAsync("git", args, { cwd });
+    return stdout;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function artifactIdForFile(file: string): string {
+  return file.replace(/\.md$/, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+}
+
+function generatedArtifactDescription(file: string): string {
+  if (file === "write-plan.md") {
+    return "Pre-approval write plan for a gated write-capable workflow.";
+  }
+  if (file === "dry-run-preview.md") {
+    return "Pre-approval dry-run preview proving no target files were changed yet.";
+  }
+  if (file === "diff-summary.md") {
+    return "Post-write git status, diff stat, and changed-file summary.";
+  }
+  if (file === "rollback.md") {
+    return "Rollback notes for the gated write phase.";
+  }
+  if (file === "verification.md") {
+    return "Verification evidence returned by the write worker.";
+  }
+  return "Generated workflow artifact.";
 }
