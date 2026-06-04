@@ -211,6 +211,8 @@ The workflow spec describes a worker agent role. The runtime chooses an executio
 - Codex subagent when native subagent tools are available
 - detached Codex review thread for review-shaped workflows
 
+The v1.3 adapter seam is implemented with `codex-sdk-headless` as the real default. Native adapter names are validated and normalized into worker runtime metadata, but app-thread, subagent, and detached-review execution fail explicitly unless the host exposes those Codex-native paths. Fallback to SDK happens only when the workflow config declares it.
+
 Each worker declares:
 
 - id

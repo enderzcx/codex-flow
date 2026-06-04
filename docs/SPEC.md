@@ -361,24 +361,39 @@ Worker result envelope persisted at `workers/<worker-id>.json`:
   "raw_fallback": false,
   "retry_count": 0,
   "error": null,
-  "usage": null
+  "usage": null,
+  "runtime": {
+    "adapter": "codex-sdk-headless",
+    "requested_adapter": "codex-subagent",
+    "fallback_adapter": "codex-sdk-headless",
+    "fallback_used": true,
+    "fallback_reason": "codex-subagent unavailable: native API missing",
+    "agent_role": "correctness",
+    "transcript_read": false,
+    "sandbox": "read-only",
+    "approval_policy": "never"
+  }
 }
 ```
 
 If structured output fails, the worker result is normalized with `raw_fallback: true`, a low-confidence summary, empty findings, and a `fallback_reason`. If the worker process or thread fails, status is `failed` and the error remains visible in state, events, status, show, and reducer provenance.
 
-Future native worker metadata may include:
+Optional workflow runtime defaults:
 
-- `runtime_adapter`
-- `thread_id`
-- `turn_id`
-- `agent_role`
-- `agent_nickname`
-- `review_thread_id`
-- `sandbox`
-- `approval_policy`
-- `permissions_profile`
-- `worktree_path`
+```yaml
+runtime:
+  preferred_worker_adapter: codex-subagent
+  fallback_worker_adapter: codex-sdk-headless
+```
+
+Supported public worker adapters:
+
+- `codex-sdk-headless`: current CLI-safe worker execution path.
+- `codex-app-thread`: explicit native-thread adapter, unavailable unless the host exposes app-server worker execution.
+- `codex-subagent`: explicit native-subagent adapter, unavailable unless the host exposes subagent execution to this CLI process.
+- `codex-review-detached`: explicit detached-review adapter, unavailable unless app-server review execution is available.
+
+If a preferred native adapter is unavailable, Codex Flow falls back only when `runtime.fallback_worker_adapter` is configured. The public runtime does not add private adapters or non-Codex model routing. Reducers must treat all adapters as equivalent worker envelopes and preserve `runtime` in worker provenance.
 
 ## Worker Perspectives
 

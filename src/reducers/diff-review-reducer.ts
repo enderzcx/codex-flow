@@ -124,6 +124,7 @@ function toWorkerProvenance(result: WorkerResult): WorkerProvenance {
     raw_fallback: result.raw_fallback,
     fallback_reason: result.fallback_reason,
     error: result.error,
+    runtime: result.runtime,
   };
 }
 

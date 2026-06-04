@@ -126,6 +126,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Post-v1 native mode can create a named Codex App supervisor thread and record its thread id.
 - Post-v1 result return works through the skill wrapper or an explicit app-server thread id; it must not guess the current thread from a thread list.
 - Post-v1 worker execution treats "agent" as the role/config and "thread" as the run instance.
+- Post-v1 worker runtime adapters are Codex-only, validate public adapter names, preserve runtime metadata, and fall back to SDK headless only when configured.
 - Post-v1 write-capable phases run only after a gate and inherit Codex sandbox/approval/permissions behavior.
 - Release CI runs build, tests, package dry-run, and non-live CLI smoke on push to `main` and pull requests.
 - Release operators have a checklist for install/build/test, package dry-run, CLI smoke, source audit, docs audit, and optional live smoke.
@@ -143,6 +144,6 @@ Codex owns the agent execution boundary: threads, subagents, sandbox, approvals,
 
 ## Future: Codex App Thread Integration
 
-Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. v1.2 adds explicit result handoff and coordinator-thread attempts for completed runs. A later release should run worker agents as Codex threads/subagents and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
+Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. v1.2 adds explicit result handoff and coordinator-thread attempts for completed runs. v1.3 adds the worker adapter contract, SDK fallback, and runtime metadata preservation; live app-thread/subagent/detached-review execution remains host-dependent and fails explicitly when unavailable. Later write-capable workflows should reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
 
 The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.

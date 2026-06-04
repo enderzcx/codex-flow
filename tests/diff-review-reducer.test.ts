@@ -95,4 +95,49 @@ describe("reduceDiffReview", () => {
     expect(result.verification_gaps).toContain("Worker safety used raw fallback: malformed structured output");
     expect(result.worker_provenance[0]).toEqual(expect.objectContaining({ raw_fallback: true, fallback_reason: "malformed structured output" }));
   });
+
+  it("reduces mixed adapter worker results without changing review semantics", () => {
+    const sdk = {
+      ...cleanWorker("correctness", "medium"),
+      runtime: {
+        adapter: "codex-sdk-headless" as const,
+        fallback_used: false,
+        agent_role: "correctness",
+        transcript_read: false,
+        sandbox: "read-only" as const,
+        approval_policy: "never" as const,
+      },
+    };
+    const native = {
+      ...worker("tests", "Missing branch check", "src/git.ts", "high"),
+      runtime: {
+        adapter: "codex-subagent" as const,
+        thread_id: "thr_123",
+        turn_id: "turn_456",
+        agent_role: "tests",
+        agent_nickname: "Atlas",
+        transcript_read: true,
+        fallback_used: false,
+        sandbox: "read-only" as const,
+        approval_policy: "never" as const,
+      },
+    };
+
+    const result = reduceDiffReview([sdk, native], artifacts);
+
+    expect(result.verdict).toBe("fail");
+    expect(result.findings).toHaveLength(1);
+    expect(result.worker_provenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          worker_id: "correctness",
+          runtime: expect.objectContaining({ adapter: "codex-sdk-headless", transcript_read: false }),
+        }),
+        expect.objectContaining({
+          worker_id: "tests",
+          runtime: expect.objectContaining({ adapter: "codex-subagent", thread_id: "thr_123", transcript_read: true }),
+        }),
+      ]),
+    );
+  });
 });

@@ -48,6 +48,13 @@ export type WorkflowCapabilities = {
   writes: boolean;
 };
 
+export type WorkerAdapterName = "codex-sdk-headless" | "codex-app-thread" | "codex-subagent" | "codex-review-detached";
+
+export type WorkflowRuntime = {
+  preferred_worker_adapter?: WorkerAdapterName;
+  fallback_worker_adapter?: WorkerAdapterName;
+};
+
 export type WorkflowSpec = {
   id: string;
   version: string;
@@ -63,6 +70,7 @@ export type WorkflowSpec = {
     sandbox: "read-only";
     timeout_ms: number;
   };
+  runtime?: WorkflowRuntime;
   phases: WorkflowPhase[];
   artifacts: string[];
 };
@@ -226,6 +234,22 @@ export type WorkerResult = {
   retry_count: number;
   error?: string;
   usage?: unknown;
+  runtime?: WorkerRuntimeMetadata;
+};
+
+export type WorkerRuntimeMetadata = {
+  adapter: WorkerAdapterName;
+  requested_adapter?: WorkerAdapterName;
+  fallback_adapter?: WorkerAdapterName;
+  fallback_used: boolean;
+  fallback_reason?: string;
+  thread_id?: string;
+  turn_id?: string;
+  agent_role: string;
+  agent_nickname?: string;
+  transcript_read: boolean;
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
+  approval_policy?: "never" | "on-request" | "on-failure" | "untrusted";
 };
 
 export type ReducedFinding = Finding & {
@@ -255,6 +279,7 @@ export type WorkerProvenance = {
   raw_fallback: boolean;
   fallback_reason?: string;
   error?: string;
+  runtime?: WorkerRuntimeMetadata;
 };
 
 export type ArtifactRef = {

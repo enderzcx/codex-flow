@@ -79,7 +79,7 @@ Runtime adapters should normalize all worker outputs into the same envelope:
 - `codex-subagent`: native subagent worker.
 - `codex-review-detached`: app-server detached review thread.
 
-Reducer logic must not depend on the adapter.
+Reducer logic must not depend on the adapter. In v1.3, the adapter seam and metadata normalization are implemented; native app-thread, subagent, and detached-review execution fail explicitly until the host exposes those execution paths, with SDK fallback only when configured.
 
 ### Current Conversation Return
 

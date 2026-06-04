@@ -110,6 +110,7 @@ After running:
 - point to `result.md`
 - when the user wants the result returned to Codex, use `cwf desktop result <run-id> --print` or read `artifacts/handoff-prompt.md`; use `--new-thread` or `--thread <thread-id>` only when Desktop/app-server return is explicitly requested
 - mention worker failures or raw fallback if any
+- mention worker runtime adapter/fallback metadata when native worker mode was requested
 - mention failure summary and next step for failed runs
 - mention gate decisions for waiting/approved/rejected runs
 - verify the target diff hash did not change when read-only review was expected
@@ -126,6 +127,7 @@ The skill should ask Codex to report:
 - whether fallback occurred
 - whether the reducer verdict is degraded
 - worker provenance when findings or failures matter
+- worker runtime adapter, requested adapter, fallback status, and transcript-read status when native worker mode was requested
 - failure policy and summary when status is `failed`
 - gate id, gate status, and decision reason when relevant
 - whether the target diff changed
@@ -138,7 +140,7 @@ The skill should ask Codex to report:
 
 Only after v1.0 release readiness is stable:
 
-- worker agent thread integration
+- live worker agent thread integration when app-server/subagent execution is exposed
 - GitHub PR review output
 - migration plan workflow
 - generated workflow spec suggestions

@@ -1,6 +1,6 @@
 import { join, resolve } from "node:path";
 import { collectDiffContext, currentDiffHash } from "./adapters/command-step.js";
-import { runCodexWorker, type RunCodexWorkerOptions } from "./adapters/codex-worker.js";
+import { runWorkerWithAdapter, type WorkerAdapterOptions, type WorkerAdapterRegistry } from "./adapters/worker-adapter.js";
 import { reduceDiffReview } from "./reducers/diff-review-reducer.js";
 import { renderMarkdownResult } from "./renderers/markdown-result.js";
 import { buildFailureSummary } from "./run-index.js";
@@ -10,7 +10,7 @@ import type { ArtifactManifest, ArtifactRef, DiffContext, PhaseState, WorkerResu
 export type WorkerRunner = (
   worker: WorkflowWorker,
   context: DiffContext,
-  options: RunCodexWorkerOptions,
+  options: WorkerAdapterOptions,
 ) => Promise<WorkerResult>;
 
 export type RunWorkflowOptions = {
@@ -18,6 +18,7 @@ export type RunWorkflowOptions = {
   specPath: string;
   target: string;
   workerRunner?: WorkerRunner;
+  workerAdapters?: WorkerAdapterRegistry;
   resume?: boolean;
 };
 
@@ -123,15 +124,18 @@ async function runCodexParallelPhase(
   options: ExecuteWorkflowOptions,
 ): Promise<void> {
   await store.updatePhase(phase.id, "running");
-  const workerRunner = options.workerRunner ?? runCodexWorker;
   const workerResults = await Promise.all(
     phase.workers.map(async (worker): Promise<WorkerResult> => {
       await store.updateWorker(worker.id, "running");
-      const result = await workerRunner(worker, context, {
+      const runnerOptions = {
         target,
         timeoutMs: Number(process.env.CWF_WORKER_TIMEOUT_MS || options.spec.defaults.timeout_ms),
         codexPath: process.env.CWF_CODEX_PATH,
-      });
+        runtime: options.spec.runtime,
+      };
+      const result = options.workerRunner
+        ? await options.workerRunner(worker, context, runnerOptions)
+        : await runWorkerWithAdapter(worker, context, runnerOptions, options.workerAdapters);
       await store.writeWorkerResult(result);
       await store.updateWorker(worker.id, result.status, result.error);
       return result;

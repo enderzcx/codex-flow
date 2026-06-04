@@ -1,4 +1,4 @@
-import type { WorkflowCapabilities, WorkflowInput, WorkflowPhase, WorkflowSpec } from "./types.js";
+import type { WorkerAdapterName, WorkflowCapabilities, WorkflowInput, WorkflowPhase, WorkflowRuntime, WorkflowSpec } from "./types.js";
 
 export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   const spec = asRecord(value, "workflow");
@@ -19,6 +19,7 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
     throw new Error("defaults.sandbox must be read-only");
   }
   const timeoutMs = expectNumber(defaults.timeout_ms, "defaults.timeout_ms");
+  const runtime = validateRuntime(spec.runtime);
 
   const phasesRaw = expectArray(spec.phases, "phases");
   const phases = phasesRaw.map((phase, index) => validatePhase(phase, `phases[${index}]`));
@@ -47,8 +48,22 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
       sandbox: "read-only",
       timeout_ms: timeoutMs,
     },
+    runtime,
     phases,
     artifacts,
+  };
+}
+
+function validateRuntime(value: unknown): WorkflowRuntime | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const runtime = asRecord(value, "runtime");
+  const preferred = expectOptionalWorkerAdapter(runtime.preferred_worker_adapter, "runtime.preferred_worker_adapter");
+  const fallback = expectOptionalWorkerAdapter(runtime.fallback_worker_adapter, "runtime.fallback_worker_adapter");
+  return {
+    preferred_worker_adapter: preferred,
+    fallback_worker_adapter: fallback,
   };
 }
 
@@ -191,4 +206,15 @@ function expectOptionalBoolean(value: unknown, path: string): true | undefined {
     throw new Error(`${path} must be true when present`);
   }
   return true;
+}
+
+function expectOptionalWorkerAdapter(value: unknown, path: string): WorkerAdapterName | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const adapters: WorkerAdapterName[] = ["codex-sdk-headless", "codex-app-thread", "codex-subagent", "codex-review-detached"];
+  if (typeof value !== "string" || !adapters.includes(value as WorkerAdapterName)) {
+    throw new Error(`${path} must be one of ${adapters.join(", ")}`);
+  }
+  return value as WorkerAdapterName;
 }

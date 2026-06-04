@@ -319,12 +319,17 @@ Worker artifact metadata:
 
 ```json
 {
-  "runtime_adapter": "codex-subagent",
+  "adapter": "codex-subagent",
+  "requested_adapter": "codex-subagent",
+  "fallback_adapter": "codex-sdk-headless",
+  "fallback_used": false,
   "thread_id": "thr_...",
   "turn_id": "turn_...",
   "agent_role": "correctness",
   "agent_nickname": "Atlas",
-  "transcript_read": true
+  "transcript_read": true,
+  "sandbox": "read-only",
+  "approval_policy": "never"
 }
 ```
 
@@ -343,19 +348,23 @@ Out of scope:
 - write-capable workers
 - making CLI-only users depend on Codex App
 
+Current implementation note: v1.3 ships the adapter abstraction, SDK fallback behavior, schema validation, runtime metadata envelope, and adapter-independent reducer provenance. Native app-thread, subagent, and detached-review adapters fail explicitly with `WorkerAdapterUnavailableError` until the host exposes those execution paths to this CLI process; they do not pretend to create sidebar threads.
+
 ### Acceptance
 
-- [ ] Worker adapter abstraction exists.
+- [x] Worker adapter abstraction exists.
   - Evidence: tests cover SDK fallback and native metadata normalization
 
 - [ ] Native worker thread smoke can run when app-server/subagent support is available.
   - Evidence: a worker records `thread_id`, `turn_id`, adapter, and final output
+  - Current status: blocked in this environment; native execution path is unavailable and falls back only when configured
 
-- [ ] Reducer output is adapter-independent.
+- [x] Reducer output is adapter-independent.
   - Evidence: reducer fixture passes with mixed SDK/native worker envelopes
 
 - [ ] Detached review path is supported for review workflows.
   - Evidence: `review/start` detached response can be normalized into a worker artifact
+  - Current status: adapter name and metadata seam exist; live detached review normalization remains pending until app-server review execution is available
 
 ### Goal Prompt
 

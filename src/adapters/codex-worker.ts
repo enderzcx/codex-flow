@@ -1,5 +1,5 @@
 import { Codex } from "@openai/codex-sdk";
-import type { DiffContext, WorkerResult, WorkflowWorker, WorkerOutput } from "../types.js";
+import type { DiffContext, WorkerAdapterName, WorkerResult, WorkflowWorker, WorkerOutput } from "../types.js";
 
 export const WORKER_OUTPUT_SCHEMA = {
   type: "object",
@@ -39,6 +39,9 @@ export type RunCodexWorkerOptions = {
   target: string;
   timeoutMs: number;
   codexPath?: string;
+  requestedAdapter?: WorkerAdapterName;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
 };
 
 export async function runCodexWorker(
@@ -89,6 +92,7 @@ export async function runCodexWorker(
       fallback_reason: parsed.rawFallback ? "Worker returned malformed JSON; raw text was preserved as summary." : undefined,
       retry_count: 0,
       usage: turn.usage,
+      runtime: buildSdkRuntime(worker, options),
     };
   } catch (error) {
     const completed = Date.now();
@@ -108,6 +112,7 @@ export async function runCodexWorker(
       raw_fallback: false,
       retry_count: 0,
       error: error instanceof Error ? error.message : String(error),
+      runtime: buildSdkRuntime(worker, options),
     };
   }
 }
@@ -139,6 +144,20 @@ function normalizeWorkerOutput(workerId: string, output: WorkerOutput): WorkerOu
     verification: Array.isArray(output.verification) ? output.verification : [],
     artifacts: Array.isArray(output.artifacts) ? output.artifacts : [],
     confidence: output.confidence || "medium",
+  };
+}
+
+function buildSdkRuntime(worker: WorkflowWorker, options: RunCodexWorkerOptions): WorkerResult["runtime"] {
+  return {
+    adapter: "codex-sdk-headless",
+    requested_adapter: options.requestedAdapter,
+    fallback_adapter: options.fallbackUsed ? "codex-sdk-headless" : undefined,
+    fallback_used: Boolean(options.fallbackUsed),
+    fallback_reason: options.fallbackReason,
+    agent_role: worker.perspective || worker.id,
+    transcript_read: false,
+    sandbox: "read-only",
+    approval_policy: "never",
   };
 }
 

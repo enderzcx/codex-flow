@@ -77,4 +77,30 @@ describe("validateWorkflowSpec", () => {
       }),
     ).not.toThrow();
   });
+
+  it("accepts public Codex worker runtime adapter preferences", () => {
+    const spec = validateWorkflowSpec({
+      ...validSpec,
+      runtime: {
+        preferred_worker_adapter: "codex-subagent",
+        fallback_worker_adapter: "codex-sdk-headless",
+      },
+    });
+
+    expect(spec.runtime).toEqual({
+      preferred_worker_adapter: "codex-subagent",
+      fallback_worker_adapter: "codex-sdk-headless",
+    });
+  });
+
+  it("rejects non-Codex or private worker runtime adapters", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        runtime: {
+          preferred_worker_adapter: "ollama",
+        },
+      }),
+    ).toThrow("runtime.preferred_worker_adapter must be one of codex-sdk-headless, codex-app-thread, codex-subagent, codex-review-detached");
+  });
 });

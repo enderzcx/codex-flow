@@ -106,7 +106,48 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 
 ## v1.3 Worker Adapter Abstraction
 
-- [ ] Not started.
+- [x] Worker adapter abstraction exists.
+  - Evidence: `src/adapters/worker-adapter.ts` defines `codex-sdk-headless`, `codex-app-thread`, `codex-subagent`, and `codex-review-detached` adapters plus explicit fallback handling.
+  - Evidence: `tests/worker-adapter.test.ts` covers SDK fallback, no-fallback failure, and native metadata normalization.
+
+- [x] Workflow specs can declare public Codex worker adapter preferences.
+  - Evidence: `runtime.preferred_worker_adapter` and `runtime.fallback_worker_adapter` validate only public Codex adapters.
+  - Evidence: `npm run check` passed schema tests rejecting non-Codex/private adapter names.
+
+- [x] Worker envelopes persist runtime metadata.
+  - Evidence: SDK worker results include `runtime.adapter`, requested/fallback adapter fields, agent role, transcript-read status, sandbox, and approval policy.
+
+- [x] Reducer output is adapter-independent.
+  - Evidence: mixed SDK/native reducer fixture passed and preserved runtime metadata in worker provenance.
+
+- [x] Native worker adapter behavior is honest when unavailable.
+  - Evidence: native adapters fail with `WorkerAdapterUnavailableError`; SDK fallback is used only when configured.
+  - Evidence: native app-server/subagent worker execution smoke is not claimed in this environment because the host-owned execution path is unavailable.
+
+- [x] Verification: `npm run check`
+  - Evidence: passed locally; `tsc` build plus 53 Vitest tests.
+
+- [x] Verification: `npm pack --dry-run`
+  - Evidence: passed locally; tarball dry-run included `dist/adapters/worker-adapter.js` and public docs.
+
+- [x] Verification: SDK fallback worker smoke
+  - Evidence: `npx vitest run tests/worker-adapter.test.ts` passed 3 tests covering preferred native adapter failure, configured SDK fallback, and no-fallback failure.
+
+- [x] Verification: mixed-adapter reducer fixture
+  - Evidence: `npx vitest run tests/diff-review-reducer.test.ts` passed 5 tests including mixed SDK/native runtime metadata.
+
+- [x] Verification: workflow validation still works
+  - Evidence: `node dist/cli.js validate workflows/diff-review.yaml` passed and started no Codex workers.
+  - Evidence: `node dist/cli.js workflows validate` passed for 5 bundled workflows.
+
+- [x] Verification: source audit
+  - Evidence: `rg` found no runtime private model routing, generated JavaScript execution, auto-post, or GitHub posting commands in `src package.json workflows scripts .github`.
+
+- [x] Verification: G3 final review
+  - Evidence: Reasonix final-review returned `approve`; only advisory was documenting the internal `WorkerRunner` option shape change.
+
+- [x] Commit v1.3.
+  - Evidence: v1.3 phase commit in git history; final response reports the exact hash after commit.
 
 ## v1.4 Gated Write-Capable Workflow Pack
 

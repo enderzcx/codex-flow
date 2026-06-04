@@ -134,6 +134,8 @@ Run artifacts are stored under:
 
 Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
 
+Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. Native adapters fail explicitly when the host runtime does not expose that execution path; reducers keep the same worker envelope and preserve runtime metadata in worker provenance.
+
 ## Examples
 
 ```bash
