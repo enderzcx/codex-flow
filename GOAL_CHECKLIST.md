@@ -37,7 +37,7 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
   - Evidence: passed locally; it ran build/test, pack dry-run, help, workflow registry list/show/validate, `diff-review` validation, gated fixture validation, and write-without-gate failure smoke without live Codex worker calls.
 
 - [x] Verification: local inspection of `.github/workflows/ci.yml`
-  - Evidence: workflow runs on push to `main` and pull requests, then executes `npm ci`, `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`.
+  - Evidence: workflow runs on push to `main` and pull requests, uses current v6 GitHub checkout/setup-node actions, then executes `npm ci`, `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`.
 
 - [x] Commit v1.1.
   - Evidence: v1.1 phase commit in git history; final response reports the exact hash after commit.
