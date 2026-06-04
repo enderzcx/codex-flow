@@ -14,6 +14,8 @@ cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
 cwf desktop check
 cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
 cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
+cwf suggest-workflow --goal "<task>" [--target <repo>] [--output <path>]
+cwf suggest-workflow --from-run <run-id> [--output <path>]
 cwf status <run-id>
 cwf watch <run-id> [--interval <ms>] [--once]
 cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -36,7 +38,7 @@ The public package includes a CI-safe release smoke:
 bash scripts/smoke-cli.sh
 ```
 
-The smoke runs build, tests, package dry-run, CLI help, workflow registry listing/showing/validation, default `diff-review` validation, gated fixture validation, and write-without-gate validation failure. It must not start live Codex workers.
+The smoke runs build, tests, package dry-run, CLI help, workflow registry listing/showing/validation, default `diff-review` validation, gated fixture validation, write-without-gate validation failure, GitHub PR artifact generation, and workflow suggestion generation/validation. It must not start live Codex workers.
 
 GitHub Actions runs on pull requests and pushes to `main` through `.github/workflows/ci.yml`. CI runs `npm ci`, `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`.
 
@@ -495,6 +497,27 @@ Rules:
 - Review format posts with `gh pr review --comment`.
 - Missing `gh`, auth failure, or command failure leaves local artifacts in place and returns a clear error.
 - Codex Flow never posts automatically after a workflow run.
+
+## Workflow Suggestion Contract
+
+`cwf suggest-workflow --goal "<task>" [--target <repo>] [--output <path>]` writes a constrained YAML workflow spec. `cwf suggest-workflow --from-run <run-id> [--output <path>]` derives the suggestion goal from a previous run.
+
+Default output:
+
+```text
+~/.codex-workflows/suggestions/<timestamp>-<slug>.yaml
+```
+
+Rules:
+
+- Suggestions use existing workflow phase kinds only.
+- Generated suggestions are read-only by default and use Codex worker phases, not generated JavaScript.
+- The command validates the saved YAML immediately and prints `Validation: OK` or diagnostics.
+- Suggestions are not installed in `./.codex-flow/workflows`, `./workflows`, or `~/.codex-flow/workflows`.
+- Suggestions are never run automatically.
+- Running a suggestion requires an explicit path, for example `cwf run ~/.codex-workflows/suggestions/<file>.yaml --target <repo>`.
+- `--output <path>` may write outside the default suggestions directory, but the same validate-and-print behavior applies.
+- `--output <path>` fails if the file already exists; Codex Flow does not overwrite arbitrary files with suggestions.
 
 ## Artifact Manifest Contract
 

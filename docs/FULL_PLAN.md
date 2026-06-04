@@ -516,6 +516,9 @@ v1.4 status: the first write-capable pack is `doc-refresh`, a documentation-only
 - [ ] A user can generate PR-ready local artifacts without posting.
   - Evidence: `cwf github-pr <run-id> --format comment|review`
 
+- [ ] A user can generate workflow spec suggestions safely.
+  - Evidence: `cwf suggest-workflow --goal "<task>"`, invalid diagnostics test, registry unchanged after suggestion, and explicit-path run with mocked worker
+
 - [ ] Public core remains Codex-native.
   - Evidence: dependency and source audit shows no third-party model routers or private adapters
 

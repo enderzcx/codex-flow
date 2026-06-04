@@ -573,7 +573,9 @@ Final response:
 - Include commands run, pass/fail, commit hash, and push status.
 ```
 
-## v1.4: Generated Workflow Spec Suggestions
+## v1.6: Generated Workflow Spec Suggestions
+
+Status: implemented. `cwf suggest-workflow` writes constrained YAML suggestions, validates them immediately, leaves the registry unchanged, and requires explicit path usage before running.
 
 ### PRD
 
@@ -618,25 +620,25 @@ Out of scope:
 
 ### Acceptance
 
-- [ ] A workflow suggestion can be generated.
+- [x] A workflow suggestion can be generated.
   - Evidence: `cwf suggest-workflow --goal "..."`
 
-- [ ] Suggestions are not installed automatically.
+- [x] Suggestions are not installed automatically.
   - Evidence: `cwf workflows list` unchanged after suggestion
 
-- [ ] Validation diagnostics are shown.
-  - Evidence: invalid generated fixture test
+- [x] Validation diagnostics are shown.
+  - Evidence: invalid suggestion diagnostics test
 
-- [ ] A valid suggestion can be run by explicit path.
-  - Evidence: `cwf run <suggestion-path> --target <repo>`
+- [x] A valid suggestion can be run by explicit path.
+  - Evidence: explicit-path run test with mocked Codex worker
 
-- [ ] No generated JS execution exists.
+- [x] No generated JS execution exists.
   - Evidence: source and docs audit
 
 ### Goal Prompt
 
 ```text
-Build Codex Flow v1.4 Generated Workflow Spec Suggestions in /Users/sunny/Work/CODEX/codex-workflows.
+Build Codex Flow v1.6 Generated Workflow Spec Suggestions in /Users/sunny/Work/CODEX/codex-workflows.
 
 Scope:
 - Generate constrained YAML/JSON workflow specs only.

@@ -95,6 +95,8 @@ cwf desktop result <run-id> --thread <thread-id>
 cwf github-pr <run-id> --format comment
 cwf github-pr <run-id> --format review
 cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>
+cwf suggest-workflow --goal "Review docs changes" --target <repo>
+cwf suggest-workflow --from-run <run-id>
 ```
 
 Workflow discovery searches these local paths in order:
@@ -118,6 +120,8 @@ Gated workflows can pause before a risky or write-capable phase. `cwf status` an
 `cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. With an available Codex app-server daemon, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow never guesses the current thread from `thread/list`.
 
 `cwf github-pr <run-id>` turns a completed local run into PR-ready artifacts. Without `--post`, it only writes `artifacts/github-pr-comment.md` and `artifacts/github-pr-review.json`. Posting to GitHub requires explicit `--post --repo <owner/repo> --pr <number>` and uses the local `gh` CLI.
+
+`cwf suggest-workflow` drafts a constrained YAML workflow spec and validates it immediately. Suggestions are saved under `~/.codex-workflows/suggestions/` by default, are not installed in the workflow registry, and are never run automatically. `--output` will not overwrite an existing file. To use a suggestion, run it by explicit path or move it manually into a workflow search path.
 
 Run artifacts are stored under:
 
@@ -216,6 +220,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Bundled review workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
 - `doc-refresh` is the only bundled write-capable workflow. It is documentation-only, gated, reversible, and writes through Codex SDK `workspace-write` execution after explicit approval.
 - GitHub PR output is local by default. Nothing is posted unless `cwf github-pr` is run with explicit `--post --repo <owner/repo> --pr <number>`.
+- Workflow suggestions are YAML specs only. They are validated after generation, but they are not installed or run automatically.
 - Reviews tracked git diffs; untracked file contents are not included.
 - Background mode is process-based, not a daemon or queue.
 - Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
@@ -252,6 +257,7 @@ The v1.0 release has been smoke-tested on:
 - bundled workflow catalog and example workflow registry validation
 - gated doc-refresh preview, approve/resume, reject, rollback, and verification artifact coverage
 - GitHub PR comment/review artifact generation and mocked `gh` post success/failure
+- workflow suggestion generation, invalid diagnostics, registry non-installation, and explicit-path run with mocked worker
 - documented command surface and install/build/link flow
 
 For release preparation, use [Release checklist](docs/RELEASE_CHECKLIST.md).

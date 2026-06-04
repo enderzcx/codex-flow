@@ -119,6 +119,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] GitHub PR artifacts are generated locally and posting is explicit.
   - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.
 
+- [ ] Workflow suggestions are generated safely.
+  - Evidence: `cwf suggest-workflow --goal "<task>"`, invalid diagnostics test, registry unchanged after suggestion, and explicit-path run with mocked worker.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.
@@ -134,6 +137,7 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - Codex app-server Desktop handoff. This is planned for a later guarded integration.
 - Auto-trigger from the word `workflow`.
 - Generated JavaScript workflow scripts.
+- Auto-installing or auto-running generated workflow suggestions.
 - Non-Codex model adapters.
 - Ungated automatic code modification workflows.
 - Remote workflow marketplace.

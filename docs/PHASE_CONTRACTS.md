@@ -717,6 +717,8 @@ cwf resume <run-id>
 cwf workflows list
 cwf workflows show <workflow>
 cwf workflows validate
+cwf github-pr <run-id> --format comment|review
+cwf suggest-workflow --goal "<task>" [--target <repo>]
 ```
 
 Stable docs:

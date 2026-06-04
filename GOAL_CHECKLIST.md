@@ -225,8 +225,39 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
   - Evidence: Reasonix final-review returned `approve`; no findings after completed-run guard.
 
 - [x] Commit v1.5.
-  - Evidence: commit `7dfda33` in git history.
+  - Evidence: commit `31b0372` in git history.
 
 ## v1.6 Workflow Spec Suggestion
 
-- [ ] Not started.
+- [x] `cwf suggest-workflow --goal "<task>"` generates a valid YAML suggestion.
+  - Evidence: `tests/workflow-suggestion.test.ts` and `bash scripts/smoke-cli.sh`.
+
+- [x] `cwf suggest-workflow --from-run <run-id>` derives a suggestion from run context.
+  - Evidence: `tests/workflow-suggestion.test.ts`.
+
+- [x] Suggestions are not installed automatically.
+  - Evidence: registry unchanged test and smoke.
+
+- [x] Validation diagnostics are shown for invalid suggestions.
+  - Evidence: invalid suggestion diagnostics test.
+
+- [x] A valid suggestion can run by explicit path.
+  - Evidence: explicit-path run test with mocked Codex worker.
+
+- [x] No generated JavaScript execution or private model routing exists.
+  - Evidence: source audit.
+
+- [x] Verification: `npm run check`
+  - Evidence: passed locally; `tsc` build plus 72 Vitest tests.
+
+- [x] Verification: `npm pack --dry-run`
+  - Evidence: passed locally; dry-run tarball includes `dist/workflow-suggestion.js`.
+
+- [x] Verification: suggestion generation smoke
+  - Evidence: `bash scripts/smoke-cli.sh` passed; `suggest-workflow smoke` generated and validated an explicit YAML path without live Codex workers.
+
+- [x] Verification: v1.6 final review
+  - Evidence: Reasonix final-review returned `approve`; only info notes, no blockers.
+
+- [x] Commit v1.6.
+  - Evidence: commit `3f69c27` in git history.

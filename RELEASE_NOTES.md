@@ -21,6 +21,8 @@ Codex Flow 1.0.0 is the first stable public release of the Codex-native workflow
   - `cwf resume`
   - `cwf result`
   - `cwf cancel`
+  - `cwf github-pr`
+  - `cwf suggest-workflow`
 - Filesystem run store under `~/.codex-workflows/runs/<run-id>/`
 - Rebuildable run index at `~/.codex-workflows/index.json`
 - Shared worker result envelope
@@ -45,6 +47,7 @@ Codex Flow 1.0.0 intentionally does not include:
 - generated JavaScript workflow execution
 - broad production write-capable workflows beyond gated documentation refresh
 - automatic GitHub posting
+- automatic installation or execution of generated workflow suggestions
 - deployment automation
 - full Codex Desktop task-panel parity
 

@@ -66,4 +66,20 @@ test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-comment.md"
 test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-review.json"
 rm -rf "$tmp_target" "$HOME/.codex-workflows/runs/$run_id"
 
+echo "==> suggest-workflow smoke"
+tmp_suggest_target=$(mktemp -d /tmp/cwf-suggest-target-XXXXXX)
+mkdir -p "$tmp_suggest_target/docs"
+printf '# Smoke\n' > "$tmp_suggest_target/docs/note.md"
+tmp_suggestion_dir=$(mktemp -d /tmp/cwf-suggestion-XXXXXX)
+tmp_suggestion="$tmp_suggestion_dir/suggested.yaml"
+node dist/cli.js suggest-workflow --goal "Review fixture docs" --target "$tmp_suggest_target" --output "$tmp_suggestion" >/tmp/cwf-suggestion.txt
+grep -q "Validation: OK" /tmp/cwf-suggestion.txt
+grep -q "Installed: no" /tmp/cwf-suggestion.txt
+node dist/cli.js validate "$tmp_suggestion"
+if node dist/cli.js workflows list | grep -q "suggested-review-fixture-docs"; then
+  echo "Suggestion should not be installed in workflow registry" >&2
+  exit 1
+fi
+rm -rf "$tmp_suggest_target" "$tmp_suggestion_dir" /tmp/cwf-suggestion.txt
+
 echo "cwf CLI smoke passed without live Codex worker calls."

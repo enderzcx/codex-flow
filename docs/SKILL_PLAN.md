@@ -62,6 +62,8 @@ cwf desktop check
 cwf desktop result <run-id> --print
 cwf github-pr <run-id> --format comment
 cwf github-pr <run-id> --format review
+cwf suggest-workflow --goal "<task>" --target <repo>
+cwf suggest-workflow --from-run <run-id>
 cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id> --reason <text>
 cwf resume <run-id>
@@ -99,6 +101,8 @@ During running:
 - inspect `events.jsonl` when status looks stale
 - use `cwf github-pr <run-id> --format comment|review` when a PR-ready artifact is needed
 - use `cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>` only when the user explicitly asks to post
+- use `cwf suggest-workflow --goal "<task>" --target <repo>` when the user wants a draft workflow spec
+- after a suggestion, report the saved path and validation diagnostics; do not run or install it unless the user explicitly asks
 - cancel only when the user asks or when the run clearly cannot complete
 
 When the run id is unknown:
@@ -148,6 +152,7 @@ The skill should ask Codex to report:
 - release smoke status when release readiness matters: `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`
 - desktop handoff path and app-server fallback status when result return matters
 - GitHub PR artifact paths and whether anything was posted when PR output matters
+- workflow suggestion path, validation result, and explicit run command when suggestion output matters
 
 ## Future Skill Expansions
 
@@ -155,6 +160,6 @@ Only after v1.0 release readiness is stable:
 
 - live worker agent thread integration when app-server/subagent execution is exposed
 - migration plan workflow
-- generated workflow spec suggestions
+- richer generated workflow spec suggestions
 
 See [POST_V1_PLAN.md](POST_V1_PLAN.md) for post-v1 PRDs, specs, acceptance criteria, and goal prompts.

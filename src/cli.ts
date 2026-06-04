@@ -11,6 +11,7 @@ import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { describeFailurePolicy, latestRun, listRuns, normalizeRunState, showRun } from "./run-index.js";
 import { RunStore } from "./run-store.js";
+import { suggestWorkflow } from "./workflow-suggestion.js";
 import {
   formatWorkflowList,
   formatWorkflowShow,
@@ -45,6 +46,9 @@ type ParsedArgs = {
   post?: boolean;
   repo?: string;
   pr?: string;
+  goal?: string;
+  fromRunId?: string;
+  output?: string;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -184,6 +188,29 @@ async function main(argv: string[]): Promise<void> {
     console.log(`Posted: ${result.posted ? "yes" : "no"}`);
     if (result.post_command) {
       console.log(`Command: ${result.post_command.join(" ")}`);
+    }
+    return;
+  }
+
+  if (args.command === "suggest-workflow") {
+    const result = await suggestWorkflow({
+      goal: args.goal,
+      target: args.target,
+      fromRunId: args.fromRunId,
+      output: args.output,
+    });
+    console.log(`Suggestion: ${result.path}`);
+    console.log(`Installed: ${result.installed ? "yes" : "no"}`);
+    console.log(`Validation: ${result.valid ? "OK" : "failed"}`);
+    if (result.diagnostics.length > 0) {
+      console.log("Diagnostics:");
+      for (const diagnostic of result.diagnostics) {
+        console.log(`- ${diagnostic}`);
+      }
+    }
+    console.log("Registry: unchanged; run by explicit path or move manually into a workflow search path.");
+    if (result.run_command) {
+      console.log(`Run explicitly: ${result.run_command}`);
     }
     return;
   }
@@ -401,6 +428,24 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
       }
     }
+  } else if (command === "suggest-workflow") {
+    const tokens = [first, ...rest].filter((value): value is string => Boolean(value));
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (token === "--goal") {
+        parsed.goal = tokens[index + 1];
+        index += 1;
+      } else if (token === "--from-run") {
+        parsed.fromRunId = tokens[index + 1];
+        index += 1;
+      } else if (token === "--target") {
+        parsed.target = tokens[index + 1];
+        index += 1;
+      } else if (token === "--output") {
+        parsed.output = tokens[index + 1];
+        index += 1;
+      }
+    }
   } else if (command === "list" || command === "latest") {
     const tokens = [first, ...rest].filter((value): value is string => Boolean(value));
     for (let index = 0; index < tokens.length; index += 1) {
@@ -434,6 +479,8 @@ Usage:
   cwf desktop check
   cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
   cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
+  cwf suggest-workflow --goal "<task>" [--target <repo>] [--output <path>]
+  cwf suggest-workflow --from-run <run-id> [--output <path>]
   cwf status <run-id>
   cwf watch <run-id> [--interval <ms>] [--once]
   cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -454,6 +501,7 @@ Common flow:
   cwf result <run-id>
   cwf desktop result <run-id> --print
   cwf github-pr <run-id> --format comment
+  cwf suggest-workflow --goal "Review docs changes" --target .
 
 Current workflow:
   diff-review (or workflows/diff-review.yaml)

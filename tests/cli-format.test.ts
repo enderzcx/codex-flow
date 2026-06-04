@@ -14,9 +14,12 @@ describe("CLI output formatting", () => {
     expect(help).toContain("cwf desktop check");
     expect(help).toContain("cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]");
     expect(help).toContain("cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]");
+    expect(help).toContain('cwf suggest-workflow --goal "<task>" [--target <repo>] [--output <path>]');
+    expect(help).toContain("cwf suggest-workflow --from-run <run-id> [--output <path>]");
     expect(help).toContain("cwf run diff-review --target . --background");
     expect(help).toContain("cwf desktop result <run-id> --print");
     expect(help).toContain("cwf github-pr <run-id> --format comment");
+    expect(help).toContain('cwf suggest-workflow --goal "Review docs changes" --target .');
     expect(help).toContain("cwf status <run-id>");
     expect(help).toContain("cwf watch <run-id>");
     expect(help).toContain("cwf list [--limit <n>] [--status <status>] [--target <repo>]");

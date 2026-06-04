@@ -1,7 +1,7 @@
 ---
 name: codex-workflows
-description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks, including gated documentation refresh and PR-ready artifacts.
-when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, gated documentation refresh, GitHub PR artifact, compare Codex workflow behavior to Claude Dynamic Workflows"
+description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks, including gated documentation refresh, PR-ready artifacts, and safe workflow spec suggestions.
+when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, gated documentation refresh, GitHub PR artifact, workflow suggestion, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
   version: "1.0.0"
 ---
@@ -57,6 +57,8 @@ cwf resume <run-id>
 cwf result <run-id>
 cwf github-pr <run-id> --format comment
 cwf github-pr <run-id> --format review
+cwf suggest-workflow --goal "<task>" --target <repo>
+cwf suggest-workflow --from-run <run-id>
 cwf cancel <run-id>
 ```
 
@@ -73,6 +75,8 @@ Use `--background` for large diffs. The command returns a run id immediately, wh
 Completed runs include `artifacts/reduced-result.json` and `artifacts/manifest.json`. Use the reduced result when a machine-readable verdict, worker provenance, verification gaps, or degraded status matters. Use the manifest to reconstruct the run evidence.
 
 Use `cwf github-pr <run-id> --format comment|review` to create PR-ready local artifacts. Do not post to GitHub unless the user explicitly asks; posting requires `cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>`.
+
+Use `cwf suggest-workflow --goal "<task>" --target <repo>` to draft a constrained YAML workflow spec. Suggestions are saved under `~/.codex-workflows/suggestions/`, validated immediately, and not installed or run automatically. Report the path and diagnostics; only run a suggestion by explicit path when the user asks.
 
 If the run id is unknown, use `cwf latest --target <repo>` or `cwf list`. Discovery uses `~/.codex-workflows/index.json`, and the CLI rebuilds it from run folders when the index is missing, stale, or corrupt.
 

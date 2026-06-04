@@ -36,6 +36,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Provide a live-refresh CLI view for background runs.
 - Let users list, show, and reopen the latest run without remembering run ids.
 - Generate GitHub PR-ready comment and review artifacts from completed local runs.
+- Generate constrained workflow spec suggestions without installing or running them automatically.
 - Rebuild discovery data from run folders when the local index is missing, stale, or corrupt.
 - Record default failure policy metadata and summarize failures in human-readable terms.
 - Persist standardized worker envelopes, a standardized reduced result envelope, and an artifact manifest for each completed run.
@@ -62,6 +63,7 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - No custom subagent scheduler that duplicates Codex's own subagent mechanism.
 - No custom sandbox or approval system that bypasses Codex permissions.
 - No generated workflow scripts.
+- No auto-running generated workflow suggestions.
 - No broad workflow marketplace in v1.0.
 - No broad production write-capable workflow beyond gated documentation refresh.
 - No remote workflow marketplace.
@@ -97,6 +99,8 @@ Codex is strong in a single session, but complex engineering work benefits from 
 23. As a documentation maintainer, I can run `doc-refresh`, review the dry-run artifacts, explicitly approve, and receive rollback plus verification evidence.
 24. As a maintainer, I can generate a PR-ready comment or review artifact without posting anything.
 25. As a maintainer, I can explicitly post with `--post --repo --pr`, and failures leave local artifacts behind.
+26. As a workflow author, I can run `cwf suggest-workflow --goal "<task>"` to draft a valid YAML spec.
+27. As a cautious user, I can verify suggestions are not installed or run unless I explicitly use their path.
 
 ## Success Criteria
 
@@ -143,6 +147,11 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - `cwf desktop result <run-id> --new-thread` or `--thread <thread-id>` attempts explicit app-server result return and records fallback metadata if unavailable.
 - `cwf github-pr <run-id> --format comment|review` writes local PR artifacts without posting.
 - `cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>` is the only GitHub posting path and uses `gh`.
+- `cwf suggest-workflow --goal "<task>"` writes a validated suggestion under `~/.codex-workflows/suggestions/` by default.
+- `cwf suggest-workflow --from-run <run-id>` derives a validated suggestion from prior run context.
+- Workflow suggestions are absent from `cwf workflows list` until manually moved into a workflow search path.
+- A valid suggestion can be run only by explicit path.
+- Invalid suggestion diagnostics are visible and do not delete the saved file.
 
 ## Public Positioning
 

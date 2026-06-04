@@ -102,6 +102,8 @@ cwf desktop result <run-id> --thread <thread-id>
 cwf github-pr <run-id> --format comment
 cwf github-pr <run-id> --format review
 cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>
+cwf suggest-workflow --goal "Review docs changes" --target <repo>
+cwf suggest-workflow --from-run <run-id>
 ```
 
 ## 跑起来后怎么看
@@ -140,6 +142,8 @@ worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex
 `cwf desktop result` 用来把已完成的文件系统 run 带回 Codex。`--print` 会打印一段适合贴回当前对话的简洁 handoff prompt；不依赖 app-server 时也会写 `artifacts/handoff-prompt.md`。如果本机 Codex app-server daemon 可用，`--new-thread` 会尝试创建命名 coordinator thread，`--thread <thread-id>` 会发到明确指定的 thread。Codex Flow 不会从 `thread/list` 猜“当前线程”。
 
 `cwf github-pr <run-id>` 会把本地 run 转成适合 PR 的 artifact。默认只写 `artifacts/github-pr-comment.md` 和 `artifacts/github-pr-review.json`，不会发到 GitHub。只有显式加 `--post --repo <owner/repo> --pr <number>` 时才会调用本机 `gh` CLI。
+
+`cwf suggest-workflow` 只生成受约束的 YAML workflow spec，并立刻 validate。默认保存到 `~/.codex-workflows/suggestions/`，不会自动安装进 registry，也不会自动运行；`--output` 不会覆盖已有文件。要使用时必须显式 `cwf run <suggestion-path> --target <repo>`，或手动移动到 workflow 搜索路径。
 
 示例：
 
@@ -252,6 +256,7 @@ v1.0 已覆盖：
 - gate pause / approve resume / reject / write-without-gate validation
 - doc-refresh gated preview / approve resume / reject / rollback / verification artifact coverage
 - GitHub PR comment / review artifact generation 和 mocked `gh` post success/failure
+- workflow suggestion generation / invalid diagnostics / registry 不自动安装 / mocked worker explicit-path run
 - workflow registry list / show / validate / duplicate-id detection / id-or-path run
 - workflow validate
 - 人能读懂的 status 输出
