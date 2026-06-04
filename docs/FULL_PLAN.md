@@ -57,6 +57,7 @@ Completed phases are historical evidence. Do not rewrite their detailed acceptan
 | PR artifacts | Completed runs can produce local GitHub PR comment/review artifacts; posting requires explicit flags. |
 | Workflow suggestions | Suggestions create validated YAML and are not installed or run automatically. |
 | Desktop bridge | Completed runs can attempt explicit app-server result return; CLI remains reliable when app-server is unavailable. |
+| Worker app threads | Selected workers can run in Codex Desktop-visible threads when app-server is available; worker JSON records thread and turn metadata. |
 
 Completed ledger: `GOAL_CHECKLIST.md`.
 
@@ -106,11 +107,11 @@ Incorrect promise:
 
 > Full Claude Dynamic Workflows parity.
 
-## Unfinished Plan
+## Remaining Plan
 
 ### v1.7 Worker App Threads
 
-Build now.
+Done.
 
 Outcome:
 
@@ -122,11 +123,11 @@ Outcome:
 
 Detailed plan: `WORKER_APP_THREADS_PLAN.md`.
 
-Goal prompt: `../GOAL_PROMPT.md`.
+Historical goal prompt: `goal-prompts/v1.7-worker-app-threads.md`.
 
 ### v1.8 Managed-Agents-Style Scheduling Decision
 
-Do not build yet.
+Current next goal. Decide first; do not build yet.
 
 After v1.7, decide whether a scheduler is actually needed. The decision must be evidence-based:
 
@@ -143,6 +144,10 @@ Deliverable when started:
 - fake-runtime tests if any scheduler behavior is proposed
 
 No implementation until that decision doc is accepted.
+
+Current goal prompt: `../GOAL_PROMPT.md`.
+
+Archived phase prompt: `goal-prompts/v1.8-managed-agents-decision.md`.
 
 ### v1.9 Public Workflow Registry
 

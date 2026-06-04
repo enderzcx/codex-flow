@@ -17,7 +17,7 @@ Plain English:
 - v1.5 turns results into GitHub PR review artifacts.
 - v1.6 lets Codex suggest workflow specs safely.
 - v1.7 turns `codex-app-thread` into a live Desktop-visible worker-thread adapter.
-- Managed-Agents-style platform scheduling is deferred until worker app threads are proven.
+- v1.8 decides whether Managed-Agents-style platform scheduling is still needed after native worker threads.
 - Later work can explore remote workflow sharing.
 
 Global rules:
@@ -675,7 +675,7 @@ Final response:
 
 Planning source: [WORKER_APP_THREADS_PLAN.md](WORKER_APP_THREADS_PLAN.md).
 
-Status: implemented in code with fake app-server coverage; live Desktop acceptance remains environment-dependent and requires recorded worker `thread_id` / `turn_id` values from an available app-server.
+Status: implemented in code with fake app-server coverage and live Desktop evidence. Live Desktop proof remains environment-dependent for future machines and requires recorded worker `thread_id` / `turn_id` values from an available app-server.
 
 ### PRD
 
@@ -744,54 +744,18 @@ Out of scope:
 - [x] Existing CLI lifecycle remains unaffected.
   - Evidence: `npm run check`, `bash scripts/smoke-cli.sh`, and normal `diff-review` smoke pass without app-server
 
-- [ ] No current-thread guessing exists.
+- [x] No current-thread guessing exists.
   - Evidence: tests and source audit prove `thread/list` is never used to select a parent/current thread
 
 ### Goal Prompt
 
-```text
-Build Codex Flow v1.7 Worker App Threads in /Users/sunny/Work/CODEX/codex-workflows.
-
-Scope:
-- Implement a live codex-app-thread worker adapter.
-- Keep the Codex skill wrapper / active conversation as the primary final-result return path.
-- Keep --new-thread explicit for CLI/background/coordinator use only.
-- Do not build Claude Managed Agents-style platform scheduling.
-- Do not build a custom subagent scheduler, queue, daemon, remote lifecycle service, or marketplace.
-- Do not enable write-capable app-thread workers.
-- Do not guess the current/parent Codex thread from thread/list.
-
-Required:
-- Reuse the existing app-server websocket transport.
-- Add codex-app-thread execution behind runtime.preferred_worker_adapter.
-- For each worker, create a named app-server thread and start a worker turn.
-- Normalize app-thread output into the existing worker envelope.
-- Record thread_id, turn_id, parent_thread_id when provided, coordinator_thread_id when present, transcript_read, sandbox, approval_policy, adapter, fallback, and app-server metadata.
-- Keep reducer adapter-independent.
-- Fall back to codex-sdk-headless only when runtime.fallback_worker_adapter is configured.
-- Update README, README.zh-CN, PRD, SPEC, POST_V1_PLAN, PHASE_CONTRACTS, ACCEPTANCE, and WORKER_APP_THREADS_PLAN if implementation changes the contract.
-
-Verification:
-- npm run check
-- bash scripts/smoke-cli.sh
-- fake app-server app-thread worker test
-- mixed-adapter reducer fixture
-- normal CLI diff-review smoke without app-server
-- live app-server diff-review smoke with three worker thread ids when app-server is available
-- source audit for no current-thread guessing
-
-Final response:
-- Say whether same-conversation return remains primary.
-- List worker thread ids / turn ids from live smoke, or state why live smoke was unavailable.
-- Explain fallback behavior and whether fallback was used.
-- Include commands run, pass/fail, commit hash, push status, and any remaining gap.
-```
+Archived prompt: [v1.7 worker app threads](goal-prompts/v1.7-worker-app-threads.md).
 
 ## Deferred: Managed-Agents-Style Platform Scheduling
 
-Do not implement platform-level scheduling in v1.7. That work is deferred until worker app threads are proven.
+Do not implement platform-level scheduling as part of v1.7. v1.8 is a decision slice that checks whether a scheduler is still worth building after native worker app threads.
 
-Future planning can start after v1.7 proves:
+Future implementation planning can start only if v1.8 proves all of these:
 
 - worker threads are visible in Codex Desktop;
 - worker outputs return to the reducer;

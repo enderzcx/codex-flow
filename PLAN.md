@@ -47,8 +47,9 @@ The project should keep reusing Codex-native capability instead of rebuilding a 
 
 - Current product behavior: `README.md`, `README.zh-CN.md`, `docs/SPEC.md`, `ACCEPTANCE.md`.
 - Full product direction: `docs/FULL_PLAN.md`.
-- Next unfinished implementation slice: `docs/WORKER_APP_THREADS_PLAN.md`.
-- Next goal-mode contract: `GOAL_PROMPT.md`.
+- Completed native worker-thread slice: `docs/WORKER_APP_THREADS_PLAN.md`.
+- Current goal-mode entrypoint: `GOAL_PROMPT.md`.
+- Archived phase goal prompts: `docs/goal-prompts/`.
 - Completed phase evidence: `GOAL_CHECKLIST.md`.
 - Detailed historical roadmap: `docs/POST_V1_PLAN.md` and `docs/PHASE_CONTRACTS.md`.
 
@@ -67,22 +68,11 @@ Implemented and treated as historical evidence:
 | v1.4 | Done | Gated docs-only write workflow exists. |
 | v1.5 | Done | Completed runs can become GitHub PR comment/review artifacts; posting is explicit. |
 | v1.6 | Done | Workflow suggestions create validated YAML specs and do not install or run automatically. |
+| v1.7 | Done | Selected workflow workers can run as Codex Desktop-visible threads when app-server is available; CLI fallback remains explicit. |
 
 The completed ledger lives in `GOAL_CHECKLIST.md`. Leave it alone during future planning rewrites.
 
-## Unfinished Roadmap
-
-### v1.7 Worker App Threads
-
-Goal: make selected workflow workers run as real Codex Desktop-visible threads.
-
-User-facing effect:
-
-- If the workflow starts inside an active Codex conversation, the final result returns to that same conversation through the skill wrapper.
-- If the workflow requests Desktop-visible worker execution, each worker can also appear as its own Codex thread in the left sidebar.
-- `--new-thread` remains explicit and is used only for CLI/background/coordinator cases.
-
-Detailed contract: `docs/WORKER_APP_THREADS_PLAN.md`.
+## Remaining Roadmap
 
 ### v1.8 Managed-Agents-Style Scheduling Decision
 
@@ -116,17 +106,17 @@ Required shape when revisited:
 
 ## Next Implementation Order
 
-1. Finish v1.7 Worker App Threads.
-2. Run real and fake app-server verification.
-3. Audit whether native Codex thread reuse is enough.
-4. Only then write the v1.8 scheduler decision plan.
+1. Run the v1.8 managed-agents-style scheduling decision audit.
+2. Check whether Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents cover the common case.
+3. If native capability is enough, keep scheduler work out of Codex Flow and record the decision.
+4. If a concrete gap remains, write the smallest PRD/SPEC/acceptance plan before implementation.
 5. Only after that revisit public workflow sharing.
 
 ## Acceptance For This Plan
 
 - The plan separates completed evidence from unfinished work.
-- The next implementation slice is v1.7 only.
+- The next goal is v1.8 decision-only, not scheduler implementation.
 - Same-conversation result return is primary for Codex-launched workflows.
 - Desktop worker threads are optional execution/evidence surfaces.
-- Managed-agents-style scheduling is explicitly deferred.
+- Managed-agents-style scheduling is explicitly gated by evidence.
 - Future agents can find the current goal prompt without reading every historical phase.

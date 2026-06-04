@@ -5,7 +5,7 @@ archive_at: 2026-07-04
 
 # v1.7 Worker App Threads Plan
 
-Status: implemented in code with fake app-server tests. Live Desktop acceptance is only proven when the local Codex app-server is available and worker JSON records real `thread_id` / `turn_id` values.
+Status: implemented in code with fake app-server tests and a live Desktop smoke recorded on 2026-06-04. Live Desktop acceptance requires local app-server availability and worker JSON records with real `thread_id` / `turn_id` values.
 
 ## Capability Sentence
 
@@ -211,7 +211,7 @@ cwf status <run-id>
 cwf result <run-id>
 ```
 
-The implementation may add a specific fixture workflow or runtime flag for app-thread smoke. If so, update this file and `GOAL_PROMPT.md`.
+The implementation may add a specific fixture workflow or runtime flag for app-thread smoke. If so, update this file and the matching archived phase prompt under `docs/goal-prompts/`. Root `GOAL_PROMPT.md` should remain the current or next goal-mode entrypoint.
 
 ## Stop Conditions
 
