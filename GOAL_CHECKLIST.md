@@ -260,4 +260,4 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
   - Evidence: Reasonix final-review returned `approve`; only info notes, no blockers.
 
 - [x] Commit v1.6.
-  - Evidence: commit `3f69c27` in git history.
+  - Evidence: commit `3c38d73` in git history.
