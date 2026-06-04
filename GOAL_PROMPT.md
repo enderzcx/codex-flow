@@ -10,85 +10,62 @@ This file is the current goal-mode entrypoint. Historical phase prompts live in
 
 Current phase:
 
-- v1.9 Public Workflow Registry Planning
+- none; v1.9 is completed as a planning contract
 
-Latest decision:
+Latest decisions:
 
 - v1.8 Managed-Agents-Style Scheduling Decision: do not build a scheduler now.
+- v1.9 Public Workflow Registry Planning: use source trust levels plus required
+  SHA-256 pinning for remote install; do not implement registry runtime commands
+  in the planning goal.
 
 Archived phase prompts:
 
 - `docs/goal-prompts/v0.3-run-discovery.md`
 - `docs/goal-prompts/v1.7-worker-app-threads.md`
 - `docs/goal-prompts/v1.8-managed-agents-decision.md`
+- `docs/goal-prompts/v1.9-public-workflow-registry.md`
 
 When a new phase starts, replace this file with the active goal prompt and add
 or update the matching historical prompt under `docs/goal-prompts/`.
 
-```text
-Plan Codex Flow v1.9 Public Workflow Registry in /Users/sunny/Work/CODEX/codex-workflows.
+## v1.9 Planning Summary
 
-Outcome:
-- Produce a complete PRD/SPEC/acceptance contract for a safe public workflow registry.
-- Define the smallest useful v1.9 implementation slice, but do not implement registry runtime commands in this goal.
-- Make the trust boundary clear between bundled workflows, local user workflows, and remote/public workflow sources.
-- Decide how checksums, signatures or equivalent integrity metadata, validation, install, enablement, and explicit run rules should work.
-- Keep generated JavaScript execution, auto-running remote workflows, write-capable auto-enable, marketplace behavior, and scheduler work out of scope unless a later accepted contract adds them.
+Codex Flow should plan a public workflow registry, but not implement registry
+runtime commands in the planning goal.
 
-Allowed writes:
-- GOAL_PROMPT.md
-- PLAN.md
-- docs/FULL_PLAN.md
-- docs/POST_V1_PLAN.md
-- docs/PRD.md
-- docs/SPEC.md
-- ACCEPTANCE.md
-- docs/PHASE_CONTRACTS.md
-- docs/goal-prompts/
-- README.md and README.zh-CN.md only if the public roadmap wording needs a small boundary update
+Chosen trust model:
 
-Forbidden:
-- Do not implement registry commands or runtime code in src/.
-- Do not add remote install, marketplace, daemon, scheduler, queue, generated JavaScript execution, or automatic workflow execution.
-- Do not enable write-capable remote workflows automatically.
-- Do not add non-Codex model routing, private adapters, MiMo/Reasonix-specific behavior, or user-specific defaults to public Codex Flow.
-- Do not rewrite completed v1.0-v1.8 evidence unless a factual error is proven.
+- `bundled`: package-shipped workflows, CI/package-smoke validated, runnable by
+  id.
+- `local`: user/project workflows in existing search paths, validated before
+  list/show/run.
+- `remote-candidate`: inspected only, untrusted, not installed, not enabled, not
+  runnable.
+- `remote-installed`: validated and SHA-256 pinned into a local cache, but not
+  runnable yet.
+- `remote-enabled`: explicitly enabled read-only workflow exposed through local
+  discovery.
 
-Constraints:
-- Reuse the existing workflow schema, validation, local registry/search-path behavior, gates, capability metadata, and run-store contracts.
-- Keep public core Codex-native and CLI-only usable.
-- Treat remote/public workflow sources as untrusted until validated and explicitly installed/enabled.
-- Every new rule must say when it applies and when it should be skipped.
-- Keep v1.9 planning smaller than an implementation backlog.
+Smallest future implementation slice:
 
-Verification:
-- `git diff --check`
-- Source audit that v1.7 and v1.8 remain completed and v1.9 is planning-only.
-- Source audit that no src/ runtime files changed in this goal.
-- Source audit that v1.9 docs explicitly forbid auto-run, generated JavaScript, ungated write-capable remote workflows, and scheduler work.
-- `npm run check`
-- `bash scripts/smoke-cli.sh`
-- Reasonix/DeepSeek final review for the PRD/SPEC/acceptance and public wording; apply blocker/high fixes before finishing.
+- inspect a remote/file workflow and print metadata, diagnostics, capabilities,
+  and SHA-256;
+- install only when the user supplies the expected SHA-256 digest;
+- keep remote installs disabled until explicit enablement;
+- refuse write-capable remote workflows in the first slice;
+- keep `cwf run <url>` invalid.
 
-Iteration policy:
-- Start by auditing existing local registry behavior, workflow schema, bundled workflow catalog, gates, and suggestion workflow safety rules.
-- Write PRD first, then SPEC, then acceptance criteria, then update the roadmap and current goal prompt.
-- Keep every acceptance item tied to a future test or manual evidence surface.
-- Use plain-language summaries after each major step.
-- If a verification command fails, state the root-cause hypothesis before retrying.
+What v1.9 planning does not add:
 
-Stop/Pause conditions:
-- Stop and ask before implementing any registry runtime behavior.
-- Stop and ask if the trust model needs a product decision between checksum-only, signature-based, or source-trust-level approaches.
-- Stop before adding any remote execution, posting, publishing, or write-capable default behavior.
-- Stop after three repeated no-progress attempts on the same verification failure and report the blocker.
-- Stop when the v1.9 planning contract is complete, verification passes, and commit/push/CI state is reported.
-
-Final response:
-- Explain in human terms what v1.9 will build later and what this planning goal completed.
-- State the chosen trust model and explicit non-goals.
-- List files changed, commands run, Reasonix review result, commit hash, push status, and CI status if pushed.
-```
+- no registry runtime commands yet;
+- no remote install behavior yet;
+- no generated JavaScript execution;
+- no auto-run or direct URL run;
+- no write-capable remote workflow enablement;
+- no marketplace, daemon, scheduler, queue, remote lifecycle service, or nested
+  worker runtime;
+- no private adapters, non-Codex model routing, or user-specific defaults.
 
 ## v1.8 Decision Summary
 

@@ -1031,3 +1031,161 @@ Any future scheduler plan must also say when it applies and when it should be sk
 
 - [x] Public product promise remains honest.
   - Evidence: this section repeats the supported Codex workflow promise and rejects full Claude Dynamic Workflows parity.
+
+## v1.9: Public Workflow Registry Planning
+
+Status: planned as a contract. Do not implement registry runtime commands in this goal.
+
+### PRD
+
+v1.9 defines how Codex Flow can share public workflow specs without becoming a remote-code marketplace.
+
+Users already have local workflow discovery:
+
+- bundled workflows live in the package `workflows/` directory;
+- project workflows may live under `.codex-flow/workflows`;
+- user workflows may live under `~/.codex-flow/workflows`;
+- `cwf workflows list/show/validate` validates local YAML specs before use.
+
+The missing product surface is a safe path from a remote/public workflow source to a local, explicit, inspectable workflow. The core problem is trust, not transport.
+
+Target users:
+
+- Codex Flow users who want to reuse public workflow YAML from a known source;
+- maintainers who want to publish workflow specs without shipping runtime code;
+- teams that need a clear boundary between bundled, local, and remote-installed workflows.
+
+Goals:
+
+- Define trust levels for bundled, local, remote candidate, and remote-installed workflows.
+- Require validation before install or enablement.
+- Require SHA-256 integrity pinning for remote install in the first implementation slice.
+- Allow signatures later without making them mandatory for v1.9.
+- Keep remote workflows disabled until explicitly enabled.
+- Keep running explicit: no URL is ever runnable directly.
+- Refuse write-capable remote workflows in the first implementation slice.
+- Preserve the existing workflow schema, gates, capability metadata, local registry behavior, and run-store contracts.
+
+Non-goals:
+
+- No runtime implementation in this planning goal.
+- No generated JavaScript execution.
+- No auto-running or auto-installing remote workflows.
+- No marketplace search, ranking, publishing, payments, accounts, or remote lifecycle service.
+- No scheduler, queue, daemon, or nested worker runtime.
+- No private adapters or non-Codex model routing.
+- No automatic enablement of write-capable workflows.
+
+### Trust Model
+
+Chosen model for v1.9: source trust levels plus required SHA-256 pinning for remote install.
+
+Trust levels:
+
+- `bundled`: shipped inside the npm package, validated by CI and package smoke, runnable by id.
+- `local`: authored or placed by the user in local search paths, validated before list/show/run, runnable by id or path.
+- `remote-candidate`: fetched or read for inspection only; untrusted, not installed, not enabled, not runnable.
+- `remote-installed`: copied into Codex Flow's local registry cache with metadata after validation and SHA-256 match; not runnable until explicitly enabled.
+- `remote-enabled`: a previously installed read-only workflow made available through the local search path after explicit enablement and duplicate-id validation.
+
+Integrity:
+
+- Remote install requires an expected SHA-256 digest supplied by the user or a trusted channel.
+- `inspect` may print the computed SHA-256 digest, but `install` still requires the expected digest so mutable URLs do not become trust anchors.
+- Signature metadata may be recorded later, but signatures are not required for the smallest v1.9 slice.
+- Automatic update is out of scope; changing remote content requires a new inspect/install/enable cycle.
+
+When to use:
+
+- Use this registry path for public read-only YAML workflow specs that users want to reuse across projects.
+- Use direct local paths for one-off local workflows or generated suggestions that are not being shared.
+
+When to skip:
+
+- Skip for workflows that need generated code, runtime plugins, private model adapters, non-Codex routing, secrets, deployment, irreversible writes, or write-capable remote behavior.
+- Skip for bundled workflows; they already ship with the package.
+
+### SPEC
+
+Smallest useful future implementation slice:
+
+```text
+cwf registry inspect <url-or-file> [--sha256 <digest>]
+cwf registry install <url-or-file> --sha256 <digest>
+cwf registry list
+cwf registry enable <installed-id-or-digest>
+```
+
+`inspect`:
+
+- fetches or reads one workflow YAML file;
+- parses and validates it with the existing workflow schema;
+- prints id, version, title, description, tags, capabilities, required inputs, worker adapter preferences, write capability, computed SHA-256, and diagnostics;
+- does not write to the registry cache unless a later explicit `install` runs;
+- never runs workers.
+
+`install`:
+
+- requires `--sha256 <digest>`;
+- fails if the computed digest does not match the supplied digest;
+- fails if the workflow is invalid;
+- fails for `capabilities.writes: true` in the first implementation slice;
+- stores the original YAML and metadata under a local cache path such as `~/.codex-flow/registry/installed/<digest>/`;
+- records source URL or source file path, SHA-256 digest, installed timestamp, workflow metadata, and trust level `remote-installed`;
+- does not add the workflow to normal `cwf workflows list` yet.
+
+`list`:
+
+- lists installed registry entries and whether each entry is enabled;
+- separates bundled/local workflow discovery from remote-installed entries.
+
+`enable`:
+
+- re-validates the installed workflow;
+- refuses duplicate workflow ids already present in enabled search paths unless a future explicit conflict policy is accepted;
+- refuses write-capable remote workflows in the first implementation slice;
+- makes the workflow available through the existing local workflow search path;
+- records trust level `remote-enabled` in metadata or show output.
+
+Run rules:
+
+- `cwf run <url>` is invalid.
+- A remote workflow can run only after install and enable, or by explicit local path if the user manually places the file.
+- `cwf workflows show` should display trust level and source metadata for remote-enabled workflows when that metadata exists.
+
+Security rules:
+
+- Workflow YAML remains data. No generated JavaScript, shell snippets, dynamic imports, plugin code, or remote execution hooks are allowed.
+- Existing schema validation, gate validation, capability metadata, and adapter allow-list remain mandatory.
+- Remote-installed write-capable workflows are inspectable but not enableable or runnable in the first slice.
+- The registry cache is local filesystem state, not a daemon or service.
+
+### Acceptance
+
+- [ ] Remote inspect validates without installing or running.
+  - Test: mocked remote/file workflow returns metadata, diagnostics, and SHA-256; registry cache and search paths remain unchanged.
+
+- [ ] Remote install requires SHA-256 pinning.
+  - Test: missing digest fails; mismatched digest fails; matching digest writes YAML plus metadata under the local registry cache.
+
+- [ ] Remote install refuses write-capable workflows in the first slice.
+  - Test: valid `capabilities.writes: true` workflow is inspectable but install/enable fails with a clear message.
+
+- [ ] Enable is explicit and re-validates.
+  - Test: installed read-only workflow is not visible in `cwf workflows list` before enable; after enable it appears and can be shown by id.
+
+- [ ] Duplicate ids fail safely.
+  - Test: enabling a workflow id already present in bundled/project/user search paths fails and lists conflicting paths.
+
+- [ ] Direct URL run is impossible.
+  - Test: `cwf run https://...` fails before fetch/run and tells the user to inspect/install/enable first.
+
+- [ ] Trust metadata is visible.
+  - Test: `cwf registry list` and `cwf workflows show <id>` show source, SHA-256, trust level, enabled status, and write capability when metadata exists.
+
+- [ ] Existing registry behavior remains stable.
+  - Test: `npm run check`, `bash scripts/smoke-cli.sh`, and current `cwf workflows list/show/validate` smoke pass.
+
+### Goal Prompt
+
+Archived prompt: [v1.9 public workflow registry](goal-prompts/v1.9-public-workflow-registry.md).

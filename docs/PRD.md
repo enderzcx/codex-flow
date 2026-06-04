@@ -172,4 +172,16 @@ Codex's app-server protocol supports thread lifecycle methods, turn streaming, r
 
 Managed-Agents-style platform scheduling is not part of the current product. v1.8 records the decision not to build a scheduler now: v1.7 already proves visible app-thread worker execution, reducer-compatible worker envelopes, same-conversation result return through the skill wrapper, and safe CLI fallback. Revisit a scheduler only when a concrete workflow proves Codex-native threads, SDK workers, skills, sandbox/approval rules, worktrees, and host subagents are insufficient.
 
+## Future: Public Workflow Registry
+
+v1.9 plans, but does not implement, a safe public workflow registry. The registry should share workflow YAML as data, not remote code. The selected trust model is source trust levels plus required SHA-256 pinning for remote install:
+
+- bundled workflows are shipped with the package and validated by CI/package smoke;
+- local workflows are user/project files in existing search paths and are validated before list/show/run;
+- remote candidates are inspect-only and untrusted;
+- remote installs require an expected SHA-256 digest and remain disabled until explicitly enabled;
+- remote-enabled workflows are read-only in the first implementation slice and can run only through local workflow discovery.
+
+Direct URL runs, generated JavaScript execution, auto-run, marketplace behavior, remote lifecycle services, scheduler work, and automatic write-capable remote workflow enablement remain out of scope.
+
 The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.

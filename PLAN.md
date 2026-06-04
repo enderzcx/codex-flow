@@ -92,17 +92,27 @@ Until one of those cases is proven, Codex Flow should keep scheduling out of pub
 
 ### v1.9 Public Workflow Registry
 
-Goal: let users share and install workflow specs safely.
+Contract status: planned; implementation not started.
 
-This is the next phase after v1.8. Start with planning, not implementation.
+Goal: let users share and install workflow specs safely without turning Codex Flow into a remote-code marketplace.
 
-Required shape when revisited:
+Chosen trust model:
 
-- signed or checksum-verifiable workflow specs
-- validation before install
-- no generated JavaScript execution
-- no automatic write-capable workflow enablement
-- clear trust boundary between bundled, local, and remote workflows
+- `bundled`: package-shipped workflows, CI/package-smoke validated, runnable by id.
+- `local`: user/project workflows in existing search paths, validated before list/show/run.
+- `remote-candidate`: inspected only, untrusted, not installed, not enabled, not runnable.
+- `remote-installed`: validated and SHA-256 pinned into a local cache, but not runnable yet.
+- `remote-enabled`: explicitly enabled read-only workflow exposed through the local search path.
+
+Smallest future implementation slice:
+
+- inspect one remote/file workflow and print metadata plus SHA-256;
+- install only when the user supplies the expected SHA-256;
+- keep remote installs disabled until explicit enablement;
+- refuse write-capable remote workflows in the first slice;
+- keep `cwf run <url>` invalid.
+
+Signatures remain future hardening, not a v1.9 requirement.
 
 ## Next Implementation Order
 

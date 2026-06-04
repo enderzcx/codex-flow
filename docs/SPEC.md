@@ -622,3 +622,34 @@ Contract:
 - Workflow registry is local filesystem discovery only; no remote marketplace.
 - Live worker app-thread support depends on host app-server availability; fake app-server tests prove the contract, and live Desktop acceptance requires recorded worker `thread_id` and `turn_id` values.
 - There is no Codex Flow-owned scheduler, durable queue, remote lifecycle service, recursive worker runtime, or agent marketplace.
+
+## Planned v1.9 Registry Contract
+
+v1.9 planning selects source trust levels plus required SHA-256 pinning for remote install. Runtime registry commands are not implemented yet.
+
+Future trust levels:
+
+- `bundled`: package-shipped workflows, CI/package-smoke validated.
+- `local`: project/user search-path workflows, validated before list/show/run.
+- `remote-candidate`: fetched or read for inspect only; not installed, enabled, or runnable.
+- `remote-installed`: validated and SHA-256 pinned into a local cache; not runnable yet.
+- `remote-enabled`: explicitly enabled read-only remote workflow exposed through local discovery.
+
+Future command contract:
+
+```text
+cwf registry inspect <url-or-file> [--sha256 <digest>]
+cwf registry install <url-or-file> --sha256 <digest>
+cwf registry list
+cwf registry enable <installed-id-or-digest>
+```
+
+Future rules:
+
+- `cwf run <url>` must fail before fetch or execution.
+- `inspect` prints workflow metadata, validation diagnostics, capabilities, adapter preferences, and computed SHA-256 without installing.
+- `install` requires a matching expected SHA-256 digest and stores original YAML plus metadata in a local cache.
+- `enable` re-validates, rejects duplicate workflow ids, and exposes only read-only remote workflows in the first slice.
+- Write-capable remote workflows are inspectable but not installable/enabled/runnable in the first slice.
+- Signatures are optional future hardening; checksum pinning is the required v1.9 integrity baseline.
+- The registry cache is local filesystem state, not a daemon, scheduler, queue, marketplace, or remote lifecycle service.

@@ -877,18 +877,34 @@ Final response:
 
 ## v1.9: Public Workflow Registry Planning
 
-Status: next phase. Plan first; do not implement runtime commands yet.
+Status: planned as a PRD/SPEC/acceptance contract. Do not implement runtime commands in this goal.
 
 v1.9 should define how public workflow sharing can exist without turning Codex Flow into a remote-code marketplace. The first deliverable is a PRD/SPEC/acceptance contract for a safe registry boundary.
 
-Possible shape:
+Chosen trust model:
 
-- `cwf registry add <url>`
-- signed or checksummed workflow specs
-- trust policy
-- local cache
-- explicit install
-- explicit enable/run rules
+- bundled workflows are package-shipped and CI/package-smoke validated;
+- local workflows are user/project files in existing search paths and are validated before use;
+- remote candidates are inspect-only and untrusted;
+- remote installs require an expected SHA-256 digest and stay disabled until explicit enablement;
+- remote-enabled workflows are read-only in the first slice and visible through local discovery.
+
+Future command shape:
+
+```bash
+cwf registry inspect <url-or-file> [--sha256 <digest>]
+cwf registry install <url-or-file> --sha256 <digest>
+cwf registry list
+cwf registry enable <installed-id-or-digest>
+```
+
+Rules:
+
+- `cwf run <url>` is invalid.
+- `install` fails without a matching SHA-256 digest.
+- `enable` re-validates and fails on duplicate ids.
+- write-capable remote workflows are inspectable but not enableable or runnable in the first slice.
+- signatures can be added later; checksum pinning is the minimum v1.9 integrity requirement.
 
 Non-goals:
 

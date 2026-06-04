@@ -153,18 +153,19 @@ Archived phase prompt: `goal-prompts/v1.8-managed-agents-decision.md`.
 
 ### v1.9 Public Workflow Registry
 
-Next phase. Plan first; do not build yet.
+Planned as a contract; do not build runtime commands in this goal.
 
-v1.7 and v1.8 are complete, so v1.9 can start. A registry adds trust and supply-chain risk, so the first deliverable is a PRD/SPEC/acceptance contract, not runtime implementation.
+v1.7 and v1.8 are complete, so v1.9 can define the public workflow registry boundary. A registry adds trust and supply-chain risk, so the first deliverable is a PRD/SPEC/acceptance contract, not runtime implementation.
 
-Minimum future requirements:
+Decision:
 
-- local install path and remote source path are distinct;
-- workflow specs are validated before install;
-- checksums or signatures are considered;
-- generated JavaScript remains out of public core;
-- write-capable workflows require gates and visible warnings;
-- bundled/local/remote trust levels are clear in CLI output.
+- trust model is source trust levels plus required SHA-256 pinning for remote install;
+- signatures may be added later but are not required for the smallest v1.9 slice;
+- remote workflows are inspectable before install, installed before enablement, and enabled before id-based run;
+- direct URL runs are invalid;
+- write-capable remote workflows are not enableable or runnable in the first slice.
+
+Future implementation should start from the contract in `PHASE_CONTRACTS.md`, not from new runtime code.
 
 ## Guardrails For Future Plans
 

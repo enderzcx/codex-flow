@@ -128,6 +128,21 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [x] Managed-agents-style scheduling is explicitly not approved for implementation now.
   - Evidence: v1.8 decision docs keep scheduling out of scope and require a future PRD/SPEC/acceptance contract before any queue, daemon, remote lifecycle service, nested worker runtime, or scheduler work starts.
 
+- [x] v1.9 registry planning selects a trust model and forbids unsafe remote workflow behavior.
+  - Evidence: `docs/PHASE_CONTRACTS.md`, `docs/SPEC.md`, `docs/PRD.md`, and `PLAN.md` define bundled/local/remote-candidate/remote-installed/remote-enabled trust levels, SHA-256 pinning, explicit install/enable/run rules, and non-goals.
+
+- [ ] Future registry inspect validates without installing or running.
+  - Evidence: planned test for `cwf registry inspect <url-or-file>` prints metadata, diagnostics, capabilities, and SHA-256 while leaving registry cache and search paths unchanged.
+
+- [ ] Future registry install requires SHA-256 pinning.
+  - Evidence: planned tests cover missing digest failure, mismatched digest failure, and matching digest writing original YAML plus metadata into local cache.
+
+- [ ] Future registry enable is explicit and read-only in the first slice.
+  - Evidence: planned tests show installed workflow is not visible in `cwf workflows list` before enable, appears only after enable, re-validates, rejects duplicate ids, and refuses `capabilities.writes: true`.
+
+- [ ] Future registry never runs URLs directly.
+  - Evidence: planned test for `cwf run https://...` fails before fetch/run and instructs users to inspect/install/enable first.
+
 - [ ] GitHub PR artifacts are generated locally and posting is explicit.
   - Evidence: `cwf github-pr <run-id> --format comment`, `cwf github-pr <run-id> --format review`, mocked `gh` post success/failure tests, and source audit showing no auto-post path.
 
