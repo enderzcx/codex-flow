@@ -82,6 +82,16 @@ cwf result <run-id>
 cwf cancel <run-id>
 ```
 
+Return a completed run to Codex:
+
+```bash
+cwf desktop check
+cwf desktop result <run-id> --print
+cwf desktop result <run-id>
+cwf desktop result <run-id> --new-thread
+cwf desktop result <run-id> --thread <thread-id>
+```
+
 Workflow discovery searches these local paths in order:
 
 ```text
@@ -99,6 +109,8 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 `cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
 
 Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. This is a safety primitive only; the public package ships read-only workflows and no production write-capable workflow.
+
+`cwf desktop result` bridges completed filesystem runs back into Codex. `--print` prints a concise handoff prompt for the current conversation. Without app-server, the command still writes `artifacts/handoff-prompt.md`. With an available Codex app-server daemon, `--new-thread` creates a named coordinator thread and `--thread <thread-id>` posts to a known thread. Codex Flow never guesses the current thread from `thread/list`.
 
 Run artifacts are stored under:
 
@@ -193,7 +205,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - Run discovery is local and rebuildable.
 - Workflow registry is local filesystem discovery only; there is no remote marketplace.
 - Gates are safety primitives for specs and fixtures; no production write-capable workflow ships in this release.
-- Codex App coordinator threads, worker agent threads, and result return are planned, but not part of the stable CLI core yet.
+- Codex App result handoff is explicit and fallback-safe; worker agent threads are planned for a later phase.
 
 ## Verification
 

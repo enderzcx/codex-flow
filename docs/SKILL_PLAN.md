@@ -54,6 +54,8 @@ cwf run release-review --target <repo> --background
 cwf status <run-id>
 cwf latest --target <repo>
 cwf show <run-id>
+cwf desktop check
+cwf desktop result <run-id> --print
 cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id> --reason <text>
 cwf resume <run-id>
@@ -106,6 +108,7 @@ After running:
 
 - summarize final findings
 - point to `result.md`
+- when the user wants the result returned to Codex, use `cwf desktop result <run-id> --print` or read `artifacts/handoff-prompt.md`; use `--new-thread` or `--thread <thread-id>` only when Desktop/app-server return is explicitly requested
 - mention worker failures or raw fallback if any
 - mention failure summary and next step for failed runs
 - mention gate decisions for waiting/approved/rejected runs
@@ -129,12 +132,12 @@ The skill should ask Codex to report:
 - short human summary of what the run did, not only raw artifact paths
 - package/version when release readiness matters
 - release smoke status when release readiness matters: `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`
+- desktop handoff path and app-server fallback status when result return matters
 
 ## Future Skill Expansions
 
 Only after v1.0 release readiness is stable:
 
-- native runtime bridge with coordinator threads and result return
 - worker agent thread integration
 - GitHub PR review output
 - migration plan workflow

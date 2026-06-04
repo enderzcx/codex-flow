@@ -31,19 +31,30 @@ Plain Chinese summary:
 
 ## Current Codex Flow Gap
 
-Codex Flow v1.0 uses `@openai/codex-sdk` to start read-only SDK threads for workers. That is valid for a stable CLI engine, but it has three limits:
+Codex Flow v1.2 still uses `@openai/codex-sdk` to start read-only SDK threads for workers. That is valid for a stable CLI engine, but it has limits:
 
 - worker activity is not guaranteed to appear as left-sidebar Codex App threads;
-- result return is file/CLI based, not current-conversation based;
+- result return is explicit handoff or app-server attempt based, not implicit current-conversation detection;
 - write workflows are intentionally blocked and cannot yet reuse Codex worktree/thread safety.
 
-So the next integration should be additive:
+So the next integrations should stay additive:
 
 1. Keep the v1.0 CLI run store as the durable evidence trail.
-2. Add a Codex App Server adapter for Desktop-visible coordinator threads.
+2. Keep the v1.2 Codex App Server result bridge explicit and fallback-safe.
 3. Add worker adapters that can map workflow workers to Codex worker agent threads/subagents.
 4. Add a Codex skill wrapper that runs `cwf`, reads the result, and returns the human summary in the current Codex conversation.
 5. Add write-capable workflows only through Codex thread/worktree execution with explicit gates.
+
+## v1.2 Implementation Note
+
+Codex Flow v1.2 implements the first guarded bridge:
+
+- `cwf desktop check` probes the local Codex CLI, generated app-server schema, daemon connectivity, and required thread methods.
+- `cwf desktop result <run-id> --print` returns a completed run as a concise prompt without requiring Desktop.
+- `cwf desktop result <run-id>` writes `artifacts/handoff-prompt.md`.
+- `--new-thread` and `--thread <thread-id>` attempt app-server result return and write `artifacts/desktop-handoff.json`.
+- If app-server daemon access is unavailable, the completed workflow remains valid and the metadata records a fallback reason.
+- The implementation never guesses the current thread from `thread/list`; it only verifies a newly created or explicitly supplied thread id.
 
 ## Required Architecture Direction
 

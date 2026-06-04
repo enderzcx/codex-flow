@@ -10,6 +10,9 @@ cwf workflows list
 cwf workflows show <workflow-id-or-path>
 cwf workflows validate [workflow-id-or-path]
 cwf run <workflow-id-or-path> --target <repo> [--background]
+cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
+cwf desktop check
+cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
 cwf status <run-id>
 cwf watch <run-id> [--interval <ms>] [--once]
 cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -473,11 +476,25 @@ Artifact entries contain `id`, `type`, `path`, and `description`. The default `d
 - marks pending/running phases and workers as `cancelled`
 - ignores completed/failed/cancelled runs
 
-## Planned Native Codex Runtime Bridge
+## Native Codex Runtime Bridge
 
-The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Future `cwf` versions should use this to create named Codex App coordinator threads, execute workers as native Codex thread/subagent instances where possible, and return results into a known Codex conversation.
+The Codex app-server protocol exposes thread operations such as `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`, `thread/inject_items`, `review/start`, `thread/started`, and status-change notifications. Codex Flow v1.2 uses this only for explicit result handoff. Worker execution as native Codex threads/subagents remains a later phase.
 
-Planned contract:
+Commands:
+
+```bash
+cwf desktop check
+cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
+```
+
+Artifacts:
+
+```text
+~/.codex-workflows/runs/<run-id>/artifacts/handoff-prompt.md
+~/.codex-workflows/runs/<run-id>/artifacts/desktop-handoff.json
+```
+
+Contract:
 
 - app-server integration is optional for CLI-only users and guarded by an explicit flag or command
 - normal `diff-review` must still work without Codex Desktop running
@@ -487,6 +504,8 @@ Planned contract:
 - failures fall back to a local prompt/session handoff instead of failing the workflow result
 - future write-capable workflows reuse Codex sandbox, approvals, permissions profiles, worktrees, and subagent/thread execution instead of custom write bypasses
 - experimental protocol behavior is documented and tested separately from core run-store behavior
+
+`cwf desktop check` reports Codex CLI availability, generated app-server schema support, daemon connectivity, and required method availability. `cwf desktop result <run-id> --print` prints the same handoff prompt that is written to `handoff-prompt.md`. `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and `thread/list` verification. `--thread <thread-id>` attempts `initialize`, `turn/start`, and `thread/list` against a known thread id. If daemon access fails, `desktop-handoff.json` records a fallback instead of failing the completed workflow.
 
 ## Safety Invariants
 

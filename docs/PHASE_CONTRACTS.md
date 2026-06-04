@@ -877,3 +877,62 @@ Verification:
 - bash scripts/smoke-cli.sh
 - local inspection of .github/workflows/ci.yml
 ```
+
+## v1.2: Native Runtime Bridge
+
+### PRD
+
+v1.2 returns completed workflow results to Codex without making Desktop mandatory. The filesystem run store remains the source of truth; Desktop/app-server is an explicit result-return path.
+
+### Goals
+
+- Add app-server capability checking.
+- Add local result prompt handoff.
+- Attempt coordinator-thread result return when requested.
+- Record native runtime metadata for future worker thread phases.
+- Keep CLI-only behavior unchanged.
+
+Status: implemented with fallback.
+
+### SPEC
+
+Commands:
+
+```bash
+cwf desktop check
+cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
+cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
+```
+
+Artifacts:
+
+```text
+~/.codex-workflows/runs/<run-id>/artifacts/handoff-prompt.md
+~/.codex-workflows/runs/<run-id>/artifacts/desktop-handoff.json
+```
+
+Rules:
+
+- `--print` writes and prints the handoff prompt.
+- No app-server is required for local prompt handoff.
+- `--new-thread` attempts `initialize`, `thread/start`, `thread/name/set`, `turn/start`, and `thread/list`.
+- `--thread <thread-id>` attempts `initialize`, `turn/start`, and `thread/list` against an explicit thread id.
+- Failed app-server attempts write fallback metadata and do not invalidate the completed run.
+- Codex Flow never guesses the current thread from `thread/list`.
+
+### Acceptance
+
+- [ ] Capability check works.
+  - Evidence: `cwf desktop check`
+
+- [ ] Local prompt handoff works.
+  - Evidence: `cwf desktop result <run-id> --print` and `artifacts/handoff-prompt.md`
+
+- [ ] App-server fallback is safe.
+  - Evidence: `cwf desktop result <run-id> --new-thread` writes `desktop-handoff.json` with fallback when daemon is unavailable
+
+- [ ] Existing CLI lifecycle remains unaffected.
+  - Evidence: run/watch/result smoke without Desktop
+
+- [ ] No current-thread guessing.
+  - Evidence: tests cover explicit-thread posting and thread-list verification only

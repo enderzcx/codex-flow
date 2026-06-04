@@ -103,6 +103,37 @@ export type RunState = {
   background_pid?: number;
   error?: string;
   failure_summary?: FailureSummary;
+  native_runtime?: NativeRuntimeMetadata;
+};
+
+export type NativeRuntimeMetadata = {
+  desktop_handoff?: DesktopHandoffRecord;
+};
+
+export type DesktopHandoffRecord = {
+  adapter: "codex-app-server";
+  mode: "print" | "handoff" | "new-thread" | "thread";
+  status: "printed" | "handoff-written" | "posted" | "fallback";
+  attempted_at: string;
+  handoff_prompt_path: string;
+  desktop_handoff_path?: string;
+  app_server?: DesktopCapabilitySummary;
+  thread_id?: string;
+  turn_id?: string;
+  result_return_path: "stdout" | "handoff-prompt" | "app-server-thread";
+  fallback_reason?: string;
+  error?: string;
+};
+
+export type DesktopCapabilitySummary = {
+  codex_cli_available: boolean;
+  codex_cli_version?: string;
+  schema_available: boolean;
+  app_server_running: boolean;
+  app_server_version?: unknown;
+  required_methods: Record<string, boolean>;
+  thread_apis_available: boolean;
+  error?: string;
 };
 
 export type GateDecision = {

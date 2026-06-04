@@ -423,6 +423,28 @@ Acceptance:
 - local release smoke works with `bash scripts/smoke-cli.sh`
 - live Codex worker smoke remains manual unless safe credentials and cost controls are configured
 
+### v1.2: Native Runtime Bridge
+
+Goal: return completed filesystem workflow results to Codex without making Desktop mandatory.
+
+Status: implemented with fallback.
+
+Deliverables:
+
+- `cwf desktop check`
+- `cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]`
+- `artifacts/handoff-prompt.md`
+- `artifacts/desktop-handoff.json` for app-server attempts
+- `RunState.native_runtime.desktop_handoff` metadata
+
+Acceptance:
+
+- local prompt handoff works without Desktop
+- app-server capability check reports schema and daemon state
+- app-server return requires `--new-thread` or explicit `--thread`
+- app-server failure records fallback metadata and does not fail completed CLI runs
+- normal run/watch/result remains available without Desktop
+
 ## Delayed Until After v1.0
 
 These are valuable but not core v1.0:

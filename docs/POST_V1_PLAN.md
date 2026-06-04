@@ -136,6 +136,8 @@ Final response:
 
 ## v1.2: Native Runtime Bridge
 
+Status: implemented with fallback. `cwf desktop check` probes local Codex app-server capability. `cwf desktop result` writes `handoff-prompt.md`, prints the prompt with `--print`, and records `desktop-handoff.json` when `--new-thread` or `--thread` is attempted. If the app-server daemon is unavailable, completed CLI runs remain successful and the handoff artifact is the fallback.
+
 ### PRD
 
 Today `cwf` runs are visible through CLI and files, not the Codex Desktop left sidebar. That is not enough for a Codex-native workflow experience.

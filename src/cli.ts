@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
+import { checkDesktopCapability, formatDesktopCheck, handleDesktopResult } from "./desktop-bridge.js";
 import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
 import { describeFailurePolicy, latestRun, listRuns, normalizeRunState, showRun } from "./run-index.js";
@@ -24,10 +25,15 @@ type ParsedArgs = {
   command?: string;
   workflowPath?: string;
   workflowSubcommand?: string;
+  desktopSubcommand?: string;
   workflowRef?: string;
   target?: string;
   runId?: string;
   background?: boolean;
+  desktopResult?: boolean;
+  print?: boolean;
+  newThread?: boolean;
+  threadId?: string;
   once?: boolean;
   intervalMs?: number;
   limit?: number;
@@ -55,7 +61,7 @@ async function main(argv: string[]): Promise<void> {
     const { spec, path: specPath } = await resolveWorkflowReference(args.workflowPath);
     if (args.background) {
       const store = await RunStore.create(spec, target);
-      await startBackgroundRun(store, specPath, target);
+      await startBackgroundRun(store, specPath, target, Boolean(args.desktopResult));
       console.log(`Run ID: ${store.runId}`);
       console.log(`Run dir: ${store.runDir}`);
       console.log(`Status: cwf status ${store.runId}`);
@@ -65,6 +71,10 @@ async function main(argv: string[]): Promise<void> {
     const store = await runWorkflow({ spec, specPath, target });
     console.log(`Run ID: ${store.runId}`);
     console.log(`Run dir: ${store.runDir}`);
+    if (args.desktopResult) {
+      const result = await handleDesktopResult(store.runId, { mode: "handoff" });
+      console.log(`Desktop handoff: ${result.handoffPromptPath}`);
+    }
     return;
   }
 
@@ -114,7 +124,44 @@ async function main(argv: string[]): Promise<void> {
     const spec = await loadWorkflowSpec(specPath);
     const store = RunStore.fromRunId(args.runId);
     await executeWorkflow({ spec, specPath, target, store });
+    if (args.desktopResult) {
+      await handleDesktopResult(store.runId, { mode: "handoff" });
+    }
     return;
+  }
+
+  if (args.command === "desktop") {
+    if (args.desktopSubcommand === "check") {
+      console.log(formatDesktopCheck(await checkDesktopCapability()));
+      return;
+    }
+    if (args.desktopSubcommand === "result") {
+      if (!args.runId) {
+        throw new Error("Usage: cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]");
+      }
+      const mode = args.print ? "print" : args.newThread ? "new-thread" : args.threadId ? "thread" : "handoff";
+      const result = await handleDesktopResult(args.runId, { mode, threadId: args.threadId });
+      if (args.print) {
+        process.stdout.write(result.prompt);
+      } else {
+        console.log(`Desktop handoff prompt: ${result.handoffPromptPath}`);
+        if (result.desktopHandoffPath) {
+          console.log(`Desktop handoff metadata: ${result.desktopHandoffPath}`);
+          console.log(`Desktop handoff status: ${result.record.status}`);
+          if (result.record.thread_id) {
+            console.log(`Thread ID: ${result.record.thread_id}`);
+          }
+          if (result.record.turn_id) {
+            console.log(`Turn ID: ${result.record.turn_id}`);
+          }
+          if (result.record.fallback_reason) {
+            console.log(`Fallback: ${result.record.fallback_reason}`);
+          }
+        }
+      }
+      return;
+    }
+    throw new Error("Usage: cwf desktop <check|result> [args]");
   }
 
   if (args.command === "status") {
@@ -253,6 +300,8 @@ function parseArgs(argv: string[]): ParsedArgs {
         index += 1;
       } else if (token === "--background") {
         parsed.background = true;
+      } else if (token === "--desktop-result") {
+        parsed.desktopResult = true;
       }
     }
   } else if (command === "validate" || command === "dry-run") {
@@ -268,6 +317,24 @@ function parseArgs(argv: string[]): ParsedArgs {
       if (token === "--target") {
         parsed.target = rest[index + 1];
         index += 1;
+      } else if (token === "--desktop-result") {
+        parsed.desktopResult = true;
+      }
+    }
+  } else if (command === "desktop") {
+    parsed.desktopSubcommand = first;
+    if (first === "result") {
+      parsed.runId = second;
+      for (let index = 0; index < rest.length; index += 1) {
+        const token = rest[index];
+        if (token === "--print") {
+          parsed.print = true;
+        } else if (token === "--new-thread") {
+          parsed.newThread = true;
+        } else if (token === "--thread") {
+          parsed.threadId = rest[index + 1];
+          index += 1;
+        }
       }
     }
   } else if (command === "status" || command === "result" || command === "cancel" || command === "watch" || command === "resume") {
@@ -323,6 +390,8 @@ Usage:
   cwf workflows show <workflow-id-or-path>
   cwf workflows validate [workflow-id-or-path]
   cwf run <workflow-id-or-path> --target <repo> [--background]
+  cwf desktop check
+  cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
   cwf status <run-id>
   cwf watch <run-id> [--interval <ms>] [--once]
   cwf list [--limit <n>] [--status <status>] [--target <repo>]
@@ -341,6 +410,7 @@ Common flow:
   cwf watch <run-id>
   cwf latest
   cwf result <run-id>
+  cwf desktop result <run-id> --print
 
 Current workflow:
   diff-review (or workflows/diff-review.yaml)
@@ -628,11 +698,15 @@ function formatGateSummary(state: RunState, gate: PhaseState): string {
   return `${gate.id}: ${gate.status}`;
 }
 
-async function startBackgroundRun(store: RunStore, specPath: string, target: string): Promise<void> {
+async function startBackgroundRun(store: RunStore, specPath: string, target: string, desktopResult: boolean): Promise<void> {
   const logPath = `${store.runDir}/run.log`;
   const logFd = openSync(logPath, "a");
   const scriptPath = process.argv[1];
-  const child = spawn(process.execPath, [scriptPath, "__run", store.runId, specPath, "--target", target], {
+  const childArgs = [scriptPath, "__run", store.runId, specPath, "--target", target];
+  if (desktopResult) {
+    childArgs.push("--desktop-result");
+  }
+  const child = spawn(process.execPath, childArgs, {
     cwd: process.cwd(),
     detached: true,
     env: process.env,

@@ -110,6 +110,9 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Release CI and local CLI smoke protect documented commands.
   - Evidence: `.github/workflows/ci.yml` runs build/test/pack/smoke, and `bash scripts/smoke-cli.sh` passes without live Codex worker calls.
 
+- [ ] Desktop result handoff is explicit and fallback-safe.
+  - Evidence: `cwf desktop check`, `cwf desktop result <run-id> --print`, handoff artifacts, app-server fallback metadata, and tests proving no current-thread guessing.
+
 ## Should Pass
 
 - [ ] `cwf cancel <run-id>` stops pending workers.

@@ -129,6 +129,9 @@ Codex is strong in a single session, but complex engineering work benefits from 
 - Post-v1 write-capable phases run only after a gate and inherit Codex sandbox/approval/permissions behavior.
 - Release CI runs build, tests, package dry-run, and non-live CLI smoke on push to `main` and pull requests.
 - Release operators have a checklist for install/build/test, package dry-run, CLI smoke, source audit, docs audit, and optional live smoke.
+- `cwf desktop check` reports whether the local Codex CLI, app-server schema, daemon, and required thread methods are available.
+- `cwf desktop result <run-id> --print` can return a completed run through a local prompt without Desktop.
+- `cwf desktop result <run-id> --new-thread` or `--thread <thread-id>` attempts explicit app-server result return and records fallback metadata if unavailable.
 
 ## Public Positioning
 
@@ -140,6 +143,6 @@ Codex owns the agent execution boundary: threads, subagents, sandbox, approvals,
 
 ## Future: Codex App Thread Integration
 
-Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. A later release should add a native runtime bridge so a workflow can create a named left-sidebar coordinator thread, run worker agents as Codex threads/subagents, return results to a known Codex conversation, and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
+Codex's app-server protocol supports thread lifecycle methods, turn streaming, review threads, sandbox/approval controls, skills, plugins, and subagent-visible thread metadata. v1.2 adds explicit result handoff and coordinator-thread attempts for completed runs. A later release should run worker agents as Codex threads/subagents and prepare write-capable workflows that reuse Codex's native thread, worktree, sandbox, approval, and subagent boundaries.
 
 The CLI run store and `cwf watch` remain the stable baseline for users without Codex Desktop.
