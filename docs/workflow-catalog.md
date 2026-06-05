@@ -12,7 +12,7 @@ Bundled review workflows:
 - preserve worker provenance, verification gaps, and artifact references
 - write no files in the target repo
 
-The `doc-refresh` workflow is the exception: it is write-capable, documentation-only, gated, and requires preview artifacts plus explicit approval before its Codex write phase.
+The `doc-refresh` workflow is the bundled user-facing exception: it is write-capable, documentation-only, gated, and requires preview artifacts plus explicit approval before its Codex write phase. Its `direct-docs` mode is a docs/readme/release-note policy preset; the writer still runs in an isolated target and CWF applies only a checked patch. v1.10 also supports `write_policy.mode: patch` for bounded non-doc workflows and fixtures: the writer runs in an isolated target, CWF extracts `artifacts/proposed.patch`, checks allowed/forbidden paths, runs `git apply --check --3way`, applies, then records verification and rollback artifacts.
 
 ## diff-review
 
@@ -139,6 +139,25 @@ Do not use when:
 - the task touches source code, credentials, databases, deployments, payment, permissions, or irreversible external systems
 - you want an ungated automatic edit
 - you need a broad multi-file implementation workflow
+
+## patch-mode write fixtures
+
+Patch-mode write workflows are for bounded implementation slices authored outside the bundled public catalog.
+
+Use when:
+
+- the workflow declares `capabilities.writes: true`
+- the workflow includes a prior `gate`
+- the workflow declares `write_policy.mode: patch`
+- every intended target path is covered by `allowed_paths`
+- forbidden paths, target drift, patch conflicts, and verification failures should stop the run
+
+Do not use when:
+
+- the workflow is remote-installed or untrusted
+- the task needs credentials, deployments, databases, payments, permissions, or external irreversible writes
+- direct app-thread writes are required
+- the user has not approved the gate
 
 Run:
 

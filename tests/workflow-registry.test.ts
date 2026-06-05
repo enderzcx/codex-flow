@@ -60,6 +60,20 @@ describe("workflow registry", () => {
     expect(output).toContain("- target: path, required");
   });
 
+  it("renders write policy details in show output", async () => {
+    const { cwd, homeDir } = await createRoot();
+    await writeWorkflow(join(cwd, "workflows", "safe-write.yaml"), writeWorkflowYaml());
+
+    const shown = await showWorkflow("safe-write", { cwd, homeDir });
+    const output = formatWorkflowShow(shown);
+
+    expect(output).toContain("Capabilities: writes=true");
+    expect(output).toContain("Write policy: mode=patch");
+    expect(output).toContain("Allowed paths: src/generated/**");
+    expect(output).toContain("Forbidden paths: .env, .git, .git/**");
+    expect(output).toContain("Verification commands: test -f src/generated/result.js");
+  });
+
   it("fails duplicate workflow ids clearly", async () => {
     const { cwd, homeDir } = await createRoot();
     await writeWorkflow(join(cwd, ".codex-flow", "workflows", "a.yaml"), workflowYaml({ id: "diff-review", title: "A" }));
@@ -117,6 +131,59 @@ phases:
       - id: correctness
         perspective: correctness
         prompt: Review correctness.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - result.md
+`;
+}
+
+function writeWorkflowYaml(): string {
+  return `id: safe-write
+version: 1.10.0-test
+title: Safe Write
+description: Test write workflow.
+tags:
+  - test
+capabilities:
+  writes: true
+write_policy:
+  mode: patch
+  allowed_paths:
+    - src/generated/**
+  forbidden_paths:
+    - .env
+    - .git
+    - .git/**
+  verification_commands:
+    - test -f src/generated/result.js
+inputs:
+  target:
+    type: path
+    required: true
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+  - id: preview-write
+    kind: write-preview
+    prompt: Preview safe write.
+  - id: approve-write
+    kind: gate
+    prompt: Approve safe write.
+    requires_approval: true
+  - id: review
+    kind: codex-write
+    writes: true
+    worker:
+      id: safe-write
+      perspective: safe write
+      prompt: Write safely.
   - id: reduce
     kind: reducer
     reducer: diff-review

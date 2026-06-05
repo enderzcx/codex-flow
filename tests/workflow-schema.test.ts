@@ -66,6 +66,10 @@ describe("validateWorkflowSpec", () => {
       validateWorkflowSpec({
         ...validSpec,
         capabilities: { writes: true },
+        write_policy: {
+          mode: "patch",
+          allowed_paths: ["docs/**"],
+        },
         phases: [
           { id: "collect", kind: "command" },
           { id: "approve-write", kind: "gate", prompt: "Approve write-capable phase.", requires_approval: true },
@@ -101,6 +105,7 @@ describe("validateWorkflowSpec", () => {
   it("accepts a gated Codex write phase", () => {
     const spec = validateWorkflowSpec({
       ...validSpec,
+      id: "doc-refresh",
       capabilities: { writes: true },
       phases: [
         { id: "collect", kind: "command" },
@@ -121,6 +126,100 @@ describe("validateWorkflowSpec", () => {
     });
 
     expect(spec.phases.map((phase) => phase.kind)).toEqual(["command", "write-preview", "gate", "codex-write", "reducer"]);
+    expect(spec.write_policy?.mode).toBe("direct-docs");
+  });
+
+  it("requires write_policy for non-doc write-capable workflows", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        id: "safe-write-fixture",
+        capabilities: { writes: true },
+        phases: [
+          { id: "collect", kind: "command" },
+          { id: "preview-write", kind: "write-preview", prompt: "Preview safe write." },
+          { id: "approve-write", kind: "gate", prompt: "Approve safe write.", requires_approval: true },
+          {
+            id: "review",
+            kind: "codex-write",
+            writes: true,
+            worker: {
+              id: "safe-write",
+              perspective: "safe write",
+              prompt: "Update a bounded file.",
+            },
+          },
+          { id: "reduce", kind: "reducer", reducer: "diff-review" },
+        ],
+      }),
+    ).toThrow("write_policy is required for write-capable workflows except doc-refresh direct-docs compatibility");
+  });
+
+  it("accepts explicit patch write_policy for bounded non-doc writes", () => {
+    const spec = validateWorkflowSpec({
+      ...validSpec,
+      id: "safe-write-fixture",
+      capabilities: { writes: true },
+      write_policy: {
+        mode: "patch",
+        allowed_paths: ["src/generated/**"],
+        forbidden_paths: [".env", ".git", ".git/**"],
+        verification_commands: ["test -f src/generated/result.js"],
+      },
+      phases: [
+        { id: "collect", kind: "command" },
+        { id: "preview-write", kind: "write-preview", prompt: "Preview safe write." },
+        { id: "approve-write", kind: "gate", prompt: "Approve safe write.", requires_approval: true },
+        {
+          id: "review",
+          kind: "codex-write",
+          writes: true,
+          worker: {
+            id: "safe-write",
+            perspective: "safe write",
+            prompt: "Update a bounded file.",
+          },
+        },
+        { id: "reduce", kind: "reducer", reducer: "diff-review" },
+      ],
+    });
+
+    expect(spec.write_policy).toEqual({
+      mode: "patch",
+      allowed_paths: ["src/generated/**"],
+      forbidden_paths: [".env", ".git", ".git/**"],
+      verification_commands: ["test -f src/generated/result.js"],
+    });
+  });
+
+  it("rejects unsafe write_policy path patterns", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        id: "safe-write-fixture",
+        capabilities: { writes: true },
+        write_policy: {
+          mode: "patch",
+          allowed_paths: ["../outside"],
+        },
+        phases: [
+          { id: "collect", kind: "command" },
+          { id: "preview-write", kind: "write-preview", prompt: "Preview safe write." },
+          { id: "approve-write", kind: "gate", prompt: "Approve safe write.", requires_approval: true },
+          {
+            id: "review",
+            kind: "codex-write",
+            writes: true,
+            worker: {
+              id: "safe-write",
+              perspective: "safe write",
+              prompt: "Update a bounded file.",
+            },
+          },
+          { id: "reduce", kind: "reducer", reducer: "diff-review" },
+        ],
+      }),
+    ).toThrow("write_policy.allowed_paths[0] must be a safe repo-relative path pattern");
   });
 
   it("rejects a Codex write phase before a gate", () => {

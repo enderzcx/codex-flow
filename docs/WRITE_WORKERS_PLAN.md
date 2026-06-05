@@ -5,7 +5,7 @@ scope_type: version
 scope_name: v1.10 Safe Write Workers
 coverage: Complete delivery contract for the first general write-worker version after the existing docs-only doc-refresh path.
 not_complete_for: Full Claude Managed Agents parity, platform scheduler, remote write-capable workflow registry, production deploy automation, database writes, secrets, payments, permissions, or app-thread write execution.
-verification_level: docs-only
+verification_level: fixture-local
 real_smoke_status: requires_approval
 review_status: reviewed
 reviewer: reasonix-v4pro
@@ -17,20 +17,20 @@ review_due: resolved 2026-06-05
 
 # v1.10 Safe Write Workers Plan
 
-Status: reviewed delivery contract.
+Status: implementation in progress; fixture-local patch mode is implemented, controlled real-smoke still requires Ender approval.
 
 ## Alignment Snapshot
 
 - Building: a safe, general write-worker path for Codex Flow that can propose and apply file changes only after preview, explicit approval, drift checks, and verification.
 - Not building: direct app-thread writes, managed-agent scheduling, remote write-capable workflow enablement, non-Codex model routing, production deploy/database/payment/permission writes, or broad autonomous repo rewriting.
 - Source of truth: existing `doc-refresh` gated write path, workflow schema write gates, `codex-write` SDK worker, run-store artifacts, reducer contracts, and the v1.8 decision to avoid a custom scheduler.
-- Deliverables: PRD, SPEC, acceptance matrix, phase plan, and a copy-ready `/goal` prompt.
+- Deliverables: PRD, SPEC, acceptance matrix, phase plan, copy-ready `/goal` prompt, and the v1.10 fixture-local implementation slice.
 - Phase scope: version-level contract for v1.10. It is complete for the first general write-worker slice, not for a future v2 managed-agent platform.
 - Completeness: enough to start a goal-mode implementation without re-litigating architecture.
-- Verification level: this planning artifact is docs-only; the implementation must prove fixture, local, and controlled real-smoke behavior.
+- Verification level: fixture-local implementation evidence is required; controlled real-smoke remains approval-gated.
 - Review requirement: Reasonix/v4Pro final review is required before marking this plan final.
 - Verification: `git diff --check`, `npm run check`, `bash scripts/smoke-cli.sh`, Reasonix review, and future implementation evidence listed below.
-- Open decisions: none blocking. The chosen first implementation is patch/artifact-first plus optional isolated worktree execution, not direct main-worktree mutation by workers.
+- Open decisions: none blocking. The chosen first implementation is `write_policy.mode: patch`, which runs the writer in a disposable local clone/copy, extracts `artifacts/proposed.patch`, scans policy paths, then applies with `git apply --check --3way` and `git apply --3way`.
 
 Capability sentence:
 
@@ -132,18 +132,18 @@ At the same time, allowing worker agents to write directly into the user's main 
 
 v1.10 has two write modes.
 
-#### Mode A: Patch-First Write Worker
+#### Mode A: Patch Write Worker
 
-The worker produces a structured patch proposal before any target write:
+The worker writes only in an isolated temporary target. CWF extracts the resulting git diff as the structured patch proposal before applying anything to the original target:
 
 - patch plan;
 - intended changed files;
-- unified diff or file operation proposal;
+- unified diff in `artifacts/proposed.patch`;
 - verification commands;
 - rollback notes;
 - risk notes.
 
-CWF stores this under the run folder and pauses at an approval gate.
+CWF stores preview artifacts under the run folder and pauses at an approval gate before the writer runs. After approval, it generates the proposed patch in the isolated target, scans patch paths, runs `git apply --check --3way`, applies the patch to the original target, and records verification and rollback artifacts. If verification fails after apply, CWF attempts to reverse-apply the same proposed patch before returning a failed run.
 
 Use this mode when:
 
@@ -157,36 +157,32 @@ Skip this mode when:
 - the change cannot be represented as a patch without running a real formatter/generator;
 - the user explicitly wants a read-only plan.
 
-#### Mode B: Isolated Worktree Write Worker
+#### Mode B: Direct Docs Policy Preset
 
-The worker writes inside an isolated temporary worktree or copied target, then CWF extracts the diff.
+`direct-docs` is the compatibility policy preset for the existing bundled `doc-refresh` workflow.
 
 Required behavior:
 
-- create isolated work target;
-- run Codex SDK `workspace-write` inside the isolated target;
-- collect changed files and diff;
 - write preview artifacts;
-- pause for approval before touching the original target;
-- apply the approved diff to the original target only after drift check passes.
+- pause for approval before touching target docs;
+- run the writer in an isolated target;
+- extract `artifacts/proposed.patch`;
+- re-check target diff drift before apply;
+- keep changes within docs/readme/release-note paths;
+- reject forbidden paths before applying to the original target.
 
 Feasibility rule:
 
-- Phase 1 must first prove that the existing Codex SDK writer can use an alternate `workingDirectory` by running against a disposable git worktree or copied fixture target.
-- If that proof fails, v1.10 must not pretend isolated worktree mode is available. It must either stay patch-first only or use a documented fallback isolation strategy: copy the target repo to a temp directory, run the writer there, extract a patch, and delete the copy after artifacts are saved.
-- This proof is required before implementing any general non-doc write workflow.
+- v1.10 proved that the existing Codex SDK writer can use an alternate `workingDirectory` by running against a disposable git target.
+- General non-doc writes use `mode: patch`; `direct-docs` remains the docs-only compatibility policy preset.
 
 Use this mode when:
 
-- formatters, generators, or multi-file edits are easier to produce by writing files;
-- source code changes need real local verification before main target apply;
-- future workflows need safer code-writing behavior than direct main-worktree writes.
+- the workflow is the bundled docs-only `doc-refresh` compatibility path.
 
 Skip this mode when:
 
-- the target is not a git repo;
-- the repo has untracked/generated state that cannot be reproduced safely;
-- the workflow would require credentials, prod writes, database mutation, or external irreversible actions.
+- the workflow may touch source code, config, credentials, prod writes, database mutation, or external irreversible actions.
 
 ### Workflow Schema Additions
 
@@ -205,7 +201,7 @@ v1.10 should add a narrower write policy object for `codex-write` phases:
 
 ```yaml
 write_policy:
-  mode: patch-first | isolated-worktree | direct-docs
+  mode: patch | direct-docs
   allowed_paths:
     - docs/**
     - src/**
@@ -215,11 +211,8 @@ write_policy:
     - "**/*secret*"
     - "**/*credential*"
     - .github/workflows/**
-  verification:
+  verification_commands:
     - npm run check
-  apply:
-    requires_approval: true
-    drift_check: true
 ```
 
 Compatibility:
@@ -230,9 +223,9 @@ Compatibility:
 
 `direct-docs` definition:
 
-- it is only the compatibility mode for the existing `doc-refresh` path;
+- it is only the docs/readme/release-note policy preset for the existing `doc-refresh` path;
 - it still requires the existing gate and target diff drift check;
-- it may use the current Codex SDK `workspace-write` behavior directly for docs-only refresh work;
+- it still runs the writer in an isolated target and applies only a checked patch to the original target;
 - it does not become the default mode for new source-code write workflows;
 - it does not skip approval, drift checks, or forbidden-path checks.
 
@@ -278,8 +271,6 @@ Before approval:
 ```text
 artifacts/write-plan.md
 artifacts/dry-run-preview.md
-artifacts/proposed.patch
-artifacts/changed-files.json
 artifacts/verification-plan.md
 artifacts/rollback.md
 ```
@@ -287,30 +278,13 @@ artifacts/rollback.md
 After approval/apply:
 
 ```text
-artifacts/applied.patch
+artifacts/proposed.patch
+artifacts/proposed-patch.md
 artifacts/diff-summary.md
-artifacts/verification.json
+artifacts/verification.md
 artifacts/rollback.md
 workers/<worker-id>.json
 result.md
-```
-
-`changed-files.json` shape:
-
-```json
-{
-  "mode": "patch-first",
-  "files": [
-    {
-      "path": "src/example.ts",
-      "change": "modified",
-      "reason": "Implement approved behavior",
-      "risk": "low"
-    }
-  ],
-  "forbidden_hits": [],
-  "verification_commands": ["npm run check"]
-}
 ```
 
 ### Patch Apply Contract
@@ -336,7 +310,7 @@ Rules:
 - CWF must not auto-resolve conflicts.
 - If the target has changed since preview, patch apply is not attempted.
 - If the patch cannot be applied cleanly, the result should say "not applied" and point to `proposed.patch`.
-- Rollback guidance may suggest applying `artifacts/applied.patch` in reverse only if the patch was actually applied; otherwise rollback should say the target was untouched.
+- If verification fails after apply, CWF attempts to reverse-apply `artifacts/proposed.patch`; rollback guidance should explain whether the patch was reverted or manual cleanup is needed.
 
 ### Safety Invariants
 
@@ -429,7 +403,7 @@ Rules:
 
 - [ ] Approved safe write applies only intended files.
   - Verification level: local.
-  - Evidence: fixture repo approved run uses `git apply --check --3way` before apply, changes expected files only, and writes `applied.patch`, `changed-files.json`, and `diff-summary.md`.
+  - Evidence: fixture repo approved run uses `git apply --check --3way` before apply, changes expected files only, and writes `proposed.patch`, `proposed-patch.md`, `diff-summary.md`, and `verification.md`.
 
 - [ ] Patch conflicts stop safely.
   - Verification level: fixture/local.
@@ -437,7 +411,7 @@ Rules:
 
 - [ ] Verification command output is captured and affects verdict.
   - Verification level: local.
-  - Evidence: passing command yields PASS-capable result; failing command yields REVIEW/DEGRADED with verification failure visible.
+  - Evidence: passing command yields completed result; failing command marks the run failed, records the verification failure, and attempts to reverse-apply the proposed patch.
 
 - [ ] Rollback guidance is always present after any attempted write.
   - Verification level: fixture/local.
@@ -499,7 +473,7 @@ Stop if:
 Deliver:
 
 - general preview artifact writer.
-- `proposed.patch`, `changed-files.json`, `verification-plan.md`.
+- `proposed.patch`, `proposed-patch.md`, `verification-plan.md`.
 - status/result surfaces for planned changes before approval.
 
 Verify:

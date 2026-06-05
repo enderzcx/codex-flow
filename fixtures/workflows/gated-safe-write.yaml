@@ -1,34 +1,24 @@
-id: doc-refresh
-version: 1.4.0-fixture
-title: Gated Doc Refresh Fixture
-description: Fixture workflow that pauses before a documentation-only write phase.
+id: safe-write-fixture
+version: 1.10.0-fixture
+title: Safe Write Fixture
+description: Fixture workflow for bounded patch-mode writes after preview and approval.
 tags:
   - write-capable
-  - docs
+  - safe-write
   - gated
   - fixture
 capabilities:
   writes: true
 write_policy:
-  mode: direct-docs
+  mode: patch
   allowed_paths:
-    - docs/**
-    - README.md
-    - README.zh-CN.md
-    - CONTRIBUTING.md
-    - ACCEPTANCE.md
-    - RELEASE_NOTES.md
+    - src/generated/**
   forbidden_paths:
     - .env
-    - .env.*
-    - '**/.env'
-    - '**/.env.*'
-    - '**/*secret*'
-    - '**/*credential*'
-    - '**/*private-key*'
     - .git
     - .git/**
-    - node_modules/**
+  verification_commands:
+    - test -f src/generated/safe-write-result.js
 inputs:
   target:
     type: path
@@ -43,26 +33,29 @@ phases:
     kind: command
   - id: preview-write
     kind: write-preview
-    prompt: Prepare fixture documentation refresh.
+    prompt: Prepare a bounded generated-source write.
   - id: approve-write
     kind: gate
-    prompt: Approve fixture documentation write.
+    prompt: Approve the bounded generated-source write.
     requires_approval: true
   - id: review
     kind: codex-write
     writes: true
     worker:
-      id: doc-refresh
-      perspective: documentation write
-      prompt: Create docs/codex-flow-v14-fixture.md with a short fixture note.
+      id: safe-write
+      perspective: safe bounded write
+      prompt: Create src/generated/safe-write-result.js with a small fixture export.
   - id: reduce
     kind: reducer
     reducer: diff-review
 artifacts:
   - artifacts/write-plan.md
   - artifacts/dry-run-preview.md
+  - artifacts/verification-plan.md
+  - artifacts/proposed.patch
+  - artifacts/proposed-patch.md
   - artifacts/diff-summary.md
   - artifacts/rollback.md
   - artifacts/verification.md
-  - workers/doc-refresh.json
+  - workers/safe-write.json
   - result.md

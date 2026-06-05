@@ -59,6 +59,15 @@ export type WorkflowCapabilities = {
   writes: boolean;
 };
 
+export type WritePolicyMode = "direct-docs" | "patch";
+
+export type WritePolicy = {
+  mode: WritePolicyMode;
+  allowed_paths: string[];
+  forbidden_paths: string[];
+  verification_commands: string[];
+};
+
 export type WorkerAdapterName = "codex-sdk-headless" | "codex-app-thread" | "codex-subagent" | "codex-review-detached";
 
 export type WorkflowRuntime = {
@@ -74,6 +83,7 @@ export type WorkflowSpec = {
   tags: string[];
   inputs: Record<string, WorkflowInput>;
   capabilities: WorkflowCapabilities;
+  write_policy?: WritePolicy;
   requires: {
     target: "git-repo";
   };

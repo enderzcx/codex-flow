@@ -29,7 +29,7 @@ This public skill is Codex-native:
 
 ## Current Workflows
 
-The bundled review workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`. The bundled write-capable workflow is `doc-refresh`, which is documentation-only and must pause at a gate before writing.
+The bundled review workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`. The bundled user-facing write-capable workflow is `doc-refresh`, which is documentation-only and must pause at a gate before writing. v1.10 also supports bounded patch-mode write workflows when a workflow declares `write_policy.mode: patch`, `allowed_paths`, `forbidden_paths`, and optional `verification_commands`.
 
 ```bash
 cwf validate workflows/diff-review.yaml
@@ -62,7 +62,7 @@ cwf suggest-workflow --from-run <run-id>
 cwf cancel <run-id>
 ```
 
-Bundled workflows are read-only by default. Review workflows inspect a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result. `doc-refresh` is the narrow exception: it creates pre-write artifacts, waits for explicit approval, then runs a Codex SDK `workspace-write` thread for documentation-only edits.
+Bundled workflows are read-only by default. Review workflows inspect a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result. `doc-refresh` is the narrow exception: it creates pre-write artifacts, waits for explicit approval, then runs its writer in an isolated target with the `direct-docs` policy preset. All write workflows extract `artifacts/proposed.patch`, enforce `write_policy`, run `git apply --check --3way`, apply, and then record verification plus rollback artifacts. If workflow verification fails after apply, CWF attempts to reverse-apply the proposed patch before returning a failed run.
 
 Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, and `doc-refresh` only for gated documentation writes.
 
@@ -82,7 +82,9 @@ If the run id is unknown, use `cwf latest --target <repo>` or `cwf list`. Discov
 
 If status is `waiting`, read the printed gate line and use `cwf approve` or `cwf reject`. After approval, use `cwf resume`; do not manually edit state. Completed phases are skipped on resume and gate decisions are saved in `state.json` plus `events.jsonl`.
 
-For `doc-refresh`, inspect `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approving. After resume, report `artifacts/diff-summary.md`, `artifacts/verification.md`, `workers/doc-refresh.json`, and the rollback note.
+For `doc-refresh`, inspect `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approving. After resume, report `artifacts/diff-summary.md`, `artifacts/verification.md`, `workers/doc-refresh.json`, and the rollback note.
+
+For patch-mode write workflows, inspect `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approving. After resume, report `artifacts/proposed.patch`, `artifacts/proposed-patch.md`, `artifacts/diff-summary.md`, `artifacts/verification.md`, `workers/<worker-id>.json`, and whether policy checks, patch apply, and verification commands passed.
 
 For failed runs, read the failure summary in `cwf status` or `cwf show` before opening raw JSON. It names the failed phase, failed workers when known, the default failure policy, and the next artifact or connectivity check.
 

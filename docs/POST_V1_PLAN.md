@@ -18,6 +18,7 @@ Plain English:
 - v1.6 lets Codex suggest workflow specs safely.
 - v1.7 turns `codex-app-thread` into a live Desktop-visible worker-thread adapter.
 - v1.8 decides whether Managed-Agents-style platform scheduling is still needed after native worker threads.
+- v1.10 generalizes safe bounded writes with `write_policy.mode: patch`, isolated writer execution, proposed patch artifacts, path policy checks, `git apply --check --3way`, and verification artifacts.
 - Later work can explore remote workflow sharing.
 
 Global rules:

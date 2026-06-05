@@ -38,7 +38,7 @@ The public package includes a CI-safe release smoke:
 bash scripts/smoke-cli.sh
 ```
 
-The smoke runs build, tests, package dry-run, CLI help, workflow registry listing/showing/validation, default `diff-review` validation, gated fixture validation, write-without-gate validation failure, GitHub PR artifact generation, and workflow suggestion generation/validation. It must not start live Codex workers.
+The smoke runs build, tests, package dry-run, CLI help, workflow registry listing/showing/validation, default `diff-review` validation, gated fixture validation, patch-mode safe-write fixture validation, write-without-gate validation failure, GitHub PR artifact generation, and workflow suggestion generation/validation. It must not start live Codex workers.
 
 GitHub Actions runs on pull requests and pushes to `main` through `.github/workflows/ci.yml`. CI runs `npm ci`, `npm run check`, `npm pack --dry-run`, and `bash scripts/smoke-cli.sh`.
 
@@ -111,7 +111,9 @@ Required metadata fields:
 - `inputs.<name>.type`
 - `inputs.<name>.required`
 
-Bundled review workflows must keep `capabilities.writes: false`, `defaults.sandbox: read-only`, and the same shared `collect -> review -> reduce` contract. The bundled `doc-refresh` workflow declares `capabilities.writes: true`, writes preview artifacts before a gate, and runs its write phase through Codex SDK `workspace-write` execution after approval. Example-specific behavior belongs in workflow YAML prompts and catalog docs, not in the runtime.
+Bundled review workflows must keep `capabilities.writes: false`, `defaults.sandbox: read-only`, and the same shared `collect -> review -> reduce` contract. The bundled `doc-refresh` workflow declares `capabilities.writes: true`, uses `write_policy.mode: direct-docs`, and writes preview artifacts before a gate. All write modes run the writer in an isolated target, store `artifacts/proposed.patch`, check paths, run `git apply --check --3way`, and only then apply to the target. New non-doc write-capable workflows must declare `write_policy.mode: patch`, `allowed_paths`, `forbidden_paths`, and optional `verification_commands`. If verification fails after apply, CWF attempts to reverse-apply the same proposed patch before returning a failed run. `direct-docs` is only the docs/readme/release-note policy preset for `doc-refresh`; source/config writes should use explicit patch policy. Example-specific behavior belongs in workflow YAML prompts and catalog docs, not in the runtime.
+
+Path patterns in `allowed_paths` and `forbidden_paths` support the simple CWF glob subset: `*` for one path segment and `**` for any nested path. Other glob operators are treated literally.
 
 ## Runtime Model
 
@@ -141,10 +143,10 @@ Codex current conversation or cwf CLI
 Supported phase kinds:
 
 - `command`: local context collection.
-- `write-preview`: run-folder-only preview artifacts before a gate.
+- `write-preview`: run-folder-only preview artifacts before a gate, including the write policy and verification plan.
 - `gate`: explicit approve/reject pause.
 - `codex-parallel`: read-only Codex worker fan-out.
-- `codex-write`: one gated write worker using Codex SDK `workspace-write` execution after CWF gate approval.
+- `codex-write`: one gated write worker. The writer runs in an isolated target and CWF applies the extracted patch only after policy checks and `git apply --check --3way`. `direct-docs` is the docs-only policy preset for `doc-refresh`; `patch` is the explicit mode for non-doc safe writes.
 - `reducer`: merge worker envelopes and artifact evidence into final result.
 
 ### Agent vs Thread
@@ -336,7 +338,7 @@ Write-capable phases and workers declare `writes: true`. Validation fails if any
 
 `write-preview` is not a write phase: it writes only run-folder artifacts such as `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and an initial `artifacts/rollback.md`. It must not modify the target repo.
 
-`codex-write` is a write phase. The default runner starts a Codex SDK thread with `sandboxMode: "workspace-write"` after CWF gate approval and records runtime metadata in the worker JSON. The current noninteractive SDK writer sets `approvalPolicy: "never"` because the CWF gate is the human approval boundary for this phase; future host-native writers may use per-action Codex approval when an interactive approval surface is available. Test fixtures may inject a write runner, but production target writes must not be performed directly by the workflow runner.
+`codex-write` is a write phase. After CWF gate approval, the default runner starts a Codex SDK thread with `sandboxMode: "workspace-write"` inside an isolated temporary target, records runtime metadata in the worker JSON, extracts `artifacts/proposed.patch`, checks `write_policy`, and applies only through `git apply --check --3way` followed by `git apply --3way`. The current noninteractive SDK writer sets `approvalPolicy: "never"` because the CWF gate is the human approval boundary for this phase; future host-native writers may use per-action Codex approval when an interactive approval surface is available. Test fixtures may inject a write runner, but production target writes must not be performed directly by the workflow runner.
 
 Before a `codex-write` phase starts, Codex Flow re-checks the target diff hash captured during `collect`. If the diff changed after preview/gate, the run fails and the user must rerun the workflow before writing.
 

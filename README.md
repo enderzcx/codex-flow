@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 also ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check.
 
 The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
@@ -115,7 +115,7 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 `cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
 
-Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. The bundled `doc-refresh` workflow uses this path: it writes `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, and `artifacts/rollback.md` before approval, then runs its write phase through a Codex SDK `workspace-write` thread only after approval.
+Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. Write workflows write `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approval. After approval the writer runs in an isolated target, CWF stores `artifacts/proposed.patch`, checks `write_policy` paths and `git apply --check --3way`, applies the patch, and records diff, verification, and rollback artifacts. The bundled `doc-refresh` workflow uses `direct-docs` only as a docs/readme/release-note policy preset; it still goes through the same isolated patch apply path.
 
 `cwf desktop result` bridges completed filesystem runs back into Codex. When CWF is launched by a Codex skill from an active conversation, the primary UX is for the skill to read the completed run and answer in that same conversation. `--print` prints a concise handoff prompt for that path. Without app-server, the command still writes `artifacts/handoff-prompt.md`. `--new-thread` and `--thread <thread-id>` require a Codex CLI with app-server support, a running app-server daemon, and remote control enabled:
 
@@ -147,6 +147,9 @@ Run artifacts are stored under:
   artifacts/
     write-plan.md
     dry-run-preview.md
+    verification-plan.md
+    proposed.patch
+    proposed-patch.md
     diff-summary.md
     rollback.md
     verification.md
@@ -225,7 +228,9 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 ## Current Limitations
 
 - Bundled review workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
-- `doc-refresh` is the only bundled write-capable workflow. It is documentation-only, gated, reversible, and writes through Codex SDK `workspace-write` execution after explicit approval.
+- `doc-refresh` remains the only bundled user-facing write workflow. It is documentation-only, gated, reversible, and applies through the isolated patch path after explicit approval.
+- General non-doc write-capable workflows must declare `write_policy` and use patch mode. CWF refuses paths outside `allowed_paths`, forbidden paths, target drift after preview, `git apply --check --3way` conflicts, and failed workflow verification commands. If patch-mode verification fails after apply, CWF attempts to reverse-apply the same proposed patch before returning a failed run.
+- `direct-docs` is a compatibility policy for `doc-refresh`; source/config write workflows must use explicit patch-mode policy with their own allowed paths and verification commands.
 - GitHub PR output is local by default. Nothing is posted unless `cwf github-pr` is run with explicit `--post --repo <owner/repo> --pr <number>`.
 - Workflow suggestions are YAML specs only. They are validated after generation, but they are not installed or run automatically.
 - Reviews tracked git diffs; untracked file contents are not included.
@@ -263,6 +268,7 @@ The v1.0 release has been smoke-tested on:
 - workflow validation and human-readable status formatting
 - bundled workflow catalog and example workflow registry validation
 - gated doc-refresh preview, approve/resume, reject, rollback, and verification artifact coverage
+- patch-mode safe write fixture preview, approve/resume, proposed patch, policy rejection, apply, rollback, and verification failure coverage
 - GitHub PR comment/review artifact generation and mocked `gh` post success/failure
 - workflow suggestion generation, invalid diagnostics, registry non-installation, and explicit-path run with mocked worker
 - documented command surface and install/build/link flow

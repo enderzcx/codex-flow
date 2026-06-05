@@ -71,6 +71,13 @@ Accept only a public Codex-native v1.0 core. Private adapters are out of scope.
 - [ ] Gated write-capable documentation workflow has preview, approval, rollback, and verification evidence.
   - Evidence: `doc-refresh` fixture tests cover preview artifacts, approve/resume writing scoped docs, reject writing nothing, worker sandbox metadata, diff summary, rollback, verification, and manifest entries.
 
+- [ ] Non-doc write-capable workflows require `write_policy` and patch-mode safety.
+  - Evidence: `tests/workflow-schema.test.ts` covers required `write_policy`, safe path patterns, explicit `mode: patch`, and doc-refresh direct-docs compatibility.
+
+- [ ] Patch-mode write workflows apply only policy-approved patches.
+  - Evidence: `tests/phase-engine.test.ts` covers isolated-target patch generation, approve/resume apply, forbidden path rejection before target changes, and verification failure marking the run failed.
+  - Evidence: `tests/safe-write.test.ts` covers `git apply --check --3way` conflict stop with the target left unchanged.
+
 - [ ] Result command prints a final review and points to saved artifacts.
   - Evidence: `cwf result <run-id>` prints final review and `~/.codex-workflows/runs/<run-id>/result.md` exists.
 

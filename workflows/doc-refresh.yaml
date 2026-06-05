@@ -8,6 +8,26 @@ tags:
   - gated
 capabilities:
   writes: true
+write_policy:
+  mode: direct-docs
+  allowed_paths:
+    - docs/**
+    - README.md
+    - README.zh-CN.md
+    - CONTRIBUTING.md
+    - ACCEPTANCE.md
+    - RELEASE_NOTES.md
+  forbidden_paths:
+    - .env
+    - .env.*
+    - '**/.env'
+    - '**/.env.*'
+    - '**/*secret*'
+    - '**/*credential*'
+    - '**/*private-key*'
+    - .git
+    - .git/**
+    - node_modules/**
 inputs:
   target:
     type: path

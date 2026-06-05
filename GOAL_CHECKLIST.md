@@ -195,6 +195,24 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 - [x] Commit v1.4.
   - Evidence: v1.4 phase commit in git history; final response reports the exact hash after commit.
 
+## v1.10 Safe Write Workers
+
+- [x] Codex SDK writer can target a disposable repo.
+  - Evidence: local feasibility spike wrote `docs/sdk-write-probe.md` inside `/tmp/cwf-sdk-target-*` through `@openai/codex-sdk` `workspace-write` and removed the temp repo after confirming the file body.
+
+- [x] Non-doc write-capable workflows require `write_policy`.
+  - Evidence: `tests/workflow-schema.test.ts` covers missing policy rejection, explicit `mode: patch`, unsafe path pattern rejection, and `doc-refresh` direct-docs compatibility.
+
+- [x] Patch-mode writer runs in an isolated target and applies through policy-checked patch.
+  - Evidence: `tests/phase-engine.test.ts` covers isolated target patch generation, `artifacts/proposed.patch`, approve/resume apply, manifest entries, and workflow verification commands.
+
+- [x] Forbidden paths and patch conflicts stop safely.
+  - Evidence: `tests/phase-engine.test.ts` rejects `.env` before target change.
+  - Evidence: `tests/safe-write.test.ts` proves a conflicting patch stops at `git apply --check --3way` and leaves the target file unchanged.
+
+- [x] Verification failure cannot produce a passing run.
+  - Evidence: `tests/phase-engine.test.ts` marks worker JSON and run state failed when configured verification commands fail after apply, records that the applied patch was reverted, and asserts the generated target file is absent afterward.
+
 ## v1.5 GitHub PR Review Artifacts
 
 - [x] PR comment artifact is generated.

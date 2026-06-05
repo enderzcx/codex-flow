@@ -9,7 +9,15 @@ import { reduceDiffReview } from "./reducers/diff-review-reducer.js";
 import { renderMarkdownResult } from "./renderers/markdown-result.js";
 import { buildFailureSummary } from "./run-index.js";
 import { RunStore } from "./run-store.js";
-import type { ArtifactManifest, ArtifactRef, DiffContext, PhaseState, WorkerResult, WorkflowPhase, WorkflowSpec, WorkflowWorker } from "./types.js";
+import {
+  applySafePatch,
+  createIsolatedWriteTarget,
+  generatePatch,
+  revertAppliedPatch,
+  runVerificationCommands,
+  type VerificationResult,
+} from "./safe-write.js";
+import type { ArtifactManifest, ArtifactRef, DiffContext, PhaseState, WorkerResult, WorkflowPhase, WorkflowSpec, WorkflowWorker, WritePolicy } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -80,7 +88,7 @@ export async function executeWorkflow(options: ExecuteWorkflowOptions): Promise<
 
       if (phase.kind === "write-preview") {
         context = context ?? (await loadContextForRun(store, target));
-        await runWritePreviewPhase(store, phase, context);
+        await runWritePreviewPhase(store, phase, context, resolveWritePolicy(options.spec));
         continue;
       }
 
@@ -144,6 +152,7 @@ async function runWritePreviewPhase(
   store: RunStore,
   phase: Extract<WorkflowPhase, { kind: "write-preview" }>,
   context: DiffContext,
+  policy: WritePolicy,
 ): Promise<void> {
   await store.updatePhase(phase.id, "running");
   await writeRunArtifact(
@@ -167,6 +176,9 @@ async function runWritePreviewPhase(
       "",
       "- This preview phase does not modify target files.",
       "- The workflow must pause at a gate before any phase with `writes:true` runs.",
+      `- Write policy mode: \`${policy.mode}\`.`,
+      `- Allowed paths: ${policy.allowed_paths.map((path) => `\`${path}\``).join(", ")}`,
+      `- Forbidden paths: ${policy.forbidden_paths.map((path) => `\`${path}\``).join(", ")}`,
       "- Rollback evidence is generated before and after the write phase.",
     ].join("\n"),
   );
@@ -179,10 +191,24 @@ async function runWritePreviewPhase(
       "No target files were modified by this preview.",
       "",
       "The approved write worker will receive the collected diff context and must keep edits scoped to the workflow prompt.",
+      "Write workflows generate `artifacts/proposed.patch` from an isolated copy before CWF applies it to the target repo.",
       "",
       "Pre-write diff hash:",
       "",
       `\`${context.diff_hash}\``,
+    ].join("\n"),
+  );
+  await writeRunArtifact(
+    store,
+    "verification-plan.md",
+    [
+      "# Verification Plan",
+      "",
+      policy.verification_commands.length > 0
+        ? "CWF will run these verification commands after applying an approved patch:"
+        : "No workflow-level verification commands are configured.",
+      "",
+      ...(policy.verification_commands.length > 0 ? policy.verification_commands.map((command) => `- \`${command}\``) : ["- none"]),
     ].join("\n"),
   );
   await writeRunArtifact(
@@ -198,7 +224,7 @@ async function runWritePreviewPhase(
   );
   await store.appendEvent("write.preview", {
     phase: phase.id,
-    artifacts: ["artifacts/write-plan.md", "artifacts/dry-run-preview.md", "artifacts/rollback.md"],
+    artifacts: ["artifacts/write-plan.md", "artifacts/dry-run-preview.md", "artifacts/verification-plan.md", "artifacts/rollback.md"],
   });
   await store.updatePhase(phase.id, "completed");
 }
@@ -253,20 +279,89 @@ async function runCodexWritePhase(
   await store.updatePhase(phase.id, "running");
   await store.updateWorker(phase.worker.id, "running");
   const runner = options.writeRunner ?? runCodexWriteWorker;
-  const result = await runner(phase.worker, context, {
-    target,
-    timeoutMs: Number(process.env.CWF_WORKER_TIMEOUT_MS || options.spec.defaults.timeout_ms),
-    codexPath: process.env.CWF_CODEX_PATH,
-  });
+  const policy = resolveWritePolicy(options.spec);
+  const result = await runPatchWriteWorker(store, phase.worker, context, target, options, runner, policy);
   await store.writeWorkerResult(result);
   await store.updateWorker(phase.worker.id, result.status, result.error);
-  await writePostWriteArtifacts(store, target, context, result);
   if (result.status === "failed") {
     const error = result.error ?? `Write worker ${phase.worker.id} failed.`;
     await store.updatePhase(phase.id, "failed", error);
     throw new Error(error);
   }
   await store.updatePhase(phase.id, "completed");
+}
+
+async function runPatchWriteWorker(
+  store: RunStore,
+  worker: WorkflowWorker,
+  context: DiffContext,
+  target: string,
+  options: ExecuteWorkflowOptions,
+  runner: WriteRunner,
+  policy: WritePolicy,
+): Promise<WorkerResult> {
+  const isolated = await createIsolatedWriteTarget(target);
+  try {
+    const result = await runner(worker, { ...context, target: isolated.path }, {
+      target: isolated.path,
+      timeoutMs: Number(process.env.CWF_WORKER_TIMEOUT_MS || options.spec.defaults.timeout_ms),
+      codexPath: process.env.CWF_CODEX_PATH,
+    });
+    if (result.status === "failed") {
+      await writePostWriteArtifacts(store, target, context, result, [], []);
+      return result;
+    }
+
+    const patch = await generatePatch(isolated.path);
+    const patchPath = await writeRunFile(store, "proposed.patch", patch);
+    await writeRunArtifact(
+      store,
+      "proposed-patch.md",
+      [
+        "# Proposed Patch",
+        "",
+        `Generated from isolated target: \`${isolated.path}\``,
+        `Patch artifact: \`${patchPath}\``,
+        "",
+        "CWF scans this patch against `write_policy`, runs `git apply --check --3way`, and only then applies it to the target repo.",
+      ].join("\n"),
+    );
+
+    let changedFiles: string[] = [];
+    let verificationResults: VerificationResult[] = [];
+    try {
+      await assertTargetDiffUnchanged(target, expectedTrackedDiffHash(context), "Target repo diff changed before safe patch apply; rerun the workflow before writing.");
+      changedFiles = await applySafePatch(target, patch, policy, patchPath);
+      verificationResults = await runVerificationCommands(target, policy.verification_commands);
+      const failedVerification = verificationResults.find((item) => item.status === "failed");
+      if (failedVerification) {
+        try {
+          await revertAppliedPatch(target, patchPath);
+          await writePostWriteArtifacts(store, target, context, result, [], verificationResults);
+          return failedWriteResult(result, new Error(`verification failed: ${failedVerification.command}; applied patch was reverted`));
+        } catch (rollbackError) {
+          await writePostWriteArtifacts(store, target, context, result, changedFiles, verificationResults);
+          return failedWriteResult(
+            result,
+            new Error(
+              `verification failed: ${failedVerification.command}; rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`,
+            ),
+          );
+        }
+      }
+      await writePostWriteArtifacts(store, target, context, result, changedFiles, verificationResults);
+    } catch (error) {
+      await writePostWriteArtifacts(store, target, context, result, changedFiles, verificationResults);
+      return failedWriteResult(result, error);
+    }
+
+    return {
+      ...result,
+      artifacts: [...new Set([...result.artifacts, "artifacts/proposed.patch", "artifacts/proposed-patch.md", "artifacts/diff-summary.md", "artifacts/verification.md", "artifacts/rollback.md"])],
+    };
+  } finally {
+    await isolated.cleanup();
+  }
 }
 
 async function runReducerPhase(
@@ -357,7 +452,7 @@ async function buildGeneratedArtifactRefs(store: RunStore): Promise<ArtifactRef[
     return [];
   }
   return files
-    .filter((file) => file.endsWith(".md") && file !== "result.md")
+    .filter((file) => (file.endsWith(".md") || file.endsWith(".patch")) && file !== "result.md")
     .sort()
     .map<ArtifactRef>((file) => ({
       id: artifactIdForFile(file),
@@ -378,9 +473,13 @@ function buildArtifactManifest(store: RunStore, workflow: string, artifacts: Art
 }
 
 async function writeRunArtifact(store: RunStore, fileName: string, markdown: string): Promise<string> {
+  return writeRunFile(store, fileName, `${markdown.trimEnd()}\n`);
+}
+
+async function writeRunFile(store: RunStore, fileName: string, content: string): Promise<string> {
   await mkdir(join(store.runDir, "artifacts"), { recursive: true });
   const path = join(store.runDir, "artifacts", fileName);
-  await writeFile(path, `${markdown.trimEnd()}\n`);
+  await writeFile(path, content);
   await store.appendEvent("artifact.generated", { path });
   return path;
 }
@@ -390,6 +489,8 @@ async function writePostWriteArtifacts(
   target: string,
   context: DiffContext,
   result: WorkerResult,
+  policyChangedFiles: string[],
+  verificationResults: VerificationResult[],
 ): Promise<void> {
   const [statusShort, diffStat] = await Promise.all([gitOutput(target, ["status", "--short"]), gitOutput(target, ["diff", "--stat"])]);
   const changedFiles = statusShort
@@ -420,6 +521,10 @@ async function writePostWriteArtifacts(
       "## Changed Files",
       "",
       ...(changedFiles.length > 0 ? changedFiles.map((file) => `- ${file}`) : ["- none"]),
+      "",
+      "## Policy-Applied Files",
+      "",
+      ...(policyChangedFiles.length > 0 ? policyChangedFiles.map((file) => `- ${file}`) : ["- none recorded"]),
     ].join("\n"),
   );
   await writeRunArtifact(
@@ -434,6 +539,15 @@ async function writePostWriteArtifacts(
       "## Worker Verification",
       "",
       ...(result.verification.length > 0 ? result.verification.map((item) => `- ${item}`) : ["- No verification evidence returned by worker."]),
+      "",
+      "## Workflow Verification Commands",
+      "",
+      ...(verificationResults.length > 0
+        ? verificationResults.flatMap((item) => [
+            `- ${item.status}: \`${item.command}\``,
+            item.output ? `  - Output: ${item.output.replace(/\r?\n/g, " ").slice(0, 500)}` : "  - Output: (none)",
+          ])
+        : ["- No workflow-level verification commands configured."]),
     ].join("\n"),
   );
   await writeRunArtifact(
@@ -456,6 +570,27 @@ async function writePostWriteArtifacts(
       ...(changedFiles.length > 0 ? changedFiles.map((file) => `- ${file}`) : ["- none"]),
     ].join("\n"),
   );
+}
+
+function resolveWritePolicy(spec: WorkflowSpec): WritePolicy {
+  return spec.write_policy ?? {
+    mode: "direct-docs",
+    allowed_paths: ["docs/**", "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "ACCEPTANCE.md", "RELEASE_NOTES.md"],
+    forbidden_paths: [".env", ".env.*", "**/.env", "**/.env.*", "**/*secret*", "**/*credential*", "**/*private-key*", ".git", ".git/**", "node_modules/**"],
+    verification_commands: [],
+  };
+}
+
+function failedWriteResult(result: WorkerResult, error: unknown): WorkerResult {
+  const message = error instanceof Error ? error.message : String(error);
+  return {
+    ...result,
+    status: "failed",
+    confidence: "low",
+    summary: `${result.summary}\n\nSafe write failed: ${message}`,
+    error: message,
+    verification: [...result.verification, `Safe write failed: ${message}`],
+  };
 }
 
 async function loadContextForRun(store: RunStore, target: string): Promise<DiffContext> {
@@ -513,10 +648,19 @@ async function gitOutput(cwd: string, args: string[]): Promise<string> {
 }
 
 function artifactIdForFile(file: string): string {
+  if (file === "proposed.patch") {
+    return "proposed-patch-file";
+  }
   return file.replace(/\.md$/, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
 }
 
 function generatedArtifactDescription(file: string): string {
+  if (file === "proposed.patch") {
+    return "Patch generated in an isolated write target before safe apply.";
+  }
+  if (file === "proposed-patch.md") {
+    return "Human-readable proposed patch pointer and apply policy note.";
+  }
   if (file === "write-plan.md") {
     return "Pre-approval write plan for a gated write-capable workflow.";
   }

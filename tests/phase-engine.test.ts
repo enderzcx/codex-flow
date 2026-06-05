@@ -363,6 +363,149 @@ describe("executeWorkflow", () => {
     const status = await gitOutput(target, ["status", "--short"]);
     expect(status).not.toContain("docs/codex-flow-v14-fixture.md");
   });
+
+  it("applies a patch-mode write from an isolated target after approval", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createPatchWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-safe-write.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-safe-write.yaml",
+      target,
+      store,
+      resume: true,
+      writeRunner: fixturePatchWriteRunner,
+    });
+
+    const state = await store.readState();
+    const written = await readFile(join(target, "src", "generated", "safe-write-result.js"), "utf8");
+    const proposedPatch = await readFile(join(store.runDir, "artifacts", "proposed.patch"), "utf8");
+    const verification = await readFile(join(store.runDir, "artifacts", "verification.md"), "utf8");
+    const manifest = JSON.parse(await readFile(join(store.runDir, "artifacts", "manifest.json"), "utf8")) as ArtifactManifest;
+
+    expect(state.status).toBe("completed");
+    expect(written).toContain("safeWriteResult");
+    expect(proposedPatch).toContain("src/generated/safe-write-result.js");
+    expect(verification).toContain("passed: `test -f src/generated/safe-write-result.js`");
+    expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual(expect.arrayContaining(["proposed-patch", "proposed-patch-file", "diff-summary", "verification"]));
+  });
+
+  it("rejects patch-mode writes outside allowed_paths before changing the target", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createPatchWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-safe-write.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+
+    await expect(
+      executeWorkflow({
+        spec: writeSpec,
+        specPath: "fixtures/workflows/gated-safe-write.yaml",
+        target,
+        store,
+        resume: true,
+        writeRunner: fixtureForbiddenPatchWriteRunner,
+      }),
+    ).rejects.toThrow("outside allowed_paths");
+
+    const state = await store.readState();
+    const status = await gitOutput(target, ["status", "--short"]);
+
+    expect(state.status).toBe("failed");
+    expect(status).not.toContain(".env");
+  });
+
+  it("fails patch-mode runs if the target drifts before safe patch apply", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createPatchWriteSpec();
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-safe-write.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+
+    const driftingWriter: WriteRunner = async (worker, context, options) => {
+      const result = await fixturePatchWriteRunner(worker, context, options);
+      await writeFile(join(target, "src", "calc.js"), "export const answer = 7;\n");
+      return result;
+    };
+
+    await expect(
+      executeWorkflow({
+        spec: writeSpec,
+        specPath: "fixtures/workflows/gated-safe-write.yaml",
+        target,
+        store,
+        resume: true,
+        writeRunner: driftingWriter,
+      }),
+    ).rejects.toThrow("Target repo diff changed before safe patch apply");
+
+    const status = await gitOutput(target, ["status", "--short"]);
+    expect(status).not.toContain("src/generated/safe-write-result.js");
+  });
+
+  it("fails patch-mode runs when workflow verification commands fail", async () => {
+    const target = await createGitRepoWithDiff();
+    const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(runsRoot);
+    const writeSpec = createPatchWriteSpec(["test -f src/generated/missing.js"]);
+    const store = await RunStore.create(writeSpec, target, runsRoot);
+
+    await executeWorkflow({
+      spec: writeSpec,
+      specPath: "fixtures/workflows/gated-safe-write.yaml",
+      target,
+      store,
+    });
+    await store.approveGate("approve-write");
+
+    await expect(
+      executeWorkflow({
+        spec: writeSpec,
+        specPath: "fixtures/workflows/gated-safe-write.yaml",
+        target,
+        store,
+        resume: true,
+        writeRunner: fixturePatchWriteRunner,
+      }),
+    ).rejects.toThrow("verification failed");
+
+    const state = await store.readState();
+    const worker = await readFile(join(store.runDir, "workers", "safe-write.json"), "utf8");
+    const status = await gitOutput(target, ["status", "--short"]);
+
+    expect(state.status).toBe("failed");
+    expect(worker).toContain('"status": "failed"');
+    expect(worker).toContain("verification failed");
+    expect(worker).toContain("applied patch was reverted");
+    expect(status).not.toContain("src/generated/safe-write-result.js");
+    await expect(readFile(join(target, "src", "generated", "safe-write-result.js"), "utf8")).rejects.toThrow();
+  });
 });
 
 async function createGitRepoWithDiff(): Promise<string> {
@@ -434,6 +577,45 @@ function createGatedWriteSpec(): WorkflowSpec {
   };
 }
 
+function createPatchWriteSpec(verificationCommands = ["test -f src/generated/safe-write-result.js"]): WorkflowSpec {
+  return {
+    id: "safe-write-fixture",
+    version: "1.10.0-fixture",
+    title: "Safe Write Fixture",
+    tags: ["write-capable", "fixture"],
+    inputs: {
+      target: { type: "path", required: true },
+    },
+    capabilities: { writes: true },
+    write_policy: {
+      mode: "patch",
+      allowed_paths: ["src/generated/**"],
+      forbidden_paths: [".env", ".git", ".git/**"],
+      verification_commands: verificationCommands,
+    },
+    requires: { target: "git-repo" },
+    defaults: { sandbox: "read-only", timeout_ms: 300000 },
+    phases: [
+      { id: "collect", kind: "command" },
+      { id: "preview-write", kind: "write-preview", prompt: "Prepare safe generated source write." },
+      { id: "approve-write", kind: "gate", prompt: "Approve safe generated source write.", requires_approval: true },
+      {
+        id: "review",
+        kind: "codex-write",
+        writes: true,
+        worker: {
+          id: "safe-write",
+          perspective: "safe bounded write",
+          prompt: "Create src/generated/safe-write-result.js with a fixture export.",
+          writes: true,
+        },
+      },
+      { id: "reduce", kind: "reducer", reducer: "diff-review" },
+    ],
+    artifacts: ["result.md"],
+  };
+}
+
 const successfulRunner: WorkerRunner = async (worker) => ({
   worker_id: worker.id,
   status: "completed",
@@ -494,3 +676,49 @@ const fixtureWriteRunner: WriteRunner = async (worker, _context, options) => {
     },
   };
 };
+
+const fixturePatchWriteRunner: WriteRunner = async (worker, _context, options) => {
+  await mkdir(join(options.target, "src", "generated"), { recursive: true });
+  await writeFile(join(options.target, "src", "generated", "safe-write-result.js"), "export const safeWriteResult = true;\n");
+  return createWriteResult(worker.id, worker.perspective, options.target, ["src/generated/safe-write-result.js"]);
+};
+
+const fixtureForbiddenPatchWriteRunner: WriteRunner = async (worker, _context, options) => {
+  await writeFile(join(options.target, ".env"), "SECRET=not-allowed\n");
+  return createWriteResult(worker.id, worker.perspective, options.target, [".env"]);
+};
+
+function createWriteResult(workerId: string, perspective: string, target: string, artifacts: string[]) {
+  return {
+    worker_id: workerId,
+    status: "completed" as const,
+    confidence: "high" as const,
+    summary: "fixture patch write completed",
+    findings: [],
+    verification: ["mock writer completed"],
+    artifacts,
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:00:01.000Z",
+    duration_ms: 1000,
+    prompt: `mock write ${workerId}`,
+    raw: JSON.stringify({
+      worker_id: workerId,
+      summary: "fixture patch write completed",
+      findings: [],
+      verification: ["mock writer completed"],
+      artifacts,
+      confidence: "high",
+    }),
+    raw_fallback: false,
+    retry_count: 0,
+    runtime: {
+      adapter: "codex-sdk-headless" as const,
+      fallback_used: false,
+      agent_role: perspective,
+      transcript_read: false,
+      sandbox: "workspace-write" as const,
+      approval_policy: "never" as const,
+      worktree_path: target,
+    },
+  };
+}

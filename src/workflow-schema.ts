@@ -1,4 +1,13 @@
-import type { WorkerAdapterName, WorkflowCapabilities, WorkflowInput, WorkflowPhase, WorkflowRuntime, WorkflowSpec } from "./types.js";
+import type {
+  WorkerAdapterName,
+  WorkflowCapabilities,
+  WorkflowInput,
+  WorkflowPhase,
+  WorkflowRuntime,
+  WorkflowSpec,
+  WritePolicy,
+  WritePolicyMode,
+} from "./types.js";
 
 export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   const spec = asRecord(value, "workflow");
@@ -25,6 +34,7 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   const phases = phasesRaw.map((phase, index) => validatePhase(phase, `phases[${index}]`));
   validateWriteCapabilities(capabilities, phases);
   validateWriteGates(phases);
+  const writePolicy = validateWritePolicy(spec.write_policy, capabilities, id);
   const phaseIds = phases.map((phase) => phase.id);
   for (const required of ["collect", "reduce"]) {
     if (!phaseIds.includes(required)) {
@@ -47,6 +57,7 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
     tags,
     inputs,
     capabilities,
+    write_policy: writePolicy,
     requires: { target: "git-repo" },
     defaults: {
       sandbox: "read-only",
@@ -90,6 +101,92 @@ function validateCapabilities(value: unknown): WorkflowCapabilities {
   return {
     writes: expectBoolean(capabilities.writes, "capabilities.writes"),
   };
+}
+
+function validateWritePolicy(value: unknown, capabilities: WorkflowCapabilities, workflowId: string): WritePolicy | undefined {
+  if (!capabilities.writes) {
+    if (value !== undefined) {
+      throw new Error("write_policy is only valid when capabilities.writes is true");
+    }
+    return undefined;
+  }
+
+  if (value === undefined) {
+    if (workflowId === "doc-refresh") {
+      return defaultDocRefreshWritePolicy();
+    }
+    throw new Error("write_policy is required for write-capable workflows except doc-refresh direct-docs compatibility");
+  }
+
+  const policy = asRecord(value, "write_policy");
+  const mode = expectWritePolicyMode(policy.mode, "write_policy.mode");
+  const allowedPaths =
+    policy.allowed_paths === undefined
+      ? mode === "direct-docs"
+        ? defaultDocRefreshWritePolicy().allowed_paths
+        : []
+      : expectArray(policy.allowed_paths, "write_policy.allowed_paths").map((item, index) => expectSafePathPattern(item, `write_policy.allowed_paths[${index}]`));
+  const forbiddenPaths =
+    policy.forbidden_paths === undefined
+      ? defaultForbiddenPathPatterns()
+      : expectArray(policy.forbidden_paths, "write_policy.forbidden_paths").map((item, index) => expectSafePathPattern(item, `write_policy.forbidden_paths[${index}]`));
+  const verificationCommands =
+    policy.verification_commands === undefined
+      ? []
+      : expectArray(policy.verification_commands, "write_policy.verification_commands").map((item, index) =>
+          expectString(item, `write_policy.verification_commands[${index}]`),
+        );
+
+  if (allowedPaths.length === 0) {
+    throw new Error("write_policy.allowed_paths must contain at least one path pattern");
+  }
+
+  return {
+    mode,
+    allowed_paths: allowedPaths,
+    forbidden_paths: forbiddenPaths,
+    verification_commands: verificationCommands,
+  };
+}
+
+function expectWritePolicyMode(value: unknown, path: string): WritePolicyMode {
+  const modes: WritePolicyMode[] = ["direct-docs", "patch"];
+  if (typeof value !== "string" || !modes.includes(value as WritePolicyMode)) {
+    throw new Error(`${path} must be one of ${modes.join(", ")}`);
+  }
+  return value as WritePolicyMode;
+}
+
+function expectSafePathPattern(value: unknown, path: string): string {
+  const pattern = expectString(value, path);
+  if (pattern.startsWith("/") || pattern.includes("..") || pattern.includes("\\")) {
+    throw new Error(`${path} must be a safe repo-relative path pattern`);
+  }
+  return pattern;
+}
+
+function defaultDocRefreshWritePolicy(): WritePolicy {
+  return {
+    mode: "direct-docs",
+    allowed_paths: ["docs/**", "README.md", "README.zh-CN.md", "CONTRIBUTING.md", "ACCEPTANCE.md", "RELEASE_NOTES.md"],
+    forbidden_paths: defaultForbiddenPathPatterns(),
+    verification_commands: [],
+  };
+}
+
+function defaultForbiddenPathPatterns(): string[] {
+  return [
+    ".env",
+    ".env.*",
+    "**/.env",
+    "**/.env.*",
+    "**/*secret*",
+    "**/*credential*",
+    "**/*private-key*",
+    ".git",
+    ".git/**",
+    "node_modules/**",
+  ];
 }
 
 function validateTargetInput(inputs: Record<string, WorkflowInput>): void {

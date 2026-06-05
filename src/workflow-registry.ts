@@ -16,6 +16,7 @@ export type WorkflowEntry = {
   description?: string;
   tags: string[];
   capabilities: WorkflowSpec["capabilities"];
+  write_policy?: WorkflowSpec["write_policy"];
   inputs: WorkflowSpec["inputs"];
   path: string;
   search_path: string;
@@ -74,6 +75,14 @@ export function formatWorkflowList(entries: WorkflowEntry[]): string {
 
 export function formatWorkflowShow(entry: WorkflowEntry): string {
   const inputLines = Object.entries(entry.inputs).map(([name, input]) => `- ${name}: ${input.type}${input.required ? ", required" : ""}`);
+  const writePolicyLines = entry.write_policy
+    ? [
+        `Write policy: mode=${entry.write_policy.mode}`,
+        `Allowed paths: ${entry.write_policy.allowed_paths.join(", ")}`,
+        `Forbidden paths: ${entry.write_policy.forbidden_paths.join(", ")}`,
+        `Verification commands: ${entry.write_policy.verification_commands.length > 0 ? entry.write_policy.verification_commands.join(" && ") : "(none)"}`,
+      ]
+    : [];
   return [
     `Workflow ID: ${entry.id}`,
     `Title: ${entry.title}`,
@@ -81,6 +90,7 @@ export function formatWorkflowShow(entry: WorkflowEntry): string {
     `Path: ${entry.path}`,
     `Tags: ${entry.tags.length > 0 ? entry.tags.join(", ") : "(none)"}`,
     `Capabilities: writes=${entry.capabilities.writes}`,
+    ...writePolicyLines,
     "Inputs:",
     ...(inputLines.length > 0 ? inputLines : ["- none"]),
     entry.description ? `Description: ${entry.description}` : undefined,
@@ -122,6 +132,7 @@ function workflowEntryFromSpec(spec: WorkflowSpec, path: string, searchPath: str
     description: spec.description,
     tags: spec.tags,
     capabilities: spec.capabilities,
+    write_policy: spec.write_policy,
     inputs: spec.inputs,
     path,
     search_path: searchPath,
