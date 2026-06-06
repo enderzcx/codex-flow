@@ -14,6 +14,7 @@ echo "==> cwf help"
 node dist/cli.js --help >/tmp/cwf-help-smoke.txt
 grep -q "cwf workflows validate" /tmp/cwf-help-smoke.txt
 grep -q "cwf run <workflow-id-or-path> --target <repo>" /tmp/cwf-help-smoke.txt
+grep -q "cwf dynamic run <workflow.js> --target <repo>" /tmp/cwf-help-smoke.txt
 
 echo "==> workflow registry smoke"
 node dist/cli.js workflows list
@@ -34,6 +35,26 @@ if node dist/cli.js validate fixtures/workflows/write-without-gate.yaml >/tmp/cw
   exit 1
 fi
 grep -q "writes:true" /tmp/cwf-write-without-gate.txt
+
+echo "==> dynamic workflow preview smoke"
+tmp_dynamic_target=$(mktemp -d /tmp/cwf-dynamic-target-XXXXXX)
+mkdir -p "$tmp_dynamic_target/src"
+printf '{"name":"dynamic-smoke","version":"0.0.0"}\n' > "$tmp_dynamic_target/package.json"
+printf 'export const answer = 42;\n' > "$tmp_dynamic_target/src/calc.js"
+git -C "$tmp_dynamic_target" init >/dev/null
+git -C "$tmp_dynamic_target" config user.email codex-workflows@example.invalid
+git -C "$tmp_dynamic_target" config user.name codex-workflows
+git -C "$tmp_dynamic_target" add .
+git -C "$tmp_dynamic_target" commit -m baseline >/dev/null
+printf 'export const answer = 0;\n' > "$tmp_dynamic_target/src/calc.js"
+node dist/cli.js dynamic run fixtures/dynamic/read-only.workflow.js --target "$tmp_dynamic_target" >/tmp/cwf-dynamic-preview.txt
+grep -q "Approve: cwf approve" /tmp/cwf-dynamic-preview.txt
+dynamic_run_id=$(sed -n 's/^Run ID: //p' /tmp/cwf-dynamic-preview.txt)
+test -n "$dynamic_run_id"
+test -f "$HOME/.codex-workflows/runs/$dynamic_run_id/artifacts/dynamic-preview.md"
+test -f "$HOME/.codex-workflows/runs/$dynamic_run_id/artifacts/workflow.sha256"
+grep -q "Node Permission Model child process" "$HOME/.codex-workflows/runs/$dynamic_run_id/artifacts/dynamic-preview.md"
+rm -rf "$tmp_dynamic_target" "$HOME/.codex-workflows/runs/$dynamic_run_id" /tmp/cwf-dynamic-preview.txt
 
 echo "==> github-pr artifact smoke"
 tmp_target=$(mktemp -d /tmp/cwf-gh-target-XXXXXX)

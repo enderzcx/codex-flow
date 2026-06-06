@@ -11,6 +11,7 @@ cwf workflows show <workflow-id-or-path>
 cwf workflows validate [workflow-id-or-path]
 cwf run <workflow-id-or-path> --target <repo> [--background]
 cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
+cwf dynamic run <workflow.js> --target <repo> [--approve]
 cwf desktop check
 cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
 cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
@@ -117,9 +118,14 @@ Path patterns in `allowed_paths` and `forbidden_paths` support the simple CWF gl
 
 ## Runtime Model
 
-Codex Flow has two runtime modes:
+Codex Flow has two workflow surfaces:
 
-1. **CLI engine mode**: v1.0 stable behavior. The runner uses local workflow specs, a filesystem run store, and Codex SDK workers. This mode is reliable for CLI and CI-like usage, but worker activity is not guaranteed to appear as Codex App left-sidebar threads.
+1. **Static YAML workflows**: v1.0 stable behavior. The runner uses local workflow specs, a filesystem run store, gates, Codex workers, and reducers.
+2. **Dynamic JavaScript workflows**: v1.11 behavior. The runner accepts a local `workflow.js`, parses it with an AST policy, copies it into run artifacts, renders a non-skippable preview, waits at `approve-dynamic`, then executes the artifact copy in a Node Permission Model child process. The child process has no target repo filesystem permission, no network permission, and no child-process permission; all work goes through parent CWF JSON-RPC APIs.
+
+Codex Flow has two worker execution modes:
+
+1. **CLI engine mode**: stable filesystem-backed execution through Codex SDK workers. This mode is reliable for CLI and CI-like usage, but worker activity is not guaranteed to appear as Codex App left-sidebar threads.
 2. **Native Codex runtime mode**: post-v1 behavior. The runner reuses Codex App Server threads, turns, review threads, subagents, sandbox, approvals, permissions profiles, and worktrees where available.
 
 These native capabilities are delivered incrementally: v1.2 adds explicit result return, v1.3 adds the worker adapter contract, v1.4 introduces gated write-capable workflows, and v1.7 turns `codex-app-thread` into the first live Desktop-visible worker-thread adapter.
@@ -148,6 +154,8 @@ Supported phase kinds:
 - `codex-parallel`: read-only Codex worker fan-out.
 - `codex-write`: one gated write worker. The writer runs in an isolated target and CWF applies the extracted patch only after policy checks and `git apply --check --3way`. `direct-docs` is the docs-only policy preset for `doc-refresh`; `patch` is the explicit mode for non-doc safe writes.
 - `reducer`: merge worker envelopes and artifact evidence into final result.
+
+Dynamic JavaScript runs use a synthetic `dynamic-js` wrapper with `collect -> dynamic-preview -> approve-dynamic -> dynamic-execute`. The script must export exactly one async default function and can call only the exposed CWF runtime object: `cwf.git`, `cwf.agent.run`, `cwf.map`, `cwf.artifacts`, and `cwf.report`. The AST policy rejects imports, dynamic import, `require`, `eval`, `Function`, `globalThis`, `process`, `fetch`, constructor/prototype escapes, direct shell strings, and calls not rooted in `cwf` or approved builtins. `cwf.agent.run` defaults to `read-only`; read-only workers fail if target diff changes. `safePatch` is recognized but not executable until the dynamic run is attached to a v1.10 `write_policy`. `inherit-session` requires strict origin `generated-current-session`, matching SHA-256, and a known write-capable parent permission cap; untrusted origins and hash mismatches fail closed.
 
 ### Agent vs Thread
 
@@ -210,6 +218,13 @@ Each run writes:
     tests.json
     safety.json
   artifacts/
+    workflow.js
+    workflow.sha256
+    dynamic-preview.md
+    dynamic-capabilities.json
+    dynamic-budget.json
+    dynamic-events.jsonl
+    dynamic-final.json
     reduced-result.json
     manifest.json
   result.md

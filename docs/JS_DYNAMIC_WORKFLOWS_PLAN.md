@@ -17,16 +17,16 @@ review_due: resolved 2026-06-06
 
 # JS Dynamic Workflows Plan
 
-Status: reviewed-plan.
+Status: reviewed-plan; v1.11 MVP implemented in the current working tree.
 
 ## Alignment Snapshot
 
 - Building: a Claude-like JavaScript workflow harness for Codex Flow, where Codex can generate a task-specific `workflow.js`, show a preview, ask for approval, and then execute the script through safe CWF runtime APIs.
 - Not building: unrestricted `node workflow.js`, exact Claude product parity, hidden writes, remote untrusted workflow execution, marketplace lifecycle, daemon scheduling, non-Codex model routing, or production/database/credential/payment/permission writes.
 - Source of truth: v1.7 app-thread worker evidence, v1.10 safe write worker evidence, current CWF run-store/artifact/reducer contracts, Codex app-server and SDK capabilities, and Claude Dynamic Workflows public descriptions.
-- Deliverables: PRD, SPEC, acceptance matrix, phase plan, and a copy-ready v1.11 `/goal` prompt.
+- Deliverables: PRD, SPEC, acceptance matrix, phase plan, copy-ready v1.11 `/goal` prompt, and the implemented v1.11 MVP slice.
 - Phase scope: roadmap-level contract for v1.11-v1.16, with v1.11 as the first implementable version slice.
-- Completeness: complete enough to start v1.11 without re-litigating whether JavaScript is the right dynamic-workflow surface.
+- Completeness: complete enough to guide v1.11-v1.16; v1.11 MVP now covers local preview-first JavaScript harnesses, AST policy, permissioned child execution, parent CWF JSON-RPC APIs, read-only agent mutation detection, strict `inherit-session` gating, and dynamic artifacts.
 - Verification level: this planning artifact is docs-only; implementation must prove fixture, local, and controlled real-smoke behavior.
 - Review requirement: Reasonix/v4Pro rereview passed on 2026-06-06 after session-permission inheritance changes.
 - Verification: `git diff --check`, delivery-doc mechanical validation if available, `npm run check`, `bash scripts/smoke-cli.sh`, Reasonix review, and future implementation evidence listed below.

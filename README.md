@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC.
 
 The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
@@ -22,6 +22,7 @@ The default catalog includes:
 - `research-crosscheck`: source fidelity and unsupported-claim review for research or documentation diffs
 - `release-review`: ship readiness, rollout, rollback, and regression review
 - `doc-refresh`: gated documentation-only write workflow with dry-run preview, approval, diff summary, rollback, and verification artifacts
+- `dynamic-js`: preview-first JavaScript harness execution through `cwf.git`, `cwf.agent.run`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
 
 The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
 
@@ -66,6 +67,14 @@ cwf run research-crosscheck --target <repo>
 cwf run release-review --target <repo>
 cwf run doc-refresh --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
+```
+
+Preview a local dynamic JavaScript workflow:
+
+```bash
+cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
+cwf approve <run-id> approve-dynamic
+cwf resume <run-id>
 ```
 
 Run in the background:
@@ -117,6 +126,8 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. Write workflows write `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approval. After approval the writer runs in an isolated target, CWF stores `artifacts/proposed.patch`, checks `write_policy` paths and `git apply --check --3way`, applies the patch, and records diff, verification, and rollback artifacts. The bundled `doc-refresh` workflow uses `direct-docs` only as a docs/readme/release-note policy preset; it still goes through the same isolated patch apply path.
 
+Dynamic JavaScript workflows are also gated. `cwf dynamic run <workflow.js> --target <repo>` writes `artifacts/workflow.js`, `workflow.sha256`, `dynamic-preview.md`, `dynamic-capabilities.json`, and `dynamic-budget.json`, then pauses at `approve-dynamic`. The script must export one async default function. The AST gate rejects imports, dynamic import, `require`, `eval`, `Function`, `globalThis`, `process`, `fetch`, constructor/prototype escape paths, direct shell strings, and call expressions outside `cwf` or approved builtins. Execution fails closed unless the child process can run with Node Permission Model active and without target repo filesystem, network, child-process, worker, native-addon, WASI, FFI, or inspector permissions. `cwf.agent.run` defaults to `read-only`; read-only agents fail the run if the target diff changes. `safePatch` is recognized but not dynamically executable until a v1.10 `write_policy` is attached to the dynamic run. `inherit-session` is allowed only for `generated-current-session` scripts with matching SHA-256 and a known write-capable parent permission cap; copied, remote, registry, packaged, unknown, and hash-mismatched workflows fail closed.
+
 `cwf desktop result` bridges completed filesystem runs back into Codex. When CWF is launched by a Codex skill from an active conversation, the primary UX is for the skill to read the completed run and answer in that same conversation. `--print` prints a concise handoff prompt for that path. Without app-server, the command still writes `artifacts/handoff-prompt.md`. `--new-thread` and `--thread <thread-id>` require a Codex CLI with app-server support, a running app-server daemon, and remote control enabled:
 
 ```bash
@@ -145,6 +156,13 @@ Run artifacts are stored under:
     tests.json
     safety.json
   artifacts/
+    workflow.js
+    workflow.sha256
+    dynamic-preview.md
+    dynamic-capabilities.json
+    dynamic-budget.json
+    dynamic-events.jsonl
+    dynamic-final.json
     write-plan.md
     dry-run-preview.md
     verification-plan.md
@@ -219,7 +237,7 @@ It does not attempt exact product parity with Claude Code Dynamic Workflows:
 
 - no native `/workflows` UI
 - no automatic `workflow` keyword trigger
-- no generated JavaScript workflow scripts
+- no unrestricted `node workflow.js`; JavaScript dynamic workflows must pass preview, AST policy, approval, and permissioned child-process execution
 - no non-Codex model routing
 - no web UI
 
@@ -231,6 +249,7 @@ See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
 - `doc-refresh` remains the only bundled user-facing write workflow. It is documentation-only, gated, reversible, and applies through the isolated patch path after explicit approval.
 - General non-doc write-capable workflows must declare `write_policy` and use patch mode. CWF refuses paths outside `allowed_paths`, forbidden paths, target drift after preview, `git apply --check --3way` conflicts, and failed workflow verification commands. If patch-mode verification fails after apply, CWF attempts to reverse-apply the same proposed patch before returning a failed run.
 - `direct-docs` is a compatibility policy for `doc-refresh`; source/config write workflows must use explicit patch-mode policy with their own allowed paths and verification commands.
+- Dynamic JavaScript workflows do not receive `fs`, `process`, network, shell, or target repo access. All git, agent, artifact, and report actions go through parent CWF APIs.
 - GitHub PR output is local by default. Nothing is posted unless `cwf github-pr` is run with explicit `--post --repo <owner/repo> --pr <number>`.
 - Workflow suggestions are YAML specs only. They are validated after generation, but they are not installed or run automatically.
 - Reviews tracked git diffs; untracked file contents are not included.
