@@ -25,8 +25,12 @@ Latest decisions:
   policy-approved paths to the real target after approval.
 - v1.11 JS Dynamic Runtime MVP: use JavaScript as the Claude-like dynamic
   workflow harness surface, but execute it only through a static AST policy gate,
-  permissioned child process, and CWF runtime APIs. Generated scripts must be
-  previewed and approved before execution.
+  permissioned child process, and CWF runtime APIs. Codex workers can use
+  `read-only`, `safePatch`, or trusted local `inherit-session` permission
+  profiles. Trusted local means `generated-current-session` origin with matching
+  SHA-256 in v1.11. CWF must never grant more authority than the parent Codex
+  session already has. Generated scripts must be previewed and approved before
+  execution.
 
 Archived phase prompts:
 

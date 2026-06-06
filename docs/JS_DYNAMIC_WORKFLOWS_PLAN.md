@@ -10,7 +10,7 @@ real_smoke_status: requires_approval
 review_status: approved
 reviewer: reasonix-v4pro
 review_command: crb review --scope working-tree --mode final-review --compact --json --timeout-ms 240000
-review_notes: Approved after adding AST policy gate, permissioned child-process boundary, IPC-only capabilities, forced read-only dynamic agents, and target diff violation checks.
+review_notes: Approved after adding session-permission inheritance capped by parent Codex permissions, generated-current-session SHA binding, strict origin enum, non-skippable inherited-permission preview, explicit app-thread downgrade status, and artifact-boundary verification.
 review_owner: Codex resolves blocker/high findings before implementation goal starts
 review_due: resolved 2026-06-06
 ---
@@ -28,13 +28,13 @@ Status: reviewed-plan.
 - Phase scope: roadmap-level contract for v1.11-v1.16, with v1.11 as the first implementable version slice.
 - Completeness: complete enough to start v1.11 without re-litigating whether JavaScript is the right dynamic-workflow surface.
 - Verification level: this planning artifact is docs-only; implementation must prove fixture, local, and controlled real-smoke behavior.
-- Review requirement: Reasonix/v4Pro final review passed on 2026-06-06.
+- Review requirement: Reasonix/v4Pro rereview passed on 2026-06-06 after session-permission inheritance changes.
 - Verification: `git diff --check`, delivery-doc mechanical validation if available, `npm run check`, `bash scripts/smoke-cli.sh`, Reasonix review, and future implementation evidence listed below.
-- Open decisions: none blocking. The selected architecture is JavaScript-first, but with a capability-scoped `cwf` runtime object instead of unrestricted Node.js access.
+- Open decisions: none blocking. The selected architecture is JavaScript-first, with a capability-scoped `cwf` runtime object and Codex-native workers that may inherit the parent session permission cap in trusted local runs.
 
 Capability sentence:
 
-This planning pass helps public Codex Flow users build Claude-like dynamic workflows by producing a JavaScript-harness roadmap and v1.11 delivery contract, using current CWF safe-write and app-thread evidence as source of truth, while avoiding unrestricted script execution, hidden writes, and platform-scheduler scope.
+This planning pass helps public Codex Flow users build Claude-like dynamic workflows by producing a JavaScript-harness roadmap and v1.11 delivery contract, using current CWF safe-write, app-thread, and Codex permission evidence as source of truth, while avoiding unrestricted script execution, hidden writes, and platform-scheduler scope.
 
 ## Source Summary
 
@@ -69,7 +69,7 @@ The target experience:
 4. The user approves.
 5. The JavaScript harness runs through CWF's controlled runtime APIs.
 6. Read-only workers may appear as Codex Desktop app-thread workers.
-7. Write workers can only write through `cwf.write.safePatch()`, which reuses v1.10 preview, gate, isolated target, path policy, patch apply, verification, and rollback behavior.
+7. Write-capable Codex workers can either use `safePatch` for public/auditable patch mode, or inherit the parent Codex session permission cap in a trusted local run.
 8. The initiating Codex conversation gets a short human summary, while artifacts keep the full evidence.
 
 The important shift: CWF becomes a dynamic harness runtime, not just a YAML workflow runner.
@@ -111,7 +111,7 @@ The gap is a dynamic JavaScript orchestration layer that composes those pieces.
 - Let Codex generate `workflow.js` from a user request, but require preview and approval before execution.
 - Execute scripts inside a constrained runtime that exposes a safe `cwf` API.
 - Support fan-out, map, branch, tournament, adversarial verification, and loop-until patterns through runtime APIs.
-- Keep all writes behind `cwf.write.safePatch()` and v1.10 safe-write controls.
+- Support two write paths: `safePatch` for public/auditable patch mode, and `inherit-session` for trusted local Codex-native workers that should behave like the parent Codex session.
 - Preserve current YAML workflows as stable bundled workflows.
 - Store script, plan, runtime events, agent outputs, budgets, and final report as run artifacts.
 - Keep same-conversation result return as the default UX.
@@ -123,7 +123,8 @@ The gap is a dynamic JavaScript orchestration layer that composes those pieces.
 - No unrestricted Node.js filesystem, process, network, or package access.
 - No execution of remote JavaScript workflows by URL.
 - No auto-running generated scripts without preview and approval.
-- No direct app-thread writes to the real target repo.
+- No direct JavaScript writes to the real target repo.
+- No permission escalation beyond the parent Codex session's sandbox and approval profile.
 - No bypass around v1.10 `allowed_paths`, `forbidden_paths`, drift check, `git apply --check --3way`, verification, and rollback.
 - No daemon scheduler, queue service, hosted agent platform, or exact Claude product clone in v1.11-v1.16.
 - No non-Codex model routing.
@@ -148,8 +149,8 @@ The gap is a dynamic JavaScript orchestration layer that composes those pieces.
 - Generated scripts cannot call `fs`, `child_process`, `fetch`, dynamic import, or arbitrary shell directly.
 - Dynamic execution fails closed if CWF cannot enforce both the static AST policy gate and the permissioned child-process boundary.
 - All agent execution goes through `cwf.agent.*`.
-- All v1.11 dynamic agents are forcibly read-only, with before/after target diff checks.
-- All writes go through `cwf.write.safePatch()` after a CWF gate.
+- v1.11 dynamic agents are read-only by default, but trusted local runs can request `inherit-session` and receive only the parent Codex session's permission cap.
+- Writes are never performed by JavaScript directly. They go through either `safePatch` or Codex-native workers under an explicit CWF permission profile.
 - Run artifacts include the script, preview, events, agent outputs, final report, and budget usage.
 - Runaway scripts stop on wall-clock, token, round, and concurrency limits.
 - Existing YAML workflows and v1.10 safe-write workflows remain compatible.
@@ -234,13 +235,25 @@ v1.11 selected approach:
    - The parent validates every request against run capabilities, budgets, target path policy, and adapter availability before doing work.
    - The child cannot read files, spawn agents, write artifacts, or inspect git state except through parent-approved CWF APIs.
 
-4. **Read-only agent sandbox contract**
-   - In v1.11, every `cwf.agent.run` worker is read-only. The runtime rejects `workspace-write`, `danger-full-access`, or any write-capable worker request from dynamic JavaScript.
-   - SDK workers must be launched with Codex read-only sandbox settings and no interactive approval path that can escalate writes.
-   - App-thread workers, when used in v1.12, must use the app-server read-only sandbox policy with network disabled where the host supports it.
-   - The parent CWF process captures the target diff hash before and after each dynamic read-only agent. If a worker changes the target repo, the run is marked `failed` with `read-only-worker-violation`; reducers must not return PASS.
-   - Worker-produced artifacts are persisted only by the parent CWF process into the run folder. Workers must not be able to write arbitrary files into the target repo or outside the run artifact path.
-   - Any future write-capable dynamic worker must go through `cwf.write.safePatch()` and the v1.10 approval, isolated target, path policy, patch apply, verification, and rollback contract.
+4. **Codex-native worker permission contract**
+   - `workflow.js` never receives raw filesystem, network, process, shell, or environment access.
+   - `cwf.agent.run` supports an explicit permission profile:
+   - `read-only`: default profile. Worker runs with Codex read-only sandbox settings. Any target diff change fails the run with `read-only-worker-violation`.
+   - `safePatch`: public/auditable write profile. Worker writes in an isolated target and CWF applies only a reviewed patch through v1.10 safe-write controls.
+   - `inherit-session`: trusted local profile. Worker inherits the parent Codex session's sandbox and approval cap, such as workspace-write or full access, but CWF must never grant permissions that the parent session does not already have.
+   - `inherit-session` is allowed only for workflows with a trusted local origin:
+     - `generated-current-session`: CWF generated the script during the initiating Codex session, wrote it into the run directory, recorded its SHA-256, and the approved script hash still matches at execution time.
+     - `local-trust-record`: the user explicitly trusted a local workflow by SHA-256 for this repo through a future reviewed trust command or config record.
+   - `inherit-session` is disabled for `remote`, `registry`, `packaged`, `copied-local`, and `unknown` origins. Copying a remote workflow into a local path must not make it trusted.
+   - v1.11 should implement `generated-current-session` first. `local-trust-record` can be planned but may remain disabled until its own trust UX and tests exist.
+   - Preview must show the requested permission profile, inherited parent permission cap, expected write surface, approval policy, and whether the worker may change the target repo.
+   - Preview must also show workflow origin, script SHA-256, and whether `inherit-session` is allowed or rejected for that origin.
+   - `inherit-session` preview is non-skippable. When the parent session has broad permissions such as workspace-write or full access, the preview must compare declared task scope with inherited capability and highlight surprising or broader-than-needed authority before approval.
+   - SDK workers use Codex SDK sandbox/approval parameters derived from the selected permission profile. App-thread workers can inherit only when the app-server exposes a stable write-capable sandbox/approval contract; otherwise they remain read-only or fall back by explicit policy.
+   - App-thread `inherit-session` fallback must never be silent. If write-capable app-thread inheritance is unavailable, CWF records `inherit-session-degraded-to-read-only`, shows it in status/final summary, and runs read-only only after explicit fallback approval.
+   - The parent CWF process captures target diff before and after every dynamic worker. In `read-only`, any target change fails. In `inherit-session`, target changes are allowed only as declared run output and must be recorded in artifacts, status, and final summary.
+   - Worker-produced artifacts are persisted by the parent CWF process into the run folder. Workers should not use arbitrary out-of-run artifact paths.
+   - CWF permission inheritance is an upper-bound rule, not escalation: child workers can receive equal or lower authority than the parent session, never more.
 
 5. **No `node:vm` as the security boundary**
    - Node's `vm` module may be used only as an execution convenience inside the already permissioned child process.
@@ -248,7 +261,7 @@ v1.11 selected approach:
 
 6. **Deny-by-test fixtures**
    - v1.11 must include malicious fixture scripts for `fs`, `child_process`, `process.env`, `fetch`, `require`, dynamic import, `globalThis`, constructor escape attempts, prototype escape attempts, and direct artifact writes.
-   - v1.11 must include malicious or simulated worker fixtures proving `cwf.agent.run` cannot mutate the target repo and cannot request write-capable sandbox modes.
+   - v1.11 must include malicious or simulated worker fixtures proving read-only workers cannot mutate the target repo, trusted `inherit-session` workers cannot exceed the parent session permission cap, and unknown/copied/remote origins cannot request `inherit-session`.
    - These fixtures must fail before agent execution and must leave the target unchanged.
 
 ### Runtime API
@@ -256,14 +269,28 @@ v1.11 selected approach:
 Initial v1.11 API:
 
 ```ts
+type WorkflowOrigin =
+  | "generated-current-session"
+  | "local-trust-record"
+  | "copied-local"
+  | "remote"
+  | "registry"
+  | "packaged"
+  | "unknown";
+
 type CwfRuntime = {
+  origin: {
+    kind: WorkflowOrigin;
+    scriptSha256: string;
+    inheritSessionAllowed: boolean;
+  };
   git: {
     changedFiles(): Promise of string list;
     diff(paths?: string list): Promise of string;
     status(): Promise of string;
   };
   agent: {
-    run(input: AgentRunInput): Promise of AgentRunResult;
+    run(input: AgentRunInput & { permissions?: "read-only" | "safePatch" | "inherit-session" }): Promise of AgentRunResult;
   };
   map(
     items: list,
@@ -279,6 +306,8 @@ type CwfRuntime = {
   };
 };
 ```
+
+Unknown or unhandled origin values must fail closed before worker execution. In v1.11, `local-trust-record` should parse as a known origin but remain disabled for `inherit-session` unless the trust command/config is fully implemented and tested.
 
 Future API:
 
@@ -439,9 +468,25 @@ Default v1.11 suggested budgets:
   - Verification level: local.
   - Evidence: fixture workflow runs two or more mock/SDK workers, writes worker artifacts, and produces a reduced result.
 
-- [ ] Spawned dynamic agents cannot bypass safePatch by writing files.
+- [ ] Spawned dynamic agents honor the requested CWF permission profile.
   - Verification level: fixture/local.
-  - Evidence: dynamic worker requests for write-capable sandbox modes are rejected; before/after target diff checks catch simulated or real worker mutation and mark the run failed.
+  - Evidence: `read-only` mutation fails; `inherit-session` receives no more than the parent session permission cap; untrusted remote/package workflows cannot request inherited writes.
+
+- [ ] Trusted local dynamic agents can inherit the parent Codex session permission cap.
+  - Verification level: local/manual.
+  - Evidence: with a generated-current-session workflow, matching script SHA-256, explicit approval, and a write-capable parent session, `cwf.agent.run({ permissions: "inherit-session" })` records origin and inherited sandbox metadata and allows declared Codex worker file changes.
+
+- [ ] Inherited broad permissions require a non-skippable preview.
+  - Verification level: fixture/local.
+  - Evidence: workspace-write or full-access parent permissions produce a preview that compares declared task scope with inherited capability and requires explicit approval before any worker starts.
+
+- [ ] Unknown or untrusted workflow origins cannot inherit the parent session.
+  - Verification level: fixture.
+  - Evidence: copied-local, remote, registry, packaged, unknown-origin, and hash-mismatched scripts requesting `inherit-session` are rejected before worker execution.
+
+- [ ] App-thread inherit-session degradation is explicit.
+  - Verification level: fixture/local.
+  - Evidence: missing or degraded app-thread write capability records `inherit-session-degraded-to-read-only`, requires explicit fallback approval, and appears in status and final summary.
 
 - [ ] Map concurrency is bounded.
   - Verification level: fixture.
@@ -457,7 +502,7 @@ Default v1.11 suggested budgets:
 
 - [ ] Dynamic write attempts cannot bypass v1.10 safe-write.
   - Verification level: fixture.
-  - Evidence: direct file write API is absent; only `cwf.write.safePatch` can write, and it requires approval plus policy checks.
+  - Evidence: direct JavaScript file write API is absent; public/untrusted workflows cannot write except through `safePatch`; trusted `inherit-session` writes are clearly labeled and bounded by the parent session permission cap.
 
 - [ ] `safePatch` from JS reuses v1.10 evidence.
   - Verification level: local/real-smoke.
@@ -484,7 +529,7 @@ Deliver:
 - `cwf dynamic preview TASK_OR_SCRIPT` for generated or local `workflow.js` preview.
 - constrained JS execution environment;
 - AST policy gate plus permissioned child-process execution boundary;
-- forced read-only `cwf.agent.run` workers with target diff violation checks;
+- `cwf.agent.run` permission profiles: default `read-only`, public `safePatch`, and trusted local `inherit-session`;
 - `cwf.git`, `cwf.agent.run`, `cwf.map`, `cwf.artifacts`, `cwf.report`;
 - script/capability/budget artifacts;
 - approval gate before execution;
@@ -497,15 +542,22 @@ Verify:
 - `npm run check`
 - `bash scripts/smoke-cli.sh`
 - fixture CLI smoke with a local script that spawns two read-only workers.
+- trusted local smoke with generated-current-session origin, matching script SHA-256, and `inherit-session` metadata when the parent session is write-capable.
 - malicious fixture scripts for forbidden globals, modules, process, network, and filesystem access.
-- worker sandbox fixtures proving write-capable dynamic agent requests are rejected and target mutation fails the run.
+- worker sandbox fixtures proving read-only mutation fails, untrusted or hash-mismatched inherited writes are rejected, and trusted inherited writes cannot exceed the parent session permission cap.
+- preview fixtures proving broad inherited permissions cannot skip explicit approval.
+- origin enum fixtures proving unknown/unhandled origins fail closed and `local-trust-record` stays disabled until implemented.
+- app-thread fallback fixtures proving degraded inheritance is explicit and not silently downgraded.
 
 Stop if:
 
 - implementation requires unrestricted Node.js access;
 - script execution cannot enforce the AST gate plus permissioned child-process boundary;
 - the local Node runtime cannot support Permission Model for dynamic execution and no reviewed fail-closed fallback exists;
-- `cwf.agent.run` cannot guarantee read-only worker execution and target mutation detection;
+- `cwf.agent.run` cannot enforce read-only default behavior, trusted-local inheritance rules, and parent permission cap limits;
+- CWF cannot distinguish generated-current-session workflows from unknown/copied/remote origins before allowing `inherit-session`;
+- broad inherited permissions can execute without a non-skippable preview;
+- app-thread inherit-session fallback would silently downgrade or silently change write expectations;
 - existing YAML workflows regress.
 
 ### v1.12: Desktop-Visible Dynamic Agents
