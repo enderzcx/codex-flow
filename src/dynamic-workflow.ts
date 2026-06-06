@@ -322,6 +322,7 @@ async function executeDynamicChild(options: {
     env: {
       CWF_TARGET: options.target,
       CWF_RUN_DIR: options.store.runDir,
+      CWF_MAX_CONCURRENCY: String(safePositiveNumber(options.metadata.budget.max_concurrency, DEFAULT_DYNAMIC_BUDGET.max_concurrency)),
     },
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -464,6 +465,8 @@ async function runDynamicAgent(
   if (permissions === "inherit-session") {
     assertInheritSessionAllowed(options.metadata);
   }
+  const sandboxMode = permissions === "inherit-session" ? options.metadata.parent_permission_cap.sandbox ?? "read-only" : "read-only";
+  const approvalPolicy = permissions === "inherit-session" ? options.metadata.parent_permission_cap.approval_policy ?? "never" : "never";
 
   const worker: WorkflowWorker = {
     id,
@@ -473,13 +476,23 @@ async function runDynamicAgent(
   };
   const beforeHash = await currentDiffHash(options.target);
   const runner = options.workerRunner ?? runWorkerWithAdapter;
-  const result = await runner(worker, options.context, {
-    target: options.target,
-    timeoutMs: options.metadata.budget.timeout_ms,
-    workflowId: "dynamic-js",
-    runId: options.store.runId,
-    runtime: { preferred_worker_adapter: "codex-sdk-headless" },
-  });
+  await options.store.upsertWorker(id, "running");
+  let result: WorkerResult;
+  try {
+    result = await runner(worker, options.context, {
+      target: options.target,
+      timeoutMs: options.metadata.budget.timeout_ms,
+      workflowId: "dynamic-js",
+      runId: options.store.runId,
+      runtime: { preferred_worker_adapter: "codex-sdk-headless" },
+      sandboxMode: sandboxMode === "unknown" ? "read-only" : sandboxMode,
+      approvalPolicy: approvalPolicy === "unknown" ? "never" : approvalPolicy,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await options.store.upsertWorker(id, "failed", message);
+    throw error;
+  }
   const afterHash = await currentDiffHash(options.target);
   if (permissions === "read-only" && afterHash !== beforeHash) {
     const failed = {
@@ -501,8 +514,8 @@ async function runDynamicAgent(
       agent_role: result.runtime?.agent_role ?? role,
       transcript_read: result.runtime?.transcript_read ?? false,
       ...result.runtime,
-      sandbox: permissions === "inherit-session" ? options.metadata.parent_permission_cap.sandbox as "workspace-write" | "danger-full-access" : "read-only",
-      approval_policy: options.metadata.parent_permission_cap.approval_policy === "unknown" ? "never" : options.metadata.parent_permission_cap.approval_policy,
+      sandbox: sandboxMode === "unknown" ? "read-only" : sandboxMode,
+      approval_policy: approvalPolicy === "unknown" ? "never" : approvalPolicy,
     },
   };
   await options.store.writeWorkerResult(normalized);
@@ -886,6 +899,11 @@ function sha256ForFileSync(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
+function safePositiveNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 type ChildRequest =
   | { type: "event"; payload: Record<string, unknown> }
   | { type: "request"; id: number; method: string; params: unknown };
@@ -909,6 +927,8 @@ if (target && process.permission.has("fs.read", target)) {
 
 let nextId = 1;
 const pending = new Map();
+const parsedRuntimeMaxConcurrency = Number(process.env.CWF_MAX_CONCURRENCY);
+const runtimeMaxConcurrency = Number.isFinite(parsedRuntimeMaxConcurrency) && parsedRuntimeMaxConcurrency > 0 ? parsedRuntimeMaxConcurrency : 1;
 const rl = createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   const message = JSON.parse(line);
@@ -937,7 +957,16 @@ function emit(payload) {
 }
 
 async function mapWithConcurrency(items, handler, options = {}) {
-  const concurrency = Math.max(1, Math.min(Number(options.concurrency || 1), Number(options.maxConcurrency || 1000)));
+  const requestedValue = Number(options.concurrency || 1);
+  const requested = Math.max(1, Number.isFinite(requestedValue) ? requestedValue : 1);
+  const optionMaxValue = Number(options.maxConcurrency);
+  const localMax = options.maxConcurrency === undefined || !Number.isFinite(optionMaxValue)
+    ? runtimeMaxConcurrency
+    : Math.min(optionMaxValue, runtimeMaxConcurrency);
+  const concurrency = Math.max(1, Math.min(requested, localMax, items.length || 1));
+  if (requested > concurrency) {
+    emit({ type: "budget.concurrency_capped", requested, concurrency, max_concurrency: runtimeMaxConcurrency });
+  }
   const results = new Array(items.length);
   let next = 0;
   async function worker() {

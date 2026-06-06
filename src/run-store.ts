@@ -112,6 +112,20 @@ export class RunStore {
     await this.appendEvent("worker.updated", { worker: id, status, error });
   }
 
+  async upsertWorker(id: string, status: WorkerStatus, error?: string): Promise<void> {
+    await this.mutateState((state) => {
+      let worker = state.workers.find((item) => item.id === id);
+      if (!worker) {
+        worker = { id, status: "pending" };
+        state.workers.push(worker);
+      }
+      applyStatusTimestamps(worker, status);
+      worker.status = status;
+      worker.error = error;
+    });
+    await this.appendEvent("worker.updated", { worker: id, status, error });
+  }
+
   async waitAtGate(id: string, prompt: string): Promise<RunState> {
     const state = await this.mutateState((draft) => {
       const phase = findPhase(draft, id);
@@ -166,6 +180,7 @@ export class RunStore {
 
   async writeWorkerResult(result: WorkerResult): Promise<void> {
     await this.writeJson(join("workers", `${result.worker_id}.json`), result);
+    await this.upsertWorker(result.worker_id, result.status, result.error);
     await this.appendEvent("worker.result", {
       worker: result.worker_id,
       status: result.status,

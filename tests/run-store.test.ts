@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { RunStore } from "../src/run-store.js";
-import type { WorkflowSpec } from "../src/types.js";
+import type { WorkerResult, WorkflowSpec } from "../src/types.js";
 
 const cleanup: string[] = [];
 
@@ -98,4 +98,48 @@ describe("RunStore", () => {
       ["safety", "running"],
     ]);
   });
+
+  it("preserves concurrent dynamic worker result upserts", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+    cleanup.push(root);
+    const dynamicSpec: WorkflowSpec = {
+      ...spec,
+      id: "dynamic-js",
+      phases: [{ id: "collect", kind: "command" }],
+    };
+    const store = await RunStore.create(dynamicSpec, process.cwd(), root);
+
+    await Promise.all(
+      Array.from({ length: 5 }, (_, index) => store.writeWorkerResult(workerResult(`dynamic-${index}`))),
+    );
+    const state = await store.readState();
+
+    expect(state.workers.map((worker) => worker.id).sort()).toEqual([
+      "dynamic-0",
+      "dynamic-1",
+      "dynamic-2",
+      "dynamic-3",
+      "dynamic-4",
+    ]);
+    expect(state.workers.every((worker) => worker.status === "completed")).toBe(true);
+  });
 });
+
+function workerResult(workerId: string): WorkerResult {
+  return {
+    worker_id: workerId,
+    status: "completed",
+    confidence: "high",
+    summary: "ok",
+    findings: [],
+    verification: [],
+    artifacts: [],
+    started_at: "2026-01-01T00:00:00.000Z",
+    completed_at: "2026-01-01T00:00:01.000Z",
+    duration_ms: 1000,
+    prompt: "test",
+    raw: "{}",
+    raw_fallback: false,
+    retry_count: 0,
+  };
+}

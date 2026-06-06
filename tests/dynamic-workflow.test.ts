@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -95,6 +96,7 @@ export default async function workflow(cwf) {
     const manifest = JSON.parse(await readFile(join(store.runDir, "artifacts", "manifest.json"), "utf8")) as ArtifactManifest;
 
     expect(state.status).toBe("completed");
+    expect(state.workers).toEqual(expect.arrayContaining([expect.objectContaining({ id: "review", status: "completed" })]));
     expect(result).toContain("Dynamic JS Workflow Result");
     expect(dynamicArtifact).toBe("dynamic artifact ok\n");
     expect(worker).toContain('"sandbox": "read-only"');
@@ -137,6 +139,13 @@ export default async function workflow(cwf) {
 
   it("allows generated-current-session inherit-session under a write-capable parent cap", async () => {
     const target = await createGitRepoWithDiff();
+    let capturedSandbox: string | undefined;
+    let capturedApproval: string | undefined;
+    const capturingWorker: DynamicWorkerRunner = async (worker, _context, options) => {
+      capturedSandbox = options.sandboxMode;
+      capturedApproval = options.approvalPolicy;
+      return workerResult(worker.id, options.target);
+    };
     const script = await writeScript(`
 export default async function workflow(cwf) {
   return cwf.agent.run({ id: "writer", role: "writer", prompt: "write", permissions: "inherit-session" });
@@ -150,13 +159,94 @@ export default async function workflow(cwf) {
       parentPermissionCap: { sandbox: "workspace-write", approval_policy: "never" },
     });
     await store.approveGate("approve-dynamic");
-    await resumeDynamicWorkflow({ store, workerRunner: fixtureWorker });
+    await resumeDynamicWorkflow({ store, workerRunner: capturingWorker });
 
     const worker = await readFile(join(store.runDir, "workers", "writer.json"), "utf8");
     const preview = await readFile(join(store.runDir, "artifacts", "dynamic-preview.md"), "utf8");
 
+    expect(capturedSandbox).toBe("workspace-write");
+    expect(capturedApproval).toBe("never");
     expect(worker).toContain('"sandbox": "workspace-write"');
     expect(preview).toContain("Broad parent authority detected");
+  });
+
+  it("caps dynamic map concurrency to the workflow budget", async () => {
+    const target = await createGitRepoWithDiff();
+    let active = 0;
+    let maxActive = 0;
+    const delayedWorker: DynamicWorkerRunner = async (worker, _context, options) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await sleep(25);
+      active -= 1;
+      return workerResult(worker.id, options.target);
+    };
+    const script = await writeScript(`
+export default async function workflow(cwf) {
+  const items = [0, 1, 2, 3, 4];
+  const reviews = await cwf.map(items, async (item) => {
+    return cwf.agent.run({
+      id: "parallel-" + item,
+      role: "reviewer",
+      prompt: "Review item " + item,
+      permissions: "read-only"
+    });
+  }, { concurrency: 99 });
+  return cwf.report.summarize(reviews);
+}
+`);
+    const store = await startDynamicWorkflow({
+      scriptPath: script,
+      target,
+      runsRoot: await runsRoot(),
+      budget: { max_concurrency: 2 },
+    });
+    await store.approveGate("approve-dynamic");
+    await resumeDynamicWorkflow({ store, workerRunner: delayedWorker });
+
+    const state = await store.readState();
+    const events = await readFile(join(store.runDir, "artifacts", "dynamic-events.jsonl"), "utf8");
+
+    expect(maxActive).toBeLessThanOrEqual(2);
+    expect(state.workers.filter((worker) => worker.status === "completed")).toHaveLength(5);
+    expect(events).toContain("budget.concurrency_capped");
+  });
+
+  it("uses the default dynamic concurrency budget when none is provided", async () => {
+    const target = await createGitRepoWithDiff();
+    let active = 0;
+    let maxActive = 0;
+    const delayedWorker: DynamicWorkerRunner = async (worker, _context, options) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await sleep(25);
+      active -= 1;
+      return workerResult(worker.id, options.target);
+    };
+    const script = await writeScript(`
+export default async function workflow(cwf) {
+  const items = [0, 1, 2, 3, 4];
+  const reviews = await cwf.map(items, async (item) => {
+    return cwf.agent.run({
+      id: "default-budget-" + item,
+      role: "reviewer",
+      prompt: "Review item " + item,
+      permissions: "read-only"
+    });
+  }, { concurrency: 99 });
+  return cwf.report.summarize(reviews);
+}
+`);
+    const store = await startDynamicWorkflow({
+      scriptPath: script,
+      target,
+      runsRoot: await runsRoot(),
+    });
+    await store.approveGate("approve-dynamic");
+    await resumeDynamicWorkflow({ store, workerRunner: delayedWorker });
+
+    expect(maxActive).toBeGreaterThan(1);
+    expect(maxActive).toBeLessThanOrEqual(4);
   });
 });
 

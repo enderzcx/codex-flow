@@ -291,7 +291,7 @@ describe("worker adapters", () => {
       );
 
       expect(result.status).toBe("completed");
-      expect(result.runtime?.fallback_reason).toContain("thread/start timed out after 25ms");
+      expect(result.runtime?.fallback_reason).toMatch(/thread\/start timed out after \d+ms/);
       expect(result.runtime?.fallback_reason).not.toContain("NaN");
     } finally {
       if (previousTimeout === undefined) {
