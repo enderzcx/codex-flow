@@ -10,8 +10,7 @@ This file is the current goal-mode entrypoint. Historical phase prompts live in
 
 Current phase:
 
-- v1.10 Safe Write Workers is implemented locally with controlled real-smoke
-  evidence. Push/CI remains pending until the branch is pushed.
+- v1.11 JS Dynamic Runtime MVP is planned as the next implementation contract.
 
 Latest decisions:
 
@@ -24,6 +23,10 @@ Latest decisions:
   previewed, drift-checked, reversible, and Codex-controlled. Patch-mode writes
   run in an isolated target, emit `artifacts/proposed.patch`, and apply only
   policy-approved paths to the real target after approval.
+- v1.11 JS Dynamic Runtime MVP: use JavaScript as the Claude-like dynamic
+  workflow harness surface, but execute it only through a static AST policy gate,
+  permissioned child process, and CWF runtime APIs. Generated scripts must be
+  previewed and approved before execution.
 
 Archived phase prompts:
 
@@ -32,9 +35,18 @@ Archived phase prompts:
 - `docs/goal-prompts/v1.8-managed-agents-decision.md`
 - `docs/goal-prompts/v1.9-public-workflow-registry.md`
 - `docs/goal-prompts/v1.10-safe-write-workers.md`
+- `docs/goal-prompts/v1.11-js-dynamic-runtime.md`
 
 When a new phase starts, replace this file with the active goal prompt and add
 or update the matching historical prompt under `docs/goal-prompts/`.
+
+## v1.11 Goal Prompt
+
+Canonical copy: `docs/goal-prompts/v1.11-js-dynamic-runtime.md`.
+
+Do not duplicate the full prompt here. Reasonix review flagged duplicated goal
+blocks as a drift risk. When starting v1.11, copy the canonical prompt from that
+file.
 
 ## v1.10 Goal Prompt
 
