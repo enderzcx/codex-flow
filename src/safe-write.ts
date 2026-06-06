@@ -66,7 +66,7 @@ export async function applySafePatch(target: string, patch: string, policy: Writ
     }
     throw error;
   }
-  return listChangedFiles(target);
+  return patchPaths;
 }
 
 export async function revertAppliedPatch(target: string, patchPath: string): Promise<void> {

@@ -492,7 +492,12 @@ async function writePostWriteArtifacts(
   policyChangedFiles: string[],
   verificationResults: VerificationResult[],
 ): Promise<void> {
-  const [statusShort, diffStat] = await Promise.all([gitOutput(target, ["status", "--short"]), gitOutput(target, ["diff", "--stat"])]);
+  const [statusShort, workingTreeDiffStat, stagedDiffStat] = await Promise.all([
+    gitOutput(target, ["status", "--short"]),
+    gitOutput(target, ["diff", "--stat"]),
+    gitOutput(target, ["diff", "--cached", "--stat"]),
+  ]);
+  const diffStat = [workingTreeDiffStat, stagedDiffStat].filter((part) => part.trim().length > 0).join("\n");
   const changedFiles = statusShort
     .split(/\r?\n/)
     .map((line) => line.trim().slice(2).trim())

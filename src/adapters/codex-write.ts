@@ -114,6 +114,7 @@ Rules:
 - Return JSON only. No Markdown, no prose outside JSON.
 - Include verification commands or manual checks in the verification array.
 - Include artifacts or changed file paths in the artifacts array.
+- Use findings only for problems that require attention; do not add success confirmations as findings.
 
 Target repo: ${context.target}
 Branch: ${context.branch}

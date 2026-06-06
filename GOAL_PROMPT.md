@@ -10,7 +10,8 @@ This file is the current goal-mode entrypoint. Historical phase prompts live in
 
 Current phase:
 
-- v1.10 Safe Write Workers is planned as the next implementation contract.
+- v1.10 Safe Write Workers is implemented locally with controlled real-smoke
+  evidence. Push/CI remains pending until the branch is pushed.
 
 Latest decisions:
 
@@ -20,7 +21,9 @@ Latest decisions:
   in the planning goal.
 - v1.10 Safe Write Workers: generalize the existing gated docs-only `doc-refresh`
   path into safe bounded file-writing workflows, but keep writes gated,
-  previewed, drift-checked, reversible, and Codex-controlled.
+  previewed, drift-checked, reversible, and Codex-controlled. Patch-mode writes
+  run in an isolated target, emit `artifacts/proposed.patch`, and apply only
+  policy-approved paths to the real target after approval.
 
 Archived phase prompts:
 

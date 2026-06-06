@@ -390,12 +390,15 @@ describe("executeWorkflow", () => {
     const state = await store.readState();
     const written = await readFile(join(target, "src", "generated", "safe-write-result.js"), "utf8");
     const proposedPatch = await readFile(join(store.runDir, "artifacts", "proposed.patch"), "utf8");
+    const diffSummary = await readFile(join(store.runDir, "artifacts", "diff-summary.md"), "utf8");
     const verification = await readFile(join(store.runDir, "artifacts", "verification.md"), "utf8");
     const manifest = JSON.parse(await readFile(join(store.runDir, "artifacts", "manifest.json"), "utf8")) as ArtifactManifest;
 
     expect(state.status).toBe("completed");
     expect(written).toContain("safeWriteResult");
     expect(proposedPatch).toContain("src/generated/safe-write-result.js");
+    expect(diffSummary).toContain("src/generated/safe-write-result.js | 1 +");
+    expect(diffSummary).toContain("## Policy-Applied Files\n\n- src/generated/safe-write-result.js");
     expect(verification).toContain("passed: `test -f src/generated/safe-write-result.js`");
     expect(manifest.artifacts.map((artifact) => artifact.id)).toEqual(expect.arrayContaining(["proposed-patch", "proposed-patch-file", "diff-summary", "verification"]));
   });

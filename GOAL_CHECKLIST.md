@@ -213,6 +213,34 @@ This file tracks the active goal phase by phase. It is the local evidence ledger
 - [x] Verification failure cannot produce a passing run.
   - Evidence: `tests/phase-engine.test.ts` marks worker JSON and run state failed when configured verification commands fail after apply, records that the applied patch was reverted, and asserts the generated target file is absent afterward.
 
+- [x] Preview-before-apply artifacts are generated before approval.
+  - Evidence: controlled real-smoke `run_20260606022257_psa1ma` paused at `approve-write` with target `/tmp/cwf-v110-real-target-h1P8A9` clean before approval.
+  - Evidence: `artifacts/write-plan.md` recorded `write_policy` mode `patch`, allowed paths `src/generated/**`, forbidden paths `.env`, `.git`, `.git/**`, and no pre-write changed files.
+  - Evidence: `artifacts/dry-run-preview.md` recorded that preview modified no target files and that the approved worker would emit `artifacts/proposed.patch` from an isolated copy.
+
+- [x] Controlled real-smoke after Ender GO passes on a disposable git repo.
+  - Evidence: `run_20260606022257_psa1ma` completed after `approve-write` at `2026-06-06T02:23:11.254Z`; status `completed`, 1/1 workers completed, 0 raw fallback, 0 adapter fallback, 0 findings, final verdict `PASS`.
+  - Evidence: target repo `/tmp/cwf-v110-real-target-h1P8A9` had only `A  src/generated/safe-write-result.js`; cached diff stat showed `1 file changed, 4 insertions(+)`.
+  - Evidence: `artifacts/diff-summary.md` recorded changed files and policy-applied files as only `src/generated/safe-write-result.js`.
+  - Evidence: `artifacts/verification.md` recorded workflow verification passed: `test -f src/generated/safe-write-result.js`.
+
+- [x] Write-result artifacts stay accurate for staged safe-apply output.
+  - Evidence: `src/phase-engine.ts` now includes both working-tree and cached diff stats in `diff-summary.md`.
+  - Evidence: `src/safe-write.ts` now reports policy-applied files from the patch paths rather than unrelated pre-existing target diffs.
+  - Evidence: `tests/phase-engine.test.ts` asserts `diff-summary.md` includes the generated-file diff stat and only the generated file under `Policy-Applied Files`.
+
+- [x] Broad local verification passes after v1.10 implementation.
+  - Evidence: `git diff --check` passed.
+  - Evidence: `npx vitest run tests/phase-engine.test.ts tests/safe-write.test.ts` passed 20 tests.
+  - Evidence: `npm run check` passed with 13 test files / 117 tests.
+  - Evidence: `bash scripts/smoke-cli.sh` passed without live Codex worker calls and validated the safe-write fixture.
+  - Evidence: `npm pack --dry-run` passed with 58 files in the package dry-run.
+
+- [x] Final implementation review is approved.
+  - Evidence: Reasonix final file-input review returned `verdict: approve` with no blocker/high findings before the controlled real-smoke.
+  - Evidence: Reasonix follow-up review of commit `1551fcc` returned `verdict: approve` with no findings after the diff-summary/policy-applied-files fix and final real-smoke evidence.
+  - Evidence: review artifact `~/.Codex/review-artifacts/adc6f86501ee326e0ab3e4d1916f5986c0f8910b5fee1c7620c5accc16756358.json` recorded `GO` for the implementation diff committed as `e1a3431`.
+
 ## v1.5 GitHub PR Review Artifacts
 
 - [x] PR comment artifact is generated.
