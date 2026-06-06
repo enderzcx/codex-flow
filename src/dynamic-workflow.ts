@@ -6,9 +6,11 @@ import { basename, join, resolve } from "node:path";
 import { parse } from "acorn";
 import { collectDiffContext, currentDiffHash } from "./adapters/command-step.js";
 import { runWorkerWithAdapter, type WorkerAdapterOptions } from "./adapters/worker-adapter.js";
+import type { DynamicIntentPreview } from "./dynamic-workflow-generator.js";
 import { buildFailureSummary, DEFAULT_FAILURE_POLICY } from "./run-index.js";
 import { RunStore } from "./run-store.js";
-import type { ArtifactRef, DiffContext, WorkerResult, WorkflowSpec, WorkflowWorker } from "./types.js";
+import { applySafePatch, revertAppliedPatch, runVerificationCommands, type VerificationResult } from "./safe-write.js";
+import type { ArtifactRef, DiffContext, WorkerResult, WorkflowSpec, WorkflowWorker, WritePolicy } from "./types.js";
 
 export type DynamicWorkflowOrigin =
   | "generated-current-session"
@@ -39,8 +41,10 @@ export type DynamicWorkflowMetadata = {
   source_sha256: string;
   origin: DynamicWorkflowOrigin;
   origin_session_id?: string;
+  declared_safe_patch_policy?: WritePolicy;
   parent_permission_cap: ParentPermissionCap;
   budget: DynamicWorkflowBudget;
+  preview?: DynamicIntentPreview;
   capabilities: DynamicWorkflowCapabilities;
   ast_policy: {
     status: "passed";
@@ -71,6 +75,7 @@ export type DynamicWorkflowOptions = {
   originSessionId?: string;
   parentPermissionCap?: ParentPermissionCap;
   budget?: Partial<DynamicWorkflowBudget>;
+  preview?: DynamicIntentPreview;
   workerRunner?: DynamicWorkerRunner;
   approve?: boolean;
 };
@@ -258,15 +263,21 @@ async function writeDynamicPreview(
   const parentPermissionCap = options.parentPermissionCap ?? inferParentPermissionCap();
   const budget = { ...DEFAULT_DYNAMIC_BUDGET, ...options.budget };
   const origin = options.origin ?? "copied-local";
+  const declaredSafePatchPolicy = declaredSafePatchPolicyFromSource(source);
   const capabilities = buildDynamicCapabilities(source, origin, parentPermissionCap);
+  if (capabilities.requested_permissions.includes("safePatch") && !declaredSafePatchPolicy) {
+    throw new Error("dynamic safePatch requires export const metadata.safe_patch_policy so the write policy is visible in preview");
+  }
   const metadata: DynamicWorkflowMetadata = {
     source_path: sourcePath,
     artifact_script_path: artifactScriptPath,
     source_sha256: sourceSha256,
     origin,
     origin_session_id: options.originSessionId,
+    declared_safe_patch_policy: declaredSafePatchPolicy,
     parent_permission_cap: parentPermissionCap,
     budget,
+    preview: options.preview,
     capabilities,
     ast_policy: {
       status: "passed",
@@ -429,6 +440,9 @@ async function handleRuntimeRequest(
     await options.store.appendEvent("artifact.generated", { path });
     return { path };
   }
+  if (method === "safePatch.apply") {
+    return applyDynamicSafePatch(asRecord(params, "safePatch params"), options);
+  }
   if (method === "report.summarize") {
     return summarizeDynamicReport(params);
   }
@@ -439,6 +453,77 @@ async function handleRuntimeRequest(
     return runDynamicAgent(asRecord(params, "agent.run params"), options);
   }
   throw new Error(`unsupported dynamic runtime method: ${method}`);
+}
+
+async function applyDynamicSafePatch(
+  params: Record<string, unknown>,
+  options: {
+    store: RunStore;
+    target: string;
+    metadata: DynamicWorkflowMetadata;
+    events: unknown[];
+  },
+): Promise<{
+  status: "passed";
+  changed_files: string[];
+  patch_path: string;
+  verification: VerificationResult[];
+}> {
+  const patch = expectString(params.patch, "safePatch.patch");
+  const writePolicy = expectWritePolicy(params.write_policy);
+  const artifactsDir = join(options.store.runDir, "artifacts");
+  await mkdir(artifactsDir, { recursive: true });
+  const patchPath = join(artifactsDir, "dynamic-proposed.patch");
+  const resultPath = join(artifactsDir, "dynamic-safe-patch.json");
+  await writeFile(patchPath, patch);
+  await options.store.appendEvent("dynamic.safe_patch.preview", {
+    patch_path: patchPath,
+    allowed_paths: writePolicy.allowed_paths,
+    forbidden_paths: writePolicy.forbidden_paths,
+  });
+  let changedFiles: string[] = [];
+  let verification: VerificationResult[] = [];
+  let rollback: { status: "not_required" | "passed" | "failed"; patch_path?: string; error?: string } = { status: "not_required" };
+  try {
+    assertSafePatchPolicyMatchesDeclared(writePolicy, options.metadata.declared_safe_patch_policy);
+    changedFiles = await applySafePatch(options.target, patch, writePolicy, patchPath);
+    verification = await runVerificationCommands(options.target, writePolicy.verification_commands);
+    if (verification.some((item) => item.status === "failed")) {
+      try {
+        await revertAppliedPatch(options.target, patchPath);
+        rollback = { status: "passed", patch_path: patchPath };
+        await options.store.appendEvent("dynamic.safe_patch.rollback", rollback);
+      } catch (rollbackError) {
+        const rollbackMessage = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+        rollback = { status: "failed", patch_path: patchPath, error: rollbackMessage };
+        await options.store.appendEvent("dynamic.safe_patch.rollback", rollback);
+        throw new Error(`safePatch verification failed and rollback failed: ${rollbackMessage}`);
+      }
+      throw new Error("safePatch verification failed; patch was rolled back");
+    }
+    const result = {
+      status: "passed" as const,
+      changed_files: changedFiles,
+      patch_path: patchPath,
+      verification,
+      rollback,
+    };
+    await writeJsonFile(resultPath, result);
+    await options.store.appendEvent("dynamic.safe_patch.applied", result);
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await writeJsonFile(resultPath, {
+      status: "failed",
+      error: message,
+      changed_files: changedFiles,
+      patch_path: patchPath,
+      verification,
+      rollback,
+    });
+    await options.store.appendEvent("dynamic.safe_patch.failed", { error: message, patch_path: patchPath });
+    throw error;
+  }
 }
 
 async function runDynamicAgent(
@@ -561,8 +646,19 @@ function buildDynamicCapabilities(
 
 function renderDynamicPreview(metadata: DynamicWorkflowMetadata, context: DiffContext): string {
   const broadParent = metadata.parent_permission_cap.sandbox === "workspace-write" || metadata.parent_permission_cap.sandbox === "danger-full-access";
+  const agents = metadata.preview?.agents ?? inferPreviewAgents(metadata);
+  const writeIntent = metadata.preview?.write_intent ?? inferWriteIntent(metadata);
+  const stopRules = metadata.preview?.stop_rules ?? [
+    "Pause at approve-dynamic before dynamic-execute starts.",
+    "Fail before execution when AST policy rejects forbidden source.",
+    "Fail read-only workers that mutate the target diff.",
+  ];
   return [
     "# Dynamic Workflow Preview",
+    "",
+    "## Intent",
+    "",
+    metadata.preview?.goal ? metadata.preview.goal : "Local dynamic workflow script selected by the user.",
     "",
     `Source: \`${metadata.source_path}\``,
     `Artifact script: \`${metadata.artifact_script_path}\``,
@@ -575,10 +671,19 @@ function renderDynamicPreview(metadata: DynamicWorkflowMetadata, context: DiffCo
     "",
     ...(metadata.capabilities.uses.length > 0 ? metadata.capabilities.uses.map((item) => `- \`${item}\``) : ["- none detected"]),
     "",
+    "## Planned Agents",
+    "",
+    ...agents.map((agent) => `- \`${agent.id}\` (${agent.role}, ${agent.permissions}): ${agent.purpose}`),
+    "",
     "## Requested Agent Permissions",
     "",
     ...metadata.capabilities.requested_permissions.map((item) => `- \`${item}\``),
     "",
+    "## Write Intent",
+    "",
+    writeIntent,
+    "",
+    ...renderSafePatchPolicy(metadata),
     "## Budget",
     "",
     `- max_agents: ${metadata.budget.max_agents}`,
@@ -604,7 +709,70 @@ function renderDynamicPreview(metadata: DynamicWorkflowMetadata, context: DiffCo
     broadParent
       ? "- Broad parent authority detected; this preview is non-skippable and should be compared with the declared task scope before approval."
       : "- Parent authority is not broad.",
+    "",
+    "## Stop Rules",
+    "",
+    ...stopRules.map((rule) => `- ${rule}`),
   ].join("\n");
+}
+
+function inferPreviewAgents(metadata: DynamicWorkflowMetadata): DynamicIntentPreview["agents"] {
+  if (!metadata.capabilities.uses.includes("cwf.agent.run")) {
+    return [
+      {
+        id: "none",
+        role: "no worker agents detected",
+        permissions: "read-only",
+        purpose: "This script does not appear to call cwf.agent.run.",
+      },
+    ];
+  }
+  return [
+    {
+      id: "declared-at-runtime",
+      role: "dynamic worker",
+      permissions: metadata.capabilities.requested_permissions.includes("inherit-session")
+        ? "inherit-session"
+        : metadata.capabilities.requested_permissions.includes("safePatch")
+          ? "safePatch"
+          : "read-only",
+      purpose: "Worker prompts and ids are declared inside workflow.js and executed only after approval.",
+    },
+  ];
+}
+
+function inferWriteIntent(metadata: DynamicWorkflowMetadata): string {
+  if (metadata.capabilities.requested_permissions.includes("inherit-session")) {
+    return "inherit-session requested: allowed only for generated-current-session scripts with matching SHA and parent-capped write permission.";
+  }
+  if (metadata.capabilities.requested_permissions.includes("safePatch")) {
+    return "safePatch requested: executable only when runtime write_policy exactly matches metadata.safe_patch_policy shown in this preview.";
+  }
+  return "read-only: workflow may write run artifacts through cwf.artifacts, but must not modify the target repo.";
+}
+
+function renderSafePatchPolicy(metadata: DynamicWorkflowMetadata): string[] {
+  if (!metadata.capabilities.requested_permissions.includes("safePatch")) {
+    return [];
+  }
+  const policy = metadata.declared_safe_patch_policy;
+  if (!policy) {
+    return [
+      "## SafePatch Policy",
+      "",
+      "- missing: dynamic safePatch execution will be rejected before apply.",
+      "",
+    ];
+  }
+  return [
+    "## SafePatch Policy",
+    "",
+    `- mode: \`${policy.mode}\``,
+    `- allowed_paths: ${policy.allowed_paths.map((item) => `\`${item}\``).join(", ") || "(none)"}`,
+    `- forbidden_paths: ${policy.forbidden_paths.map((item) => `\`${item}\``).join(", ") || "(none)"}`,
+    `- verification_commands: ${policy.verification_commands.map((item) => `\`${item}\``).join(", ") || "(none)"}`,
+    "",
+  ];
 }
 
 async function writeDynamicExecutionArtifacts(
@@ -665,6 +833,8 @@ function buildDynamicArtifactManifest(store: RunStore, workerResults: WorkerResu
     { id: "dynamic-budget", type: "generated", path: join(store.runDir, "artifacts", "dynamic-budget.json"), description: "Runtime budget fuses for the dynamic workflow." },
     { id: "dynamic-events", type: "generated", path: join(store.runDir, "artifacts", "dynamic-events.jsonl"), description: "Dynamic workflow runtime events emitted by the child process." },
     { id: "dynamic-final", type: "generated", path: join(store.runDir, "artifacts", "dynamic-final.json"), description: "Raw final value returned by the dynamic workflow." },
+    { id: "dynamic-proposed-patch", type: "generated", path: join(store.runDir, "artifacts", "dynamic-proposed.patch"), description: "Dynamic safePatch patch proposal, present for safePatch runs." },
+    { id: "dynamic-safe-patch", type: "generated", path: join(store.runDir, "artifacts", "dynamic-safe-patch.json"), description: "Dynamic safePatch policy, verification, and rollback result, present for safePatch runs." },
     { id: "result", type: "result", path: join(store.runDir, "result.md"), description: "Human-readable dynamic workflow result." },
     { id: "manifest", type: "manifest", path: join(store.runDir, "artifacts", "manifest.json"), description: "Artifact manifest for this dynamic run." },
     ...workerResults.map<ArtifactRef>((worker) => ({
@@ -703,7 +873,7 @@ function requestedPermissions(source: string): DynamicPermissionProfile[] {
 }
 
 function detectRuntimeUses(source: string): string[] {
-  return ["cwf.git", "cwf.agent.run", "cwf.map", "cwf.artifacts", "cwf.report"].filter((needle) => source.includes(needle));
+  return ["cwf.git", "cwf.agent.run", "cwf.safePatch", "cwf.map", "cwf.artifacts", "cwf.report"].filter((needle) => source.includes(needle));
 }
 
 function isAllowedMetadataExport(statement: AcornNode): boolean {
@@ -867,6 +1037,58 @@ function expectString(value: unknown, path: string): string {
   return value;
 }
 
+function expectWritePolicy(value: unknown): WritePolicy {
+  const record = asRecord(value, "safePatch.write_policy");
+  if (record.mode !== "patch") {
+    throw new Error("safePatch.write_policy.mode must be patch");
+  }
+  const allowedPaths = expectStringArray(record.allowed_paths, "safePatch.write_policy.allowed_paths");
+  const forbiddenPaths = expectStringArray(record.forbidden_paths, "safePatch.write_policy.forbidden_paths");
+  const verificationCommands = expectStringArray(record.verification_commands ?? [], "safePatch.write_policy.verification_commands");
+  return {
+    mode: "patch",
+    allowed_paths: allowedPaths,
+    forbidden_paths: forbiddenPaths,
+    verification_commands: verificationCommands,
+  };
+}
+
+function declaredSafePatchPolicyFromSource(source: string): WritePolicy | undefined {
+  const metadata = parseDeclaredMetadata(source);
+  if (!("safe_patch_policy" in metadata)) {
+    return undefined;
+  }
+  return expectWritePolicy(metadata.safe_patch_policy);
+}
+
+function parseDeclaredMetadata(source: string): Record<string, unknown> {
+  const match = /export\s+const\s+metadata\s*=\s*(\{[\s\S]*?\});/.exec(source);
+  if (!match) {
+    return {};
+  }
+  try {
+    return JSON.parse(match[1]) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+function assertSafePatchPolicyMatchesDeclared(runtimePolicy: WritePolicy, declaredPolicy: WritePolicy | undefined): void {
+  if (!declaredPolicy) {
+    throw new Error("dynamic safePatch rejected: metadata.safe_patch_policy is missing");
+  }
+  if (JSON.stringify(runtimePolicy) !== JSON.stringify(declaredPolicy)) {
+    throw new Error("dynamic safePatch rejected: runtime write_policy does not match metadata.safe_patch_policy");
+  }
+}
+
+function expectStringArray(value: unknown, path: string): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.length === 0)) {
+    throw new Error(`${path} must be an array of non-empty strings`);
+  }
+  return value;
+}
+
 function asRecord(value: unknown, path: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${path} must be an object`);
@@ -987,6 +1209,9 @@ const cwf = Object.freeze({
   }),
   agent: Object.freeze({
     run: (params) => request("agent.run", params),
+  }),
+  safePatch: Object.freeze({
+    apply: (params) => request("safePatch.apply", params),
   }),
   artifacts: Object.freeze({
     write: (params) => request("artifacts.write", params),

@@ -37,6 +37,20 @@ Codex Flow 1.0.0 is the first stable public release of the Codex-native workflow
   - `research-crosscheck`
   - `release-review`
 
+## Implemented Preview
+
+- Dynamic JavaScript workflow runtime:
+  - `cwf dynamic generate`
+  - `cwf dynamic list`
+  - `cwf dynamic show`
+  - `cwf dynamic save`
+  - `cwf dynamic run`
+- Built-in local dynamic templates:
+  - `change-summary`
+  - `docs-change-check`
+- SHA-bound local trust metadata for saved dynamic workflows
+- Guarded dynamic `cwf.safePatch.apply` with preview-visible `metadata.safe_patch_policy`, runtime policy match checks, `git apply --check --3way`, verification, and rollback-on-verification-failure evidence
+
 ## Public Boundary
 
 Codex Flow 1.0.0 intentionally does not include:
@@ -44,7 +58,7 @@ Codex Flow 1.0.0 intentionally does not include:
 - non-Codex model routing
 - private adapters
 - remote workflow marketplace
-- generated JavaScript workflow execution
+- remote dynamic workflow execution by URL
 - broad production write-capable workflows beyond gated documentation refresh
 - automatic GitHub posting
 - automatic installation or execution of generated workflow suggestions

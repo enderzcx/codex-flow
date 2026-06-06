@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC. The implemented preview also includes intent-to-preview generation, built-in local dynamic templates, local save/reuse with SHA-bound trust metadata, and guarded dynamic `safePatch`.
 
 The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
@@ -22,7 +22,7 @@ The default catalog includes:
 - `research-crosscheck`: source fidelity and unsupported-claim review for research or documentation diffs
 - `release-review`: ship readiness, rollout, rollback, and regression review
 - `doc-refresh`: gated documentation-only write workflow with dry-run preview, approval, diff summary, rollback, and verification artifacts
-- `dynamic-js`: preview-first JavaScript harness execution through `cwf.git`, `cwf.agent.run`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
+- `dynamic-js`: preview-first JavaScript harness execution through `cwf.git`, `cwf.agent.run`, `cwf.safePatch`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
 
 The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
 
@@ -72,7 +72,12 @@ cwf run workflows/diff-review.yaml --target <repo>
 Preview a local dynamic JavaScript workflow:
 
 ```bash
+cwf dynamic list
+cwf dynamic show change-summary
+cwf dynamic generate --goal "Summarize this repo diff" --target <repo>
 cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
+cwf dynamic run change-summary --target <repo>
+cwf dynamic save ./workflow.js --id local-review
 cwf approve <run-id> approve-dynamic
 cwf resume <run-id>
 ```
@@ -126,7 +131,17 @@ Duplicate workflow ids fail clearly instead of picking one silently.
 
 Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. Write workflows write `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approval. After approval the writer runs in an isolated target, CWF stores `artifacts/proposed.patch`, checks `write_policy` paths and `git apply --check --3way`, applies the patch, and records diff, verification, and rollback artifacts. The bundled `doc-refresh` workflow uses `direct-docs` only as a docs/readme/release-note policy preset; it still goes through the same isolated patch apply path.
 
-Dynamic JavaScript workflows are also gated. `cwf dynamic run <workflow.js> --target <repo>` writes `artifacts/workflow.js`, `workflow.sha256`, `dynamic-preview.md`, `dynamic-capabilities.json`, and `dynamic-budget.json`, then pauses at `approve-dynamic`. The script must export one async default function. The AST gate rejects imports, dynamic import, `require`, `eval`, `Function`, `globalThis`, `process`, `fetch`, constructor/prototype escape paths, direct shell strings, and call expressions outside `cwf` or approved builtins. Execution fails closed unless the child process can run with Node Permission Model active and without target repo filesystem, network, child-process, worker, native-addon, WASI, FFI, or inspector permissions. `cwf.agent.run` defaults to `read-only`; read-only agents fail the run if the target diff changes. `safePatch` is recognized but not dynamically executable until a v1.10 `write_policy` is attached to the dynamic run. `inherit-session` is allowed only for `generated-current-session` scripts with matching SHA-256 and a known write-capable parent permission cap; copied, remote, registry, packaged, unknown, and hash-mismatched workflows fail closed.
+Dynamic JavaScript workflows are also gated. `cwf dynamic run <workflow.js-or-id> --target <repo>` writes `artifacts/workflow.js`, `workflow.sha256`, `dynamic-preview.md`, `dynamic-capabilities.json`, and `dynamic-budget.json`, then pauses at `approve-dynamic`. The script must export one async default function. The AST gate rejects imports, dynamic import, `require`, `eval`, `Function`, `globalThis`, `process`, `fetch`, constructor/prototype escape paths, direct shell strings, and call expressions outside `cwf` or approved builtins. Execution fails closed unless the child process can run with Node Permission Model active and without target repo filesystem, network, child-process, worker, native-addon, WASI, FFI, or inspector permissions. `cwf.agent.run` defaults to `read-only`; read-only agents fail the run if the target diff changes. `cwf.safePatch.apply` is the only dynamic write path that applies patches directly: the script must declare `metadata.safe_patch_policy` so the policy is visible in preview, and the runtime `write_policy` must exactly match that metadata. CWF stores `dynamic-proposed.patch`, checks policy and `git apply --check --3way`, applies through the parent process, runs verification, records rollback evidence, and reverse-applies the patch if verification fails. `inherit-session` is allowed only for `generated-current-session` scripts with matching SHA-256 and a known write-capable parent permission cap; copied, remote, unknown, and hash-mismatched workflows fail closed. Remote dynamic workflow URLs cannot run directly; inspect and save a local trusted copy first.
+
+Dynamic template discovery is local-only:
+
+```text
+./workflows/dynamic/
+./.codex-flow/dynamic-workflows/
+~/.codex-workflows/dynamic/
+```
+
+`cwf dynamic save <workflow.js> --id <trusted-id>` copies a validated script into `~/.codex-workflows/dynamic/` and writes a `.trust.json` sidecar bound to the source SHA-256. If the saved script changes without a matching trust record, discovery fails instead of running the tampered copy.
 
 `cwf desktop result` bridges completed filesystem runs back into Codex. When CWF is launched by a Codex skill from an active conversation, the primary UX is for the skill to read the completed run and answer in that same conversation. `--print` prints a concise handoff prompt for that path. Without app-server, the command still writes `artifacts/handoff-prompt.md`. `--new-thread` and `--thread <thread-id>` require a Codex CLI with app-server support, a running app-server daemon, and remote control enabled:
 
@@ -163,6 +178,8 @@ Run artifacts are stored under:
     dynamic-budget.json
     dynamic-events.jsonl
     dynamic-final.json
+    dynamic-proposed.patch
+    dynamic-safe-patch.json
     write-plan.md
     dry-run-preview.md
     verification-plan.md

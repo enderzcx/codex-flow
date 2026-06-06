@@ -11,7 +11,11 @@ cwf workflows show <workflow-id-or-path>
 cwf workflows validate [workflow-id-or-path]
 cwf run <workflow-id-or-path> --target <repo> [--background]
 cwf run <workflow-id-or-path> --target <repo> [--desktop-result]
-cwf dynamic run <workflow.js> --target <repo> [--approve]
+cwf dynamic list
+cwf dynamic show <dynamic-workflow-id-or-path>
+cwf dynamic save <workflow.js> --id <trusted-id>
+cwf dynamic generate --goal "<task>" --target <repo> [--output <workflow.js>]
+cwf dynamic run <workflow.js-or-id> --target <repo> [--approve]
 cwf desktop check
 cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
 cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]

@@ -14,7 +14,7 @@ Bundled review workflows:
 
 The `doc-refresh` workflow is the bundled user-facing exception: it is write-capable, documentation-only, gated, and requires preview artifacts plus explicit approval before its Codex write phase. Its `direct-docs` mode is a docs/readme/release-note policy preset; the writer still runs in an isolated target and CWF applies only a checked patch. v1.10 also supports `write_policy.mode: patch` for bounded non-doc workflows and fixtures: the writer runs in an isolated target, CWF extracts `artifacts/proposed.patch`, checks allowed/forbidden paths, runs `git apply --check --3way`, applies, then records verification and rollback artifacts.
 
-v1.11 also supports local dynamic JavaScript workflow harnesses through `cwf dynamic run`. They are not part of the YAML registry and are never run directly as unrestricted Node.js. CWF copies the script into run artifacts, records SHA-256, renders a preview, waits for `approve-dynamic`, and executes only through a permissioned child process plus parent CWF JSON-RPC APIs.
+v1.11 also supports local dynamic JavaScript workflow harnesses through `cwf dynamic run`. They are not part of the YAML registry and are never run directly as unrestricted Node.js. CWF copies the script into run artifacts, records SHA-256, renders a preview, waits for `approve-dynamic`, and executes only through a permissioned child process plus parent CWF JSON-RPC APIs. Dynamic workflows can now be generated from intent, discovered from local template folders, saved with SHA-bound trust metadata, and run by id. Remote URL execution is intentionally rejected until a script has been inspected and saved locally.
 
 ## diff-review
 
@@ -177,24 +177,36 @@ Run a preview-first local JavaScript workflow harness.
 Use when:
 
 - you need a task-specific orchestration harness instead of a reusable YAML workflow
-- the script can stay inside `cwf.git`, `cwf.agent.run`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
+- the script can stay inside `cwf.git`, `cwf.agent.run`, `cwf.safePatch`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
 - you want artifact-backed preview, capabilities, budget, events, worker outputs, and final report
 
 Do not use when:
 
 - the script needs direct `fs`, `process`, shell, network, package imports, or target repo access
-- the workflow is remote, registry-installed, packaged third-party, copied from an untrusted source, or hash-mismatched
-- the task requires JavaScript itself to write files
+- the workflow is remote, copied from an untrusted source, or hash-mismatched
+- the task requires JavaScript itself to write files directly instead of submitting a guarded `safePatch`
 - `inherit-session` would exceed the parent Codex permission cap
 
 Run:
 
 ```bash
+cwf dynamic list
+cwf dynamic show change-summary
+cwf dynamic generate --goal "Summarize this repo diff" --target <repo>
+cwf dynamic run change-summary --target <repo>
 cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
 cwf approve <run-id> approve-dynamic
 cwf resume <run-id>
+cwf dynamic save ./workflow.js --id local-review
 ```
+
+Built-in dynamic templates:
+
+- `change-summary`: read-only summary of changed files and diff size.
+- `docs-change-check`: read-only documentation-scope check for README/docs changes.
+
+`cwf.safePatch.apply` is available only as a guarded parent-applied patch path. The dynamic script must declare `metadata.safe_patch_policy` so the write policy is visible in preview, and the runtime `write_policy` must exactly match that metadata. CWF stores `dynamic-proposed.patch`, enforces `allowed_paths` and `forbidden_paths`, runs `git apply --check --3way`, applies through the parent, runs verification commands, records rollback evidence, and reverse-applies the patch if verification fails.
 
 ## Choosing Quickly
 
-Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, `doc-refresh` only for gated documentation writes, and `dynamic-js` for approved local JavaScript orchestration harnesses.
+Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, `doc-refresh` only for gated documentation writes, and `dynamic-js` for approved local JavaScript orchestration harnesses, generated previews, or SHA-trusted saved templates.
