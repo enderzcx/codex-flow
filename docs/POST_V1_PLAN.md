@@ -19,6 +19,7 @@ Plain English:
 - v1.7 turns `codex-app-thread` into a live Desktop-visible worker-thread adapter.
 - v1.8 decides whether Managed-Agents-style platform scheduling is still needed after native worker threads.
 - v1.10 generalizes safe bounded writes with `write_policy.mode: patch`, isolated writer execution, proposed patch artifacts, path policy checks, `git apply --check --3way`, and verification artifacts.
+- v1.11 adds preview-first JavaScript dynamic workflows through AST policy, explicit approval, Node Permission Model child execution, and parent CWF JSON-RPC APIs.
 - Later work can explore remote workflow sharing.
 
 Global rules:
@@ -27,7 +28,7 @@ Global rules:
 - Do not make Codex Desktop required for CLI workflows.
 - Do not duplicate Codex subagent, sandbox, approval, skill, or plugin mechanisms.
 - Do not run generated workflow specs until they validate.
-- Do not run generated JavaScript in the public core.
+- Do not run JavaScript as unrestricted `node workflow.js`; dynamic JavaScript must pass preview, AST policy, approval, permissioned child-process execution, and parent CWF API mediation.
 - Do not ship write-capable workflows without gates and dry-run evidence.
 - Keep every new surface optional and gracefully degradable.
 

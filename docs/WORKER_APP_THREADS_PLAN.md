@@ -171,10 +171,21 @@ If the probe cannot complete setup before a turn exists, keep that separate as `
 Timeout tuning:
 
 - `options.timeoutMs` is the overall worker deadline; app-thread setup, turn start, and result reading must not exceed it cumulatively.
+- `CWF_APP_THREAD_TRANSPORT` selects how app-thread workers reach Codex app-server. The default is `stdio`, which starts a fresh local `codex app-server` process per probe/worker path and avoids stale persistent-daemon quota routing. Set `CWF_APP_THREAD_TRANSPORT=daemon` only when intentionally testing the long-lived `~/.codex/app-server-control` socket.
+- `CWF_APP_THREAD_MODEL` optionally pins the Codex Desktop model used by both the app-thread execution probe and worker turns. By default, app-thread workers use `gpt-5.3-codex-spark` so lightweight worker turns stay on the Codex quota lane instead of the host default premium lane. Set `CWF_APP_THREAD_MODEL=host-default` to opt back into the host default model.
+- `CWF_APP_THREAD_MODEL_PROVIDER` optionally pins the thread-start model provider, for example `openai`.
+- `CWF_APP_THREAD_REASONING_EFFORT` optionally pins the worker/probe turn effort, for example `low`, `medium`, `high`, or `xhigh` when supported by the selected Desktop model. The default app-thread effort is `low`.
 - `CWF_APP_THREAD_WORKER_REQUEST_TIMEOUT_MS` caps individual app-server setup/start requests within that overall deadline.
 - `CWF_APP_THREAD_RESULT_TIMEOUT_MS` caps worker result polling within the remaining overall deadline.
 - `CWF_APP_THREAD_CLOSE_TIMEOUT_MS` caps best-effort transport close; close failures must not hide an already collected worker result.
+- `CWF_APP_THREAD_DIAGNOSTICS_MAX_BYTES` caps the number of session-log bytes read for fallback diagnostics, with a hard maximum of 1 MiB even if the env value is larger. The adapter reads only Codex session `.jsonl` files under `CODEX_HOME/sessions` and otherwise records only the basename.
 - Invalid timeout env values fall back to defaults instead of producing `NaN` or immediate accidental timeouts.
+
+Execution diagnostics:
+
+- When `thread/read` exposes a Codex session path but no assistant response, the app-thread adapter records best-effort diagnostics from the session log: thread status, model, effort, coarse quota availability, `last_agent_message`, and the session log filename.
+- A Desktop-visible thread can be created even when the model channel cannot respond. If diagnostics show `quota_unavailable=true`, the adapter must report `app-thread-execution-unavailable` and use `fallback_worker_adapter` when configured. Public worker output must not include raw account balance values.
+- If GPT-5.5/GPT-5.4 app-thread runs appear to use a premium quota lane while `codex exec` or fresh stdio app-server runs use the normal Codex quota lane, treat it as persistent-daemon quota routing drift, not proof that the user account lacks Codex quota. Restart the daemon or use the default stdio transport before falling back.
 
 ### Safety Invariants
 

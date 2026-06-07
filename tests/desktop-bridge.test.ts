@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server, type Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -12,7 +12,9 @@ import {
   buildThreadReadRequest,
   buildThreadStartRequest,
   buildTurnStartRequest,
+  checkDesktopCapability,
   handleDesktopResult,
+  createStdioAppServerTransport,
   type AppServerTransport,
 } from "../src/desktop-bridge.js";
 import { DEFAULT_FAILURE_POLICY } from "../src/run-index.js";
@@ -67,6 +69,23 @@ describe("desktop bridge", () => {
       method: "thread/read",
       params: { threadId: "thread_1", includeTurns: false },
     });
+  });
+
+  it("marks thread APIs unavailable when the schema lacks thread/read", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cwf-capability-"));
+    cleanup.push(root);
+    const fakeCodex = join(root, "fake-codex");
+    const fakeCli = join(root, "fake-codex.mjs");
+    await writeFile(fakeCli, fakeCapabilityCodexScript(false));
+    await writeFile(fakeCodex, `#!/bin/sh\nexec "${process.execPath}" "${fakeCli}" "$@"\n`);
+    await chmod(fakeCodex, 0o755);
+
+    const capability = await checkDesktopCapability(fakeCodex);
+
+    expect(capability.codex_cli_available).toBe(true);
+    expect(capability.schema_available).toBe(true);
+    expect(capability.required_methods["thread/read"]).toBe(false);
+    expect(capability.thread_apis_available).toBe(false);
   });
 
   it("writes a local handoff prompt and records print metadata", async () => {
@@ -181,6 +200,76 @@ describe("desktop bridge", () => {
         process.env.CWF_APP_SERVER_SOCKET = previousSocketPath;
       }
       await fakeAppServer.close();
+    }
+  });
+
+  it("posts through a spawned stdio app-server transport", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cwf-stdio-"));
+    cleanup.push(root);
+    const fakeCodex = join(root, "fake-codex");
+    const fakeServer = join(root, "fake-server.mjs");
+    await writeFile(fakeServer, fakeStdioAppServerScript());
+    await writeFile(fakeCodex, `#!/bin/sh\nexec "${process.execPath}" "${fakeServer}" "$@"\n`);
+    await chmod(fakeCodex, 0o755);
+
+    const appServer = createStdioAppServerTransport(fakeCodex);
+    try {
+      await appServer.request("initialize", buildInitializeRequest().params);
+      await appServer.notify?.("initialized");
+      const started = await appServer.request("thread/start", buildThreadStartRequest(createState()).params) as { thread?: { id?: string } };
+      const turn = await appServer.request("turn/start", buildTurnStartRequest("thread_stdio", "hello", createState()).params) as { turn?: { id?: string } };
+
+      expect(started.thread?.id).toBe("thread_stdio");
+      expect(turn.turn?.id).toBe("turn_stdio");
+    } finally {
+      await appServer.close?.();
+    }
+  });
+
+  it("escalates stdio app-server close when the child ignores SIGTERM", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cwf-stdio-close-"));
+    cleanup.push(root);
+    const fakeCodex = join(root, "fake-codex");
+    const fakeServer = join(root, "ignore-term-server.mjs");
+    const pidFile = join(root, "pid.txt");
+    await writeFile(fakeServer, fakeIgnoringStdioAppServerScript());
+    await writeFile(fakeCodex, `#!/bin/sh\nexec "${process.execPath}" "${fakeServer}" "$@"\n`);
+    await chmod(fakeCodex, 0o755);
+
+    const previousPidFile = process.env.CWF_FAKE_STDIO_PID_FILE;
+    process.env.CWF_FAKE_STDIO_PID_FILE = pidFile;
+    try {
+      const appServer = createStdioAppServerTransport(fakeCodex);
+      const pid = await waitForPidFile(pidFile);
+      expect(isProcessAlive(pid)).toBe(true);
+
+      await appServer.close?.();
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      expect(isProcessAlive(pid)).toBe(false);
+    } finally {
+      if (previousPidFile === undefined) {
+        delete process.env.CWF_FAKE_STDIO_PID_FILE;
+      } else {
+        process.env.CWF_FAKE_STDIO_PID_FILE = previousPidFile;
+      }
+    }
+  });
+
+  it("fails stdio app-server requests when stdout exceeds the frame cap without a newline", async () => {
+    const root = await mkdtemp(join(tmpdir(), "cwf-stdio-buffer-"));
+    cleanup.push(root);
+    const fakeCodex = join(root, "fake-codex");
+    const fakeServer = join(root, "no-newline-server.mjs");
+    await writeFile(fakeServer, fakeOversizedStdoutAppServerScript());
+    await writeFile(fakeCodex, `#!/bin/sh\nexec "${process.execPath}" "${fakeServer}" "$@"\n`);
+    await chmod(fakeCodex, 0o755);
+
+    const appServer = createStdioAppServerTransport(fakeCodex);
+    try {
+      await expect(appServer.request("initialize", {})).rejects.toThrow("app-server stdio output exceeds");
+    } finally {
+      await appServer.close?.();
     }
   });
 
@@ -351,6 +440,106 @@ function fakeResult(method: string): unknown {
   return {};
 }
 
+function fakeStdioAppServerScript(): string {
+  return `#!/usr/bin/env node
+let buffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  buffer += chunk;
+  for (;;) {
+    const index = buffer.indexOf("\\n");
+    if (index < 0) break;
+    const line = buffer.slice(0, index).trim();
+    buffer = buffer.slice(index + 1);
+    if (!line) continue;
+    const message = JSON.parse(line);
+    if (!message.id) continue;
+    let result = {};
+    if (message.method === "thread/start") result = { thread: { id: "thread_stdio" } };
+    if (message.method === "turn/start") result = { turn: { id: "turn_stdio" } };
+    process.stdout.write(JSON.stringify({ id: message.id, result }) + "\\n");
+  }
+});
+`;
+}
+
+function fakeCapabilityCodexScript(includeThreadRead: boolean): string {
+  const methods = [
+    "initialize",
+    "thread/start",
+    "thread/name/set",
+    "thread/list",
+    ...(includeThreadRead ? ["thread/read"] : []),
+    "turn/start",
+  ];
+  return `#!/usr/bin/env node
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const args = process.argv.slice(2);
+if (args[0] === "--version") {
+  console.log("codex-cli test");
+  process.exit(0);
+}
+if (args[0] === "app-server" && args[1] === "generate-json-schema") {
+  const out = args[args.indexOf("--out") + 1];
+  mkdirSync(out, { recursive: true });
+  writeFileSync(join(out, "ClientRequest.json"), JSON.stringify({ oneOf: ${JSON.stringify(methods.map((method) => ({ properties: { method: { const: method } } })))} }));
+  process.exit(0);
+}
+if (args[0] === "app-server" && args[1] === "daemon" && args[2] === "version") {
+  process.exit(1);
+}
+process.exit(1);
+`;
+}
+
+function fakeIgnoringStdioAppServerScript(): string {
+  return `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+
+if (process.env.CWF_FAKE_STDIO_PID_FILE) {
+  writeFileSync(process.env.CWF_FAKE_STDIO_PID_FILE, String(process.pid));
+}
+process.on("SIGTERM", () => {});
+process.stdin.resume();
+setInterval(() => {}, 1000);
+`;
+}
+
+function fakeOversizedStdoutAppServerScript(): string {
+  return `#!/usr/bin/env node
+process.stdin.resume();
+process.stdout.write("x".repeat(5 * 1024 * 1024 + 1));
+setInterval(() => {}, 1000);
+`;
+}
+
+async function waitForPidFile(path: string): Promise<number> {
+  const deadline = Date.now() + 1000;
+  while (Date.now() < deadline) {
+    try {
+      const pid = Number((await readFile(path, "utf8")).trim());
+      if (Number.isInteger(pid) && pid > 0) {
+        return pid;
+      }
+    } catch {
+      // Keep polling until the child writes its pid.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`Timed out waiting for pid file: ${path}`);
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function writeFakeFrame(socket: Socket, opcode: number, payload: Buffer): void {
   let header: Buffer;
   if (payload.length < 126) {
@@ -455,6 +644,7 @@ function availableCapability(): DesktopCapabilitySummary {
       "thread/start": true,
       "thread/name/set": true,
       "thread/list": true,
+      "thread/read": true,
       "turn/start": true,
     },
     thread_apis_available: true,

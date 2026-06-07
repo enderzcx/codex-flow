@@ -6,6 +6,15 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { checkDesktopCapability, formatDesktopCheck, handleDesktopResult } from "./desktop-bridge.js";
+import { resumeDynamicWorkflow, startDynamicWorkflow, type DynamicWorkflowOrigin, type ParentPermissionCap } from "./dynamic-workflow.js";
+import { generateDynamicWorkflowFromIntent } from "./dynamic-workflow-generator.js";
+import {
+  formatDynamicWorkflowList,
+  formatDynamicWorkflowShow,
+  listDynamicWorkflowEntries,
+  resolveDynamicWorkflowReference,
+  saveDynamicWorkflow,
+} from "./dynamic-workflow-registry.js";
 import { handleGithubPr, type GitHubPrFormat } from "./github-pr.js";
 import { loadWorkflowSpec } from "./workflow-loader.js";
 import { executeWorkflow, runWorkflow } from "./phase-engine.js";
@@ -27,6 +36,7 @@ type ParsedArgs = {
   command?: string;
   workflowPath?: string;
   workflowSubcommand?: string;
+  dynamicSubcommand?: string;
   desktopSubcommand?: string;
   workflowRef?: string;
   target?: string;
@@ -49,6 +59,11 @@ type ParsedArgs = {
   goal?: string;
   fromRunId?: string;
   output?: string;
+  id?: string;
+  origin?: DynamicWorkflowOrigin;
+  parentSandbox?: ParentPermissionCap["sandbox"];
+  parentApproval?: ParentPermissionCap["approval_policy"];
+  approve?: boolean;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -122,6 +137,98 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
     throw new Error("Usage: cwf workflows <list|show|validate> [workflow-id-or-path]");
+  }
+
+  if (args.command === "dynamic") {
+    if (args.dynamicSubcommand === "list") {
+      console.log(formatDynamicWorkflowList(await listDynamicWorkflowEntries()));
+      return;
+    }
+    if (args.dynamicSubcommand === "show") {
+      if (!args.workflowRef) {
+        throw new Error("Usage: cwf dynamic show <dynamic-workflow-id-or-path>");
+      }
+      const resolved = await resolveDynamicWorkflowReference(args.workflowRef);
+      console.log(formatDynamicWorkflowShow(resolved.entry));
+      return;
+    }
+    if (args.dynamicSubcommand === "save") {
+      if (!args.workflowRef || !args.id) {
+        throw new Error("Usage: cwf dynamic save <workflow.js> --id <trusted-id>");
+      }
+      const entry = await saveDynamicWorkflow({ sourcePath: args.workflowRef, id: args.id });
+      console.log(`Saved dynamic workflow: ${entry.id}`);
+      console.log(`Path: ${entry.path}`);
+      console.log(`SHA-256: ${entry.source_sha256}`);
+      console.log(`Run: cwf dynamic run ${entry.id} --target <repo>`);
+      return;
+    }
+    if (args.dynamicSubcommand === "generate") {
+      if (!args.goal) {
+        throw new Error('Usage: cwf dynamic generate --goal "<task>" --target <repo> [--output <workflow.js>]');
+      }
+      if (!args.target) {
+        throw new Error('Please pass --target <repo>. Example: cwf dynamic generate --goal "Audit auth risks" --target .');
+      }
+      const target = resolve(args.target);
+      await assertPathExists(target, "target repo");
+      const generated = await generateDynamicWorkflowFromIntent({ goal: args.goal, output: args.output });
+      const store = await startDynamicWorkflow({
+        scriptPath: generated.path,
+        target,
+        origin: "generated-current-session",
+        parentPermissionCap: args.parentSandbox || args.parentApproval
+          ? {
+              sandbox: args.parentSandbox ?? "unknown",
+              approval_policy: args.parentApproval ?? "unknown",
+            }
+          : undefined,
+        preview: generated.preview,
+      });
+      console.log(`Generated: ${generated.path}`);
+      console.log(`Run ID: ${store.runId}`);
+      console.log(`Run dir: ${store.runDir}`);
+      console.log(`Preview: ${store.runDir}/artifacts/dynamic-preview.md`);
+      console.log(`Approve: cwf approve ${store.runId} approve-dynamic`);
+      console.log(`Resume: cwf resume ${store.runId}`);
+      return;
+    }
+    if (args.dynamicSubcommand !== "run") {
+      throw new Error('Usage: cwf dynamic <generate|run> ...');
+    }
+    if (!args.workflowPath) {
+      throw new Error("Usage: cwf dynamic run <workflow.js> --target <repo> [--approve]");
+    }
+    if (!args.target) {
+      throw new Error("Please pass --target <repo>. Example: cwf dynamic run workflow.js --target .");
+    }
+    const target = resolve(args.target);
+    await assertPathExists(target, "target repo");
+    const resolvedDynamic = await resolveDynamicWorkflowReference(args.workflowPath);
+    const store = await startDynamicWorkflow({
+      scriptPath: resolvedDynamic.path,
+      target,
+      origin: args.origin ?? resolvedDynamic.origin,
+      parentPermissionCap: args.parentSandbox || args.parentApproval
+        ? {
+            sandbox: args.parentSandbox ?? "unknown",
+            approval_policy: args.parentApproval ?? "unknown",
+          }
+        : undefined,
+      approve: Boolean(args.approve),
+    });
+    console.log(`Run ID: ${store.runId}`);
+    console.log(`Run dir: ${store.runDir}`);
+    const state = await store.readState();
+    if (state.status === "waiting") {
+      console.log(`Preview: ${store.runDir}/artifacts/dynamic-preview.md`);
+      console.log(`Approve: cwf approve ${store.runId} approve-dynamic`);
+      console.log(`Resume: cwf resume ${store.runId}`);
+    } else {
+      console.log(`Status: ${state.status}`);
+      console.log(`Result: cwf result ${store.runId}`);
+    }
+    return;
   }
 
   if (args.command === "__run") {
@@ -291,6 +398,13 @@ async function main(argv: string[]): Promise<void> {
     const store = RunStore.fromRunId(args.runId);
     const spec = await store.readWorkflow();
     const state = await store.readState();
+    if (spec.id === "dynamic-js") {
+      await resumeDynamicWorkflow({ store, target: state.target });
+      const nextState = await store.readState();
+      const workerResults = await readWorkerResults(store.runDir);
+      console.log(formatStatus(nextState, workerResults));
+      return;
+    }
     await executeWorkflow({ spec, specPath: `${store.runDir}/workflow.json`, target: state.target, store, resume: true });
     const nextState = await store.readState();
     const workerResults = await readWorkerResults(store.runDir);
@@ -360,6 +474,40 @@ function parseArgs(argv: string[]): ParsedArgs {
   } else if (command === "workflows") {
     parsed.workflowSubcommand = first;
     parsed.workflowRef = second;
+  } else if (command === "dynamic") {
+    parsed.dynamicSubcommand = first;
+    if (first === "run") {
+      parsed.workflowPath = second;
+    } else if (first === "show" || first === "save") {
+      parsed.workflowRef = second;
+    }
+    for (let index = 0; index < rest.length; index += 1) {
+      const token = rest[index];
+      if (token === "--target") {
+        parsed.target = rest[index + 1];
+        index += 1;
+      } else if (token === "--goal") {
+        parsed.goal = rest[index + 1];
+        index += 1;
+      } else if (token === "--output") {
+        parsed.output = rest[index + 1];
+        index += 1;
+      } else if (token === "--id") {
+        parsed.id = rest[index + 1];
+        index += 1;
+      } else if (token === "--approve") {
+        parsed.approve = true;
+      } else if (token === "--origin") {
+        parsed.origin = parseDynamicOrigin(rest[index + 1]);
+        index += 1;
+      } else if (token === "--parent-sandbox") {
+        parsed.parentSandbox = parseParentSandbox(rest[index + 1]);
+        index += 1;
+      } else if (token === "--parent-approval") {
+        parsed.parentApproval = parseParentApproval(rest[index + 1]);
+        index += 1;
+      }
+    }
   } else if (command === "__run") {
     parsed.runId = first;
     parsed.workflowPath = second;
@@ -476,6 +624,11 @@ Usage:
   cwf workflows show <workflow-id-or-path>
   cwf workflows validate [workflow-id-or-path]
   cwf run <workflow-id-or-path> --target <repo> [--background]
+  cwf dynamic list
+  cwf dynamic show <dynamic-workflow-id-or-path>
+  cwf dynamic save <workflow.js> --id <trusted-id>
+  cwf dynamic generate --goal "<task>" --target <repo> [--output <workflow.js>]
+  cwf dynamic run <workflow.js-or-id> --target <repo> [--approve]
   cwf desktop check
   cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]
   cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]
@@ -496,6 +649,9 @@ Common flow:
   cwf validate workflows/diff-review.yaml
   cwf workflows list
   cwf run diff-review --target . --background
+  cwf dynamic list
+  cwf dynamic generate --goal "Audit this repo for auth risks" --target .
+  cwf dynamic run change-summary --target .
   cwf watch <run-id>
   cwf latest
   cwf result <run-id>
@@ -761,6 +917,30 @@ function parseStatus(value?: string): PhaseStatus {
     throw new Error(`Invalid --status value: ${value ?? ""}`);
   }
   return value as PhaseStatus;
+}
+
+function parseDynamicOrigin(value?: string): DynamicWorkflowOrigin {
+  const origins: DynamicWorkflowOrigin[] = ["generated-current-session", "local-trust-record", "copied-local", "remote", "registry", "packaged", "unknown"];
+  if (!value || !origins.includes(value as DynamicWorkflowOrigin)) {
+    throw new Error(`Invalid --origin value: ${value ?? ""}`);
+  }
+  return value as DynamicWorkflowOrigin;
+}
+
+function parseParentSandbox(value?: string): ParentPermissionCap["sandbox"] {
+  const sandboxes: ParentPermissionCap["sandbox"][] = ["read-only", "workspace-write", "danger-full-access", "unknown"];
+  if (!value || !sandboxes.includes(value as ParentPermissionCap["sandbox"])) {
+    throw new Error(`Invalid --parent-sandbox value: ${value ?? ""}`);
+  }
+  return value as ParentPermissionCap["sandbox"];
+}
+
+function parseParentApproval(value?: string): ParentPermissionCap["approval_policy"] {
+  const policies: ParentPermissionCap["approval_policy"][] = ["never", "on-request", "on-failure", "untrusted", "unknown"];
+  if (!value || !policies.includes(value as ParentPermissionCap["approval_policy"])) {
+    throw new Error(`Invalid --parent-approval value: ${value ?? ""}`);
+  }
+  return value as ParentPermissionCap["approval_policy"];
 }
 
 function parseGithubFormat(value?: string): GitHubPrFormat {

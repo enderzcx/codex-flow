@@ -11,12 +11,16 @@ describe("CLI output formatting", () => {
     expect(help).toContain("cwf workflows list");
     expect(help).toContain("cwf workflows show <workflow-id-or-path>");
     expect(help).toContain("cwf run <workflow-id-or-path> --target <repo> [--background]");
+    expect(help).toContain("cwf dynamic list");
+    expect(help).toContain("cwf dynamic save <workflow.js> --id <trusted-id>");
+    expect(help).toContain("cwf dynamic run <workflow.js-or-id> --target <repo> [--approve]");
     expect(help).toContain("cwf desktop check");
     expect(help).toContain("cwf desktop result <run-id> [--thread <thread-id>] [--new-thread] [--print]");
     expect(help).toContain("cwf github-pr <run-id> [--format comment|review] [--post --repo <owner/repo> --pr <number>]");
     expect(help).toContain('cwf suggest-workflow --goal "<task>" [--target <repo>] [--output <path>]');
     expect(help).toContain("cwf suggest-workflow --from-run <run-id> [--output <path>]");
     expect(help).toContain("cwf run diff-review --target . --background");
+    expect(help).toContain("cwf dynamic run change-summary --target .");
     expect(help).toContain("cwf desktop result <run-id> --print");
     expect(help).toContain("cwf github-pr <run-id> --format comment");
     expect(help).toContain('cwf suggest-workflow --goal "Review docs changes" --target .');

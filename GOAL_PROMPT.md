@@ -10,7 +10,7 @@ This file is the current goal-mode entrypoint. Historical phase prompts live in
 
 Current phase:
 
-- v1.11 JS Dynamic Runtime MVP is planned as the next implementation contract.
+- v1.11 JS Dynamic Runtime MVP is implemented in the current working tree; next phase is not selected yet.
 
 Latest decisions:
 
@@ -31,6 +31,12 @@ Latest decisions:
   SHA-256 in v1.11. CWF must never grant more authority than the parent Codex
   session already has. Generated scripts must be previewed and approved before
   execution.
+- v1.11 implementation closeout: `dynamic-js` now supports local preview-first
+  `workflow.js` harnesses, AST policy validation with Acorn, Node Permission
+  Model child execution, parent CWF JSON-RPC APIs, read-only agent mutation
+  detection, strict `inherit-session` gating, dynamic artifacts, CLI preview
+  smoke, and documentation updates. Controlled live Codex-worker smoke still
+  requires Ender approval.
 
 Archived phase prompts:
 

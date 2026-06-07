@@ -1,6 +1,6 @@
 ---
 name: codex-workflows
-description: Run public Codex-native workflow specs for repeatable multi-worker engineering tasks, including gated documentation refresh, PR-ready artifacts, and safe workflow spec suggestions.
+description: Run public Codex-native workflow specs and approved local JavaScript dynamic workflows for repeatable multi-worker engineering tasks, including gated documentation refresh, PR-ready artifacts, and safe workflow spec suggestions.
 when_to_use: "run a workflow, audit a diff, review a branch with multiple perspectives, coordinate Codex workers, repeatable repo audit, gated documentation refresh, GitHub PR artifact, workflow suggestion, compare Codex workflow behavior to Claude Dynamic Workflows"
 metadata:
   version: "1.0.0"
@@ -29,7 +29,7 @@ This public skill is Codex-native:
 
 ## Current Workflows
 
-The bundled review workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`. The bundled user-facing write-capable workflow is `doc-refresh`, which is documentation-only and must pause at a gate before writing. v1.10 also supports bounded patch-mode write workflows when a workflow declares `write_policy.mode: patch`, `allowed_paths`, `forbidden_paths`, and optional `verification_commands`.
+The bundled review workflows are read-only: `diff-review`, `repo-audit`, `implementation-plan`, `research-crosscheck`, and `release-review`. The bundled user-facing write-capable workflow is `doc-refresh`, which is documentation-only and must pause at a gate before writing. v1.10 also supports bounded patch-mode write workflows when a workflow declares `write_policy.mode: patch`, `allowed_paths`, `forbidden_paths`, and optional `verification_commands`. v1.11 supports local dynamic JavaScript workflows through `cwf dynamic run`; these scripts are previewed, approved, AST-gated, and executed in a Node Permission Model child process that can only use parent CWF JSON-RPC APIs. The implemented dynamic preview also supports `cwf dynamic generate`, local `dynamic list/show`, `dynamic save` with SHA-bound trust metadata, and guarded `cwf.safePatch.apply`.
 
 ```bash
 cwf validate workflows/diff-review.yaml
@@ -46,6 +46,12 @@ cwf run release-review --target <repo>
 cwf run doc-refresh --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
 cwf run workflows/diff-review.yaml --target <repo> --background
+cwf dynamic list
+cwf dynamic show change-summary
+cwf dynamic generate --goal "<task>" --target <repo>
+cwf dynamic run change-summary --target <repo>
+cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
+cwf dynamic save ./workflow.js --id local-review
 cwf status <run-id>
 cwf watch <run-id>
 cwf latest --target <repo>
@@ -62,9 +68,9 @@ cwf suggest-workflow --from-run <run-id>
 cwf cancel <run-id>
 ```
 
-Bundled workflows are read-only by default. Review workflows inspect a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result. `doc-refresh` is the narrow exception: it creates pre-write artifacts, waits for explicit approval, then runs its writer in an isolated target with the `direct-docs` policy preset. All write workflows extract `artifacts/proposed.patch`, enforce `write_policy`, run `git apply --check --3way`, apply, and then record verification plus rollback artifacts. If workflow verification fails after apply, CWF attempts to reverse-apply the proposed patch before returning a failed run.
+Bundled workflows are read-only by default. Review workflows inspect a target git diff from independent Codex worker perspectives and reduce the findings into a stable reduced JSON envelope plus one saved Markdown result. `doc-refresh` is the narrow exception: it creates pre-write artifacts, waits for explicit approval, then runs its writer in an isolated target with the `direct-docs` policy preset. All write workflows extract `artifacts/proposed.patch`, enforce `write_policy`, run `git apply --check --3way`, apply, and then record verification plus rollback artifacts. If workflow verification fails after apply, CWF attempts to reverse-apply the proposed patch before returning a failed run. Dynamic JavaScript workflows are not registry YAML and not unrestricted `node workflow.js`; use them only for local, approved harnesses that stay inside `cwf.git`, `cwf.agent.run`, `cwf.safePatch`, `cwf.map`, `cwf.artifacts`, and `cwf.report`. Dynamic `safePatch` requires `metadata.safe_patch_policy` in the script preview and rejects runtime policy widening. Remote dynamic workflow URLs must not run directly; inspect and save a local trusted copy first.
 
-Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, and `doc-refresh` only for gated documentation writes.
+Use `docs/workflow-catalog.md` to choose the workflow. Use `diff-review` for code correctness, `repo-audit` for maintainability and project health, `implementation-plan` for plan quality, `research-crosscheck` for factual/source discipline, `release-review` for ship readiness, `doc-refresh` only for gated documentation writes, and `dynamic-js` for approved local JavaScript orchestration, generated previews, or SHA-trusted templates.
 
 Prefer `cwf run diff-review --target <repo>` when the local workflow registry can resolve it. Direct path usage remains supported with `cwf run workflows/diff-review.yaml --target <repo>`.
 

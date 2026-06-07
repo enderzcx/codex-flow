@@ -274,6 +274,9 @@ export type WorkerRuntimeMetadata = {
   transcript_read: boolean;
   sandbox?: "read-only" | "workspace-write" | "danger-full-access";
   approval_policy?: "never" | "on-request" | "on-failure" | "untrusted";
+  model?: string;
+  model_provider?: string;
+  reasoning_effort?: string;
   worktree_path?: string;
   result_return_path?: "worker-envelope";
 };

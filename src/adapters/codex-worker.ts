@@ -35,6 +35,9 @@ export const WORKER_OUTPUT_SCHEMA = {
   },
 };
 
+export type CodexWorkerSandboxMode = "read-only" | "workspace-write" | "danger-full-access";
+export type CodexWorkerApprovalPolicy = "never" | "on-request" | "on-failure" | "untrusted";
+
 export type RunCodexWorkerOptions = {
   target: string;
   timeoutMs: number;
@@ -42,6 +45,8 @@ export type RunCodexWorkerOptions = {
   requestedAdapter?: WorkerAdapterName;
   fallbackUsed?: boolean;
   fallbackReason?: string;
+  sandboxMode?: CodexWorkerSandboxMode;
+  approvalPolicy?: CodexWorkerApprovalPolicy;
 };
 
 export async function runCodexWorker(
@@ -51,7 +56,9 @@ export async function runCodexWorker(
 ): Promise<WorkerResult> {
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
-  const prompt = buildWorkerPrompt(worker, context);
+  const sandboxMode = options.sandboxMode ?? "read-only";
+  const approvalPolicy = options.approvalPolicy ?? "never";
+  const prompt = buildWorkerPrompt(worker, context, sandboxMode);
 
   try {
     const codex = new Codex({
@@ -59,8 +66,8 @@ export async function runCodexWorker(
     });
     const thread = codex.startThread({
       workingDirectory: options.target,
-      sandboxMode: "read-only",
-      approvalPolicy: "never",
+      sandboxMode,
+      approvalPolicy,
       modelReasoningEffort: "low",
       webSearchMode: "disabled",
       webSearchEnabled: false,
@@ -182,6 +189,8 @@ function isFinding(value: unknown): boolean {
 }
 
 function buildSdkRuntime(worker: WorkflowWorker, options: RunCodexWorkerOptions): WorkerResult["runtime"] {
+  const sandboxMode = options.sandboxMode ?? "read-only";
+  const approvalPolicy = options.approvalPolicy ?? "never";
   return {
     adapter: "codex-sdk-headless",
     requested_adapter: options.requestedAdapter,
@@ -190,13 +199,14 @@ function buildSdkRuntime(worker: WorkflowWorker, options: RunCodexWorkerOptions)
     fallback_reason: options.fallbackReason,
     agent_role: worker.perspective || worker.id,
     transcript_read: false,
-    sandbox: "read-only",
-    approval_policy: "never",
+    sandbox: sandboxMode,
+    approval_policy: approvalPolicy,
   };
 }
 
-export function buildWorkerPrompt(worker: WorkflowWorker, context: DiffContext): string {
-  return `You are a read-only Codex worker inside the public codex-workflows diff-review MVP.
+export function buildWorkerPrompt(worker: WorkflowWorker, context: DiffContext, sandboxMode: CodexWorkerSandboxMode = "read-only"): string {
+  const canWrite = sandboxMode !== "read-only";
+  return `You are a ${canWrite ? "write-capable" : "read-only"} Codex worker inside the public codex-workflows runtime.
 
 Worker id: ${worker.id}
 Perspective: ${worker.perspective}
@@ -205,7 +215,7 @@ Task:
 ${worker.prompt}
 
 Rules:
-- Do not modify files.
+- ${canWrite ? "Modify files only when the task explicitly asks for it, and keep changes scoped to the worker prompt." : "Do not modify files."}
 - Review only the supplied context and diff.
 - Prefer concrete findings with file/diff evidence.
 - Do not invent line numbers if the diff does not provide them.

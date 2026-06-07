@@ -2,7 +2,7 @@
 
 一个轻量的 Codex 原生工作流层，用来把一次工程审查拆成多个 Codex worker（工作者）并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
 
-它只依赖 Codex 原生能力：不接第三方模型路由，不接私有 adapter，不再造一个单独的 agent 平台。公开版默认还是只读 workflow；v1.4 额外带一个很窄的 `doc-refresh`，只允许文档写入，并且必须先生成 preview、过 gate、显式 approve 后才进入写入阶段。v1.10 增加了更安全的通用写 worker 路径：writer 先在 isolated target 里产出 `artifacts/proposed.patch`，CWF 检查 allowed/forbidden path，跑 `git apply --check --3way`，再 apply 到真实 target；非文档写必须声明显式 `write_policy`。
+它只依赖 Codex 原生能力：不接第三方模型路由，不接私有 adapter，不再造一个单独的 agent 平台。公开版默认还是只读 workflow；v1.4 额外带一个很窄的 `doc-refresh`，只允许文档写入，并且必须先生成 preview、过 gate、显式 approve 后才进入写入阶段。v1.10 增加了更安全的通用写 worker 路径：writer 先在 isolated target 里产出 `artifacts/proposed.patch`，CWF 检查 allowed/forbidden path，跑 `git apply --check --3way`，再 apply 到真实 target；非文档写必须声明显式 `write_policy`。v1.11 增加第一版 JavaScript dynamic workflow runtime：本地 `workflow.js` 先过 AST policy、复制到 run artifacts、生成 preview、显式 approve，再放进 Node Permission Model child process 执行；child 只能通过 JSON-RPC 调 parent CWF API。这个 preview 面现在还包括 intent-to-preview 生成、内置本地 dynamic template、本地 save/reuse + SHA trust metadata，以及受控 dynamic `safePatch`。
 
 Codex 负责线程、子 agent、权限和写文件边界；Codex Flow 负责 workflow spec、run store、events、gate、reducer 和 artifact manifest。
 
@@ -58,6 +58,19 @@ cwf run research-crosscheck --target <repo>
 cwf run release-review --target <repo>
 cwf run doc-refresh --target <repo>
 cwf run workflows/diff-review.yaml --target <repo>
+```
+
+本地 dynamic JavaScript workflow 先 preview，不会直接启动 worker：
+
+```bash
+cwf dynamic list
+cwf dynamic show change-summary
+cwf dynamic generate --goal "Summarize this repo diff" --target <repo>
+cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
+cwf dynamic run change-summary --target <repo>
+cwf dynamic save ./workflow.js --id local-review
+cwf approve <run-id> approve-dynamic
+cwf resume <run-id>
 ```
 
 大 diff 推荐后台跑：
@@ -139,6 +152,18 @@ worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex
 
 带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。写 workflow 在 approval 前只写 run artifact（`write-plan.md`、`dry-run-preview.md`、`verification-plan.md`、`rollback.md`）。approval 后 writer 只在 isolated target 里写，CWF 保存 `proposed.patch`，检查 `write_policy` 路径和 `git apply --check --3way` 后才 apply 到真实 target，并记录 diff、verification 和 rollback artifact。如果 verification 在 apply 后失败，CWF 会尝试用同一个 patch 做 reverse apply，然后返回 failed run。内置 `doc-refresh` 的 `direct-docs` 只是 docs/readme/release-note policy preset，也走同一条 isolated patch apply 路径；源码/配置写入要用显式 patch policy。
 
+Dynamic JavaScript workflow 也是 gated。`cwf dynamic run <workflow.js-or-id> --target <repo>` 会写 `artifacts/workflow.js`、`workflow.sha256`、`dynamic-preview.md`、`dynamic-capabilities.json`、`dynamic-budget.json`，然后停在 `approve-dynamic`。脚本只能导出一个 async default function。AST gate 会拒绝 import、dynamic import、`require`、`eval`、`Function`、`globalThis`、`process`、`fetch`、constructor/prototype escape、直接 shell 字符串，以及不从 `cwf` 或允许 builtin 发起的 call expression。执行时 child process 必须启用 Node Permission Model，且不给 target repo filesystem、network、child-process、worker、native-addon、WASI、FFI、inspector 权限。`cwf.agent.run` 默认 `read-only`；read-only worker 如果改动 target diff，会让 run failed。`cwf.safePatch.apply` 是 dynamic runtime 里唯一会直接 apply patch 的写路径：脚本必须先声明 `metadata.safe_patch_policy`，让 policy 出现在 preview 里；runtime 传入的 `write_policy` 必须和 metadata 完全一致。CWF 会保存 `dynamic-proposed.patch`，检查 policy 和 `git apply --check --3way`，由 parent process apply，跑 verification，记录 rollback evidence；如果 verification 失败，会尝试 reverse apply，然后返回 failed run。`inherit-session` 只允许 `generated-current-session`、SHA-256 匹配、parent permission cap 已知且可写的脚本，copied/remote/unknown/hash mismatch 都 fail closed。远程 dynamic workflow URL 不能直接运行，必须先 inspect 并保存本地 trusted copy。
+
+Dynamic template discovery 只扫本地：
+
+```text
+./workflows/dynamic/
+./.codex-flow/dynamic-workflows/
+~/.codex-workflows/dynamic/
+```
+
+`cwf dynamic save <workflow.js> --id <trusted-id>` 会把通过校验的脚本复制到 `~/.codex-workflows/dynamic/`，并写一个绑定 SHA-256 的 `.trust.json` sidecar。保存后的脚本如果被改但 trust record 没同步，discovery 会失败，不会继续运行。
+
 `cwf desktop result` 用来把已完成的文件系统 run 带回 Codex。如果 CWF 是由当前 Codex 会话里的 skill 发起，主路径应该是 skill 读取 run 结果，然后直接在这个发起会话里回复。`--print` 会打印一段适合这条路径的简洁 handoff prompt；不依赖 app-server 时也会写 `artifacts/handoff-prompt.md`。`--new-thread` 和 `--thread <thread-id>` 需要支持 app-server 的 Codex CLI、运行中的 app-server daemon，以及已开启 remote control：
 
 ```bash
@@ -196,6 +221,15 @@ Artifacts:
     tests.json
     safety.json
   artifacts/
+    workflow.js
+    workflow.sha256
+    dynamic-preview.md
+    dynamic-capabilities.json
+    dynamic-budget.json
+    dynamic-events.jsonl
+    dynamic-final.json
+    dynamic-proposed.patch
+    dynamic-safe-patch.json
     write-plan.md
     dry-run-preview.md
     verification-plan.md

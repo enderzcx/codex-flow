@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.136.0",
+    "acorn": "^8.16.0",
     "yaml": "^2.8.1"
   },
   "devDependencies": {

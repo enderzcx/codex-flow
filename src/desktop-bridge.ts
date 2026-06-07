@@ -12,6 +12,7 @@ export const DESKTOP_REQUIRED_METHODS = [
   "thread/start",
   "thread/name/set",
   "thread/list",
+  "thread/read",
   "turn/start",
 ] as const;
 
@@ -52,6 +53,10 @@ export type AppServerTransport = {
 
 export function createDefaultAppServerTransport(): AppServerTransport {
   return new UnixSocketWebSocketAppServerTransport();
+}
+
+export function createStdioAppServerTransport(codexPath = process.env.CWF_CODEX_PATH || "codex"): AppServerTransport {
+  return new StdioAppServerTransport(codexPath);
 }
 
 export async function checkDesktopCapability(codexPath = process.env.CWF_CODEX_PATH || "codex"): Promise<DesktopCapabilitySummary> {
@@ -609,6 +614,148 @@ class UnixSocketWebSocketAppServerTransport implements AppServerTransport {
     if (!this.socket.destroyed) {
       this.socket.destroy();
     }
+  }
+}
+
+class StdioAppServerTransport implements AppServerTransport {
+  private nextId = 1;
+  private readonly child: ReturnType<typeof spawn>;
+  private readonly pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  private buffer = "";
+  private closed = false;
+
+  constructor(codexPath: string) {
+    this.child = spawn(codexPath, ["app-server"], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout = this.child.stdout;
+    const stderr = this.child.stderr;
+    if (!stdout || !stderr || !this.child.stdin) {
+      throw new Error("app-server stdio pipes are unavailable");
+    }
+    stdout.setEncoding("utf8");
+    stdout.on("data", (chunk: string) => this.onStdout(chunk));
+    stderr.setEncoding("utf8");
+    stderr.on("data", () => {});
+    this.child.on("error", (error) => this.fail(error));
+    this.child.on("close", (code) => {
+      this.closed = true;
+      if (this.pending.size > 0) {
+        this.fail(new Error(`app-server stdio exited before completing pending requests${code === null ? "" : `: exit ${code}`}`));
+      }
+    });
+  }
+
+  request(method: string, params?: unknown): Promise<unknown> {
+    const id = this.nextId++;
+    const response = new Promise<unknown>((resolve, reject) => {
+      this.pending.set(id, {
+        resolve: (value) => {
+          resolve(value);
+        },
+        reject: (error) => {
+          reject(error);
+        },
+      });
+    });
+    try {
+      this.writeJson({ id, method, params });
+    } catch (error) {
+      this.pending.delete(id);
+      return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+    }
+    return response;
+  }
+
+  notify(method: string, params?: unknown): void {
+    this.writeJson({ method, params });
+  }
+
+  async close(): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+    const closed = new Promise<void>((resolve) => {
+      this.child.once("close", () => resolve());
+    });
+    this.child.stdin?.end();
+    const terminateTimer = setTimeout(() => {
+      if (!this.closed) {
+        this.child.kill();
+      }
+    }, 250);
+    const timeout = new Promise<void>((resolve) => {
+      setTimeout(resolve, 1000);
+    });
+    try {
+      await Promise.race([closed, timeout]);
+      if (!this.closed) {
+        this.child.kill("SIGKILL");
+        await Promise.race([
+          closed,
+          new Promise<void>((resolve) => setTimeout(resolve, 250)),
+        ]);
+      }
+    } finally {
+      clearTimeout(terminateTimer);
+    }
+  }
+
+  private writeJson(value: unknown): void {
+    const stdin = this.child.stdin;
+    if (this.closed || !stdin?.writable) {
+      throw new Error("app-server stdio is not writable");
+    }
+    stdin.write(`${JSON.stringify(value)}\n`);
+  }
+
+  private onStdout(chunk: string): void {
+    this.buffer += chunk;
+    if (Buffer.byteLength(this.buffer, "utf8") > APP_SERVER_MAX_FRAME_BYTES) {
+      this.buffer = "";
+      this.fail(new Error(`app-server stdio output exceeds ${APP_SERVER_MAX_FRAME_BYTES} bytes without a complete response frame`));
+      this.child.kill("SIGKILL");
+      return;
+    }
+    for (;;) {
+      const newline = this.buffer.indexOf("\n");
+      if (newline < 0) {
+        return;
+      }
+      const line = this.buffer.slice(0, newline).trim();
+      this.buffer = this.buffer.slice(newline + 1);
+      if (!line) {
+        continue;
+      }
+      this.handleMessage(line);
+    }
+  }
+
+  private handleMessage(raw: string): void {
+    let message: { id?: number; result?: unknown; error?: { message?: string } };
+    try {
+      message = JSON.parse(raw) as { id?: number; result?: unknown; error?: { message?: string } };
+    } catch {
+      return;
+    }
+    if (typeof message.id !== "number") {
+      return;
+    }
+    const waiter = this.pending.get(message.id);
+    if (!waiter) {
+      return;
+    }
+    this.pending.delete(message.id);
+    if (message.error) {
+      waiter.reject(new Error(message.error.message ?? JSON.stringify(message.error)));
+    } else {
+      waiter.resolve(message.result);
+    }
+  }
+
+  private fail(error: Error): void {
+    for (const waiter of this.pending.values()) {
+      waiter.reject(error);
+    }
+    this.pending.clear();
   }
 }
 
