@@ -1,5 +1,8 @@
+import { open, realpath, stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, join, sep } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { checkDesktopCapability, createDefaultAppServerTransport, type AppServerTransport } from "../desktop-bridge.js";
+import { checkDesktopCapability, createDefaultAppServerTransport, createStdioAppServerTransport, type AppServerTransport } from "../desktop-bridge.js";
 import type { DesktopCapabilitySummary, DiffContext, WorkerAdapterName, WorkerResult, WorkflowRuntime, WorkflowWorker } from "../types.js";
 import { buildWorkerPrompt, parseWorkerOutput, runCodexWorker, type RunCodexWorkerOptions } from "./codex-worker.js";
 
@@ -58,6 +61,10 @@ export const defaultWorkerAdapters: WorkerAdapterRegistry = {
 const appThreadExecutionProbes = new Map<string, Promise<void>>();
 const appServerFactoryIds = new WeakMap<NonNullable<WorkerAdapterOptions["appServerFactory"]>, number>();
 let nextAppServerFactoryId = 1;
+const defaultAppThreadModel = "gpt-5.3-codex-spark";
+const defaultAppThreadReasoningEffort = "low";
+const appThreadProbeText = 'Return exactly {"probe":"cwf-app-thread-ok"} and nothing else.';
+const appThreadDiagnosticsMaxBytes = 1_048_576;
 
 export async function runWorkerWithAdapter(
   worker: WorkflowWorker,
@@ -175,7 +182,8 @@ async function runCodexAppThreadWorker(
   }
   await ensureAppThreadExecutionAvailable(context, options, codexPath);
 
-  const appServer = options.appServer ?? (options.appServerFactory ?? (() => createDefaultAppServerTransport()))(codexPath);
+  const appServer = options.appServer ?? (options.appServerFactory ?? createAppThreadAppServerTransport)(codexPath);
+  const modelOverride = appThreadModelOverride();
 
   const started = Date.now();
   const startedAt = new Date(started).toISOString();
@@ -191,14 +199,14 @@ async function runCodexAppThreadWorker(
     await appServerRequestWithTimeout(appServer, "initialize", buildInitializeParams(), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
     await appServerNotifyWithTimeout(appServer, "initialized", remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
 
-    const thread = await appServerRequestWithTimeout(appServer, "thread/start", buildWorkerThreadStartParams(context), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
+    const thread = await appServerRequestWithTimeout(appServer, "thread/start", buildWorkerThreadStartParams(context, modelOverride), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
     threadId = extractId(thread, "thread");
     if (!threadId) {
       throw new Error("thread/start did not return thread.id");
     }
     await appServerRequestWithTimeout(appServer, "thread/name/set", buildWorkerThreadNameParams(threadId, worker, options), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
 
-    const turn = await appServerRequestWithTimeout(appServer, "turn/start", buildWorkerTurnStartParams(threadId, prompt, context), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
+    const turn = await appServerRequestWithTimeout(appServer, "turn/start", buildWorkerTurnStartParams(threadId, prompt, context, modelOverride), remainingWorkerTimeoutMs(deadline, options.timeoutMs, requestTimeoutMs));
     turnId = extractId(turn, "turn");
     const directRaw = extractWorkerRaw(turn, turnId) ?? "";
     const readResult = await readAppThreadWorkerRaw(
@@ -248,6 +256,9 @@ async function runCodexAppThreadWorker(
         transcript_read: transcriptRead,
         sandbox: "read-only",
         approval_policy: "never",
+        model: modelOverride.model,
+        model_provider: modelOverride.modelProvider,
+        reasoning_effort: modelOverride.reasoningEffort,
         result_return_path: "worker-envelope",
       },
     };
@@ -284,6 +295,9 @@ async function runCodexAppThreadWorker(
         transcript_read: transcriptRead,
         sandbox: "read-only",
         approval_policy: "never",
+        model: modelOverride.model,
+        model_provider: modelOverride.modelProvider,
+        reasoning_effort: modelOverride.reasoningEffort,
         result_return_path: "worker-envelope",
       },
     };
@@ -311,7 +325,8 @@ async function ensureAppThreadExecutionAvailable(context: DiffContext, options: 
 }
 
 async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerAdapterOptions, codexPath: string): Promise<void> {
-  const appServer = (options.appServerFactory ?? (() => createDefaultAppServerTransport()))(codexPath);
+  const appServer = (options.appServerFactory ?? createAppThreadAppServerTransport)(codexPath);
+  const modelOverride = appThreadModelOverride();
   const probeTimeoutMs = appThreadProbeTimeoutMs(options);
   const deadline = Date.now() + probeTimeoutMs;
   let threadId: string | undefined;
@@ -325,7 +340,8 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
       sandbox: "read-only",
       ephemeral: false,
       threadSource: "user",
-      baseInstructions: "You are a Codex Flow app-thread execution probe. Reply with the requested tiny JSON only.",
+      baseInstructions: "You are a Codex Flow app-thread execution probe. Return only the exact JSON object requested by the user.",
+      ...buildThreadModelParams(modelOverride),
     }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     threadId = extractId(thread, "thread");
     if (!threadId) {
@@ -337,10 +353,12 @@ async function runAppThreadExecutionProbe(context: DiffContext, options: WorkerA
     }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     const turn = await appServerRequestWithTimeout(appServer, "turn/start", {
       threadId,
-      input: [{ type: "text", text: "{\"probe\":\"cwf-app-thread-ok\"}", text_elements: [] }],
+      input: [{ type: "text", text: appThreadProbeText, text_elements: [] }],
       cwd: context.target,
       approvalPolicy: "never",
       sandboxPolicy: { type: "readOnly", networkAccess: false },
+      outputSchema: appThreadProbeOutputSchema(),
+      ...buildTurnModelParams(modelOverride),
     }, remainingProbeTimeoutMs(deadline, probeTimeoutMs));
     turnId = extractId(turn, "turn");
     if (!turnId) {
@@ -403,8 +421,15 @@ function remainingProbeTimeoutMs(deadline: number, originalTimeoutMs: number): n
 }
 
 function appThreadProbeCacheKey(codexPath: string, appServerFactory: WorkerAdapterOptions["appServerFactory"]): string {
+  const modelOverride = appThreadModelOverride();
+  const transport = appServerFactory ? "factory" : appThreadTransportMode();
+  const modelKey = [
+    modelOverride.model ? `model=${modelOverride.model}` : undefined,
+    modelOverride.modelProvider ? `provider=${modelOverride.modelProvider}` : undefined,
+    modelOverride.reasoningEffort ? `effort=${modelOverride.reasoningEffort}` : undefined,
+  ].filter(Boolean).join(",");
   if (!appServerFactory) {
-    return `${codexPath}:default`;
+    return `${codexPath}:${transport}:${modelKey || "host-default"}`;
   }
   let id = appServerFactoryIds.get(appServerFactory);
   if (!id) {
@@ -412,7 +437,18 @@ function appThreadProbeCacheKey(codexPath: string, appServerFactory: WorkerAdapt
     nextAppServerFactoryId += 1;
     appServerFactoryIds.set(appServerFactory, id);
   }
-  return `${codexPath}:factory:${id}`;
+  return `${codexPath}:factory:${id}:${modelKey || "host-default"}`;
+}
+
+function createAppThreadAppServerTransport(codexPath: string): AppServerTransport {
+  return appThreadTransportMode() === "daemon"
+    ? createDefaultAppServerTransport()
+    : createStdioAppServerTransport(codexPath);
+}
+
+function appThreadTransportMode(): "stdio" | "daemon" {
+  const value = process.env.CWF_APP_THREAD_TRANSPORT?.trim().toLowerCase();
+  return value === "daemon" || value === "socket" || value === "control-socket" ? "daemon" : "stdio";
 }
 
 async function readAppThreadProbeRaw(
@@ -427,6 +463,8 @@ async function readAppThreadProbeRaw(
     return directRaw;
   }
   let lastError: string | undefined;
+  let lastDiagnostics: string | undefined;
+  const diagnosticsCache = new Map<string, string | undefined>();
   while (Date.now() <= deadline) {
     try {
       const read = await appServerRequestWithTimeout(
@@ -440,15 +478,18 @@ async function readAppThreadProbeRaw(
       if (readRaw) {
         return readRaw;
       }
+      lastDiagnostics = await extractAppThreadReadDiagnostics(read, turnId, diagnosticsCache) ?? lastDiagnostics;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = safeAppServerError(error);
     }
     const remaining = deadline - Date.now();
     if (remaining > 0) {
       await sleep(Math.min(250, remaining));
     }
   }
-  throw new Error(`model execution channel did not return a readable assistant response${lastError ? `; last thread/read error: ${lastError}` : ""}`);
+  throw new Error(
+    `model execution channel did not return a readable assistant response${lastError ? `; last thread/read error: ${lastError}` : ""}${lastDiagnostics ? `; diagnostics: ${lastDiagnostics}` : ""}`,
+  );
 }
 
 async function appServerRequestWithTimeout(
@@ -527,6 +568,17 @@ function assertAppThreadProbeResponse(raw: string, threadId: string | undefined,
   );
 }
 
+function appThreadProbeOutputSchema(): Record<string, unknown> {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["probe"],
+    properties: {
+      probe: { type: "string", const: "cwf-app-thread-ok" },
+    },
+  };
+}
+
 function buildInitializeParams(): Record<string, unknown> {
   return {
     clientInfo: { name: "codex-flow", title: "Codex Flow", version: "1.7.0" },
@@ -538,7 +590,43 @@ function buildInitializeParams(): Record<string, unknown> {
   };
 }
 
-function buildWorkerThreadStartParams(context: DiffContext): Record<string, unknown> {
+type AppThreadModelOverride = {
+  model?: string;
+  modelProvider?: string;
+  reasoningEffort?: string;
+};
+
+function appThreadModelOverride(): AppThreadModelOverride {
+  const model = cleanEnvString("CWF_APP_THREAD_MODEL");
+  const reasoningEffort = cleanEnvString("CWF_APP_THREAD_REASONING_EFFORT");
+  const useHostDefault = model === "host-default" || model === "default";
+  return {
+    model: useHostDefault ? undefined : model ?? defaultAppThreadModel,
+    modelProvider: cleanEnvString("CWF_APP_THREAD_MODEL_PROVIDER"),
+    reasoningEffort: useHostDefault && !reasoningEffort ? undefined : reasoningEffort ?? defaultAppThreadReasoningEffort,
+  };
+}
+
+function cleanEnvString(name: string): string | undefined {
+  const value = process.env[name]?.trim();
+  return value ? value : undefined;
+}
+
+function buildThreadModelParams(modelOverride: AppThreadModelOverride): Record<string, unknown> {
+  return {
+    ...(modelOverride.model ? { model: modelOverride.model } : {}),
+    ...(modelOverride.modelProvider ? { modelProvider: modelOverride.modelProvider } : {}),
+  };
+}
+
+function buildTurnModelParams(modelOverride: AppThreadModelOverride): Record<string, unknown> {
+  return {
+    ...(modelOverride.model ? { model: modelOverride.model } : {}),
+    ...(modelOverride.reasoningEffort ? { effort: modelOverride.reasoningEffort } : {}),
+  };
+}
+
+function buildWorkerThreadStartParams(context: DiffContext, modelOverride: AppThreadModelOverride): Record<string, unknown> {
   return {
     cwd: context.target,
     approvalPolicy: "never",
@@ -546,6 +634,7 @@ function buildWorkerThreadStartParams(context: DiffContext): Record<string, unkn
     ephemeral: false,
     threadSource: "user",
     baseInstructions: "You are a read-only Codex Flow worker thread. Return the requested worker JSON and do not modify files.",
+    ...buildThreadModelParams(modelOverride),
   };
 }
 
@@ -558,13 +647,14 @@ function buildWorkerThreadNameParams(threadId: string, worker: WorkflowWorker, o
   };
 }
 
-function buildWorkerTurnStartParams(threadId: string, prompt: string, context: DiffContext): Record<string, unknown> {
+function buildWorkerTurnStartParams(threadId: string, prompt: string, context: DiffContext, modelOverride: AppThreadModelOverride): Record<string, unknown> {
   return {
     threadId,
     input: [{ type: "text", text: prompt, text_elements: [] }],
     cwd: context.target,
     approvalPolicy: "never",
     sandboxPolicy: { type: "readOnly", networkAccess: false },
+    ...buildTurnModelParams(modelOverride),
   };
 }
 
@@ -580,6 +670,8 @@ async function readAppThreadWorkerRaw(
   }
   const deadline = Date.now() + Math.max(1, Math.min(timeoutMs, timeoutEnvMs("CWF_APP_THREAD_RESULT_TIMEOUT_MS", 120000)));
   let lastError: string | undefined;
+  let lastDiagnostics: string | undefined;
+  const diagnosticsCache = new Map<string, string | undefined>();
   while (Date.now() <= deadline) {
     try {
       const read = await appServerRequestWithTimeout(
@@ -593,8 +685,9 @@ async function readAppThreadWorkerRaw(
       if (readRaw) {
         return { raw: readRaw, transcriptRead: true };
       }
+      lastDiagnostics = await extractAppThreadReadDiagnostics(read, turnId, diagnosticsCache) ?? lastDiagnostics;
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error);
+      lastError = safeAppServerError(error);
     }
     const remaining = deadline - Date.now();
     if (remaining > 0) {
@@ -602,9 +695,168 @@ async function readAppThreadWorkerRaw(
     }
   }
   if (lastError) {
-    throw new Error(formatAppThreadExecutionUnavailable(`worker read failed; last thread/read error: ${lastError}`, threadId, turnId));
+    throw new Error(formatAppThreadExecutionUnavailable(`worker read failed; last thread/read error: ${lastError}${lastDiagnostics ? `; diagnostics: ${lastDiagnostics}` : ""}`, threadId, turnId));
   }
-  throw new Error(formatAppThreadExecutionUnavailable("worker did not return an assistant response", threadId, turnId));
+  throw new Error(formatAppThreadExecutionUnavailable(`worker did not return an assistant response${lastDiagnostics ? `; diagnostics: ${lastDiagnostics}` : ""}`, threadId, turnId));
+}
+
+async function extractAppThreadReadDiagnostics(value: unknown, turnId?: string, diagnosticsCache = new Map<string, string | undefined>()): Promise<string | undefined> {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const thread = record.thread && typeof record.thread === "object"
+    ? record.thread as Record<string, unknown>
+    : record;
+  const parts: string[] = [];
+  const status = thread.status;
+  if (status && typeof status === "object") {
+    const type = (status as { type?: unknown }).type;
+    if (typeof type === "string") {
+      parts.push(`thread_status=${type}`);
+    }
+  }
+  const turns = thread.turns;
+  if (Array.isArray(turns)) {
+    parts.push(`turns=${turns.length}`);
+  }
+  const path = typeof thread.path === "string" ? thread.path : undefined;
+  if (path) {
+    const cacheKey = `${path}:${turnId ?? ""}`;
+    let sessionDiagnostics: string | undefined;
+    if (diagnosticsCache.has(cacheKey)) {
+      sessionDiagnostics = diagnosticsCache.get(cacheKey);
+    } else {
+      sessionDiagnostics = await extractAppThreadSessionDiagnostics(path, turnId);
+      if (sessionDiagnostics && isTerminalSessionDiagnostics(sessionDiagnostics)) {
+        diagnosticsCache.set(cacheKey, sessionDiagnostics);
+      }
+    }
+    if (sessionDiagnostics) {
+      parts.push(sessionDiagnostics);
+    }
+  }
+  return parts.length > 0 ? parts.join("; ") : undefined;
+}
+
+function isTerminalSessionDiagnostics(diagnostics: string): boolean {
+  return diagnostics.includes("quota_unavailable=") || diagnostics.includes("last_agent_message=");
+}
+
+function safeAppServerError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/timed out after \d+ms/.test(message)) {
+    return message;
+  }
+  return "thread-read-failed";
+}
+
+async function extractAppThreadSessionDiagnostics(path: string, turnId?: string): Promise<string | undefined> {
+  const safePath = await safeCodexSessionLogPath(path);
+  if (!safePath) {
+    return path ? `session_log=${sessionLogName(path)}` : undefined;
+  }
+  try {
+    const text = await readSessionLogTail(safePath);
+    let model: string | undefined;
+    let effort: string | undefined;
+    let credits: string | undefined;
+    let lastAgentMessage: string | undefined;
+    for (const line of text.split("\n")) {
+      if (!line.trim()) {
+        continue;
+      }
+      let entry: unknown;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+      const event = entry as { type?: unknown; payload?: Record<string, unknown> };
+      const payload = event.payload;
+      if (!payload || typeof payload !== "object") {
+        continue;
+      }
+      if (turnId && payload.turn_id !== turnId) {
+        continue;
+      }
+      if (event.type === "turn_context") {
+        model = typeof payload.model === "string" ? payload.model : model;
+        effort = typeof payload.effort === "string" ? payload.effort : effort;
+      }
+      if (event.type === "event_msg" && payload.type === "token_count") {
+        const rateLimits = payload.rate_limits;
+        if (rateLimits && typeof rateLimits === "object") {
+          const rate = rateLimits as { credits?: { has_credits?: unknown } };
+          if (rate.credits?.has_credits === false) {
+            credits = "quota_unavailable=true";
+          }
+        }
+      }
+      if (event.type === "event_msg" && payload.type === "task_complete") {
+        lastAgentMessage = payload.last_agent_message === null
+          ? "null"
+          : typeof payload.last_agent_message === "string" ? "present" : lastAgentMessage;
+      }
+    }
+    const parts = [
+      model ? `model=${model}` : undefined,
+      effort ? `effort=${effort}` : undefined,
+      credits,
+      lastAgentMessage ? `last_agent_message=${lastAgentMessage}` : undefined,
+      `session_log=${sessionLogName(safePath)}`,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join("; ") : undefined;
+  } catch {
+    return safePath ? `session_log=${sessionLogName(safePath)}` : undefined;
+  }
+}
+
+async function safeCodexSessionLogPath(path: string): Promise<string | undefined> {
+  if (!path.endsWith(".jsonl")) {
+    return undefined;
+  }
+  try {
+    const root = await realpath(join(process.env.CODEX_HOME || join(homedir(), ".codex"), "sessions"));
+    const resolved = await realpath(path);
+    const info = await stat(resolved);
+    if (!info.isFile()) {
+      return undefined;
+    }
+    if (resolved === root || resolved.startsWith(`${root}${sep}`)) {
+      return resolved;
+    }
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function readSessionLogTail(path: string): Promise<string> {
+  const info = await stat(path);
+  const maxBytes = Math.min(timeoutEnvMs("CWF_APP_THREAD_DIAGNOSTICS_MAX_BYTES", appThreadDiagnosticsMaxBytes), appThreadDiagnosticsMaxBytes);
+  const length = Math.min(info.size, maxBytes);
+  const start = Math.max(0, info.size - length);
+  const buffer = Buffer.alloc(length);
+  const file = await open(path, "r");
+  try {
+    await file.read(buffer, 0, length, start);
+  } finally {
+    await file.close();
+  }
+  const text = buffer.toString("utf8");
+  if (start === 0) {
+    return text;
+  }
+  const firstNewline = text.indexOf("\n");
+  return firstNewline >= 0 ? text.slice(firstNewline + 1) : text;
+}
+
+function sessionLogName(path: string): string {
+  return basename(path) || path;
 }
 
 function timeoutEnvMs(name: string, fallbackMs: number): number {
