@@ -124,6 +124,8 @@ run state 和 run plan 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm
 
 当前 MVP 证据汇总在 [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md)，里面明确区分 real-smoke、fixture、dry-run、approval-gated 和 deferred。
 
+后续增强计划在 [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md)，每一阶段可直接开目标模式的提示词在 [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md)。
+
 ## Budget 和隔离
 
 每个可复用 workflow 都应该写清楚预算和停止规则。动态工作流很容易比普通单轮多消耗 5-10 倍 token，预算必须显式可见。
