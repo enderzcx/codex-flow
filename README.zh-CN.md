@@ -87,6 +87,20 @@ CWF 跑复杂任务前应该先展示 harness preview：会用什么模式、分
 
 取消时要停止继续派工，并汇总已知结果。恢复时从上次阶段和已有 worker 输出继续；如果状态不完整，必须说明并从最小安全 checkpoint 重启。
 
+生成本地 preview：
+
+```bash
+node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
+```
+
+记录 cancel / resume fixture 状态：
+
+```bash
+node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+```
+
+run state 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。
+
 ## Budget 和隔离
 
 每个可复用 workflow 都应该写清楚预算和停止规则。动态工作流很容易比普通单轮多消耗 5-10 倍 token，预算必须显式可见。

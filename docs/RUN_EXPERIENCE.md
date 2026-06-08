@@ -31,6 +31,21 @@ Before a non-trivial workflow runs, Codex should show a short preview:
 
 Preview is skipped only for small, obvious workflows where the user explicitly asked to run immediately.
 
+Small means all of these are true:
+
+- phase count is 3 or less;
+- planned worker count is 5 or less;
+- `budget.max_tokens` is 100000 or less;
+- no worker has a non-empty write scope;
+- no worker has `visibility: "desktop-thread"`;
+- no untrusted raw content is routed to privileged workers.
+
+Generate a mechanical preview with:
+
+```bash
+node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
+```
+
 ## Status
 
 Status should be compact and human-readable:
@@ -43,6 +58,15 @@ Status should be compact and human-readable:
 
 Inline workers should not flood the main conversation with raw logs. Desktop-thread workers are visible only when the workflow marks them as worth following separately.
 
+For `visibility: "auto"`, resolve to `desktop-thread` when any of these are true:
+
+- `budget.max_tokens` is greater than 50000;
+- any planned worker has a non-empty `write_scope`;
+- any phase id, phase label, worker id, or worker prompt mentions deploy, release, migrate, or publish;
+- the user explicitly asks to inspect, continue, or hand off that worker separately.
+
+Otherwise, resolve `auto` to `inline`.
+
 ## Cancel
 
 Cancel means stop spawning new workers, let already-completed results remain usable, and summarize what is known. Do not pretend a cancelled workflow completed.
@@ -50,6 +74,24 @@ Cancel means stop spawning new workers, let already-completed results remain usa
 ## Resume
 
 Resume means continue from the last known phase, worker outputs, and stop conditions. If exact state is unavailable, Codex must say so and restart from the smallest safe checkpoint.
+
+Local state is stored under `.cwf/runs/RUN_ID/`:
+
+```text
+.cwf/runs/RUN_ID/state.json
+.cwf/runs/RUN_ID/preview.md
+.cwf/runs/RUN_ID/final.md
+```
+
+The smallest safe resume checkpoint is the phase after the last fully completed phase boundary. If no phase completed cleanly, restart from Phase 1.
+
+Use the state helper for local fixture proof:
+
+```bash
+node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+node scripts/cwf-run-state.mjs phase --run-id demo --phase scope --status completed --evidence "scope complete"
+node scripts/cwf-run-state.mjs resume-plan --run-id demo
+```
 
 ## Output
 

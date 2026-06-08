@@ -80,6 +80,20 @@ CWF should preview the harness before non-trivial runs, keep compact status whil
 
 Inline workers stay quiet. Desktop-thread workers are only used when their process is worth inspecting or continuing separately.
 
+Generate a local preview:
+
+```bash
+node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
+```
+
+Record local run state for cancel/resume fixtures:
+
+```bash
+node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+```
+
+Run state lives under ignored `.cwf/runs/RUN_ID/` and is not part of the npm package.
+
 ## Budget And Quarantine
 
 Every saved workflow should name a budget and stop rule. Dynamic workflows can spend far more tokens than a normal turn, so templates should make the limit visible.

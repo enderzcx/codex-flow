@@ -104,6 +104,8 @@ Visibility controls whether a worker stays inside the main workflow or gets its 
 
 Do not create a Desktop sidebar thread for every worker. The main conversation remains the coordinator and the final result destination.
 
+Resolve `auto` to `desktop-thread` only when `budget.max_tokens > 50000`, any planned worker has a non-empty `write_scope`, deploy/release/migrate/publish appears in phase or worker text, or the user explicitly asks to inspect/continue a worker separately. Otherwise resolve `auto` to `inline`.
+
 ## Run Experience
 
 Before a non-trivial workflow runs, show a concise preview:
@@ -115,9 +117,19 @@ Before a non-trivial workflow runs, show a concise preview:
 - quarantine rules;
 - stop conditions.
 
+Preview may be skipped only when the user explicitly asked to run immediately and the workflow is small, read-only, inline-only, budgeted at 100000 tokens or less, and has no privileged raw-content path.
+
+Mechanical preview:
+
+```bash
+node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
+```
+
 During long workflows, report compact status: current phase, worker counts, elapsed time, budget pressure, and blockers. Do not dump raw worker logs.
 
 Cancel means stop spawning new workers and summarize partial evidence. Resume means continue from the last known phase and worker outputs; if exact state is unavailable, restart from the smallest safe checkpoint and say so.
+
+Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, and `.cwf/runs/RUN_ID/final.md`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
 
 ## Budget
 
