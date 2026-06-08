@@ -108,13 +108,21 @@ CWF 跑复杂任务前应该先展示 harness preview：会用什么模式、分
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 ```
 
+生成并保存有边界的 run plan：
+
+```bash
+node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+```
+
 记录 cancel / resume fixture 状态：
 
 ```bash
 node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
 ```
 
-run state 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。
+run state 和 run plan 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。
+
+当前 MVP 证据汇总在 [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md)，里面明确区分 real-smoke、fixture、dry-run、approval-gated 和 deferred。
 
 ## Budget 和隔离
 

@@ -99,13 +99,21 @@ Generate a local preview:
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 ```
 
+Generate and persist a bounded run plan:
+
+```bash
+node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+```
+
 Record local run state for cancel/resume fixtures:
 
 ```bash
 node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
 ```
 
-Run state lives under ignored `.cwf/runs/RUN_ID/` and is not part of the npm package.
+Run state and run plans live under ignored `.cwf/runs/RUN_ID/` and are not part of the npm package.
+
+Current MVP evidence is summarized in [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md), with labels for real-smoke, fixture, dry-run, approval-gated, and deferred proof.
 
 ## Budget And Quarantine
 

@@ -1,6 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { buildPreview, loadWorkflow, parseWorkflowSpec, resolveVisibility } from "./cwf-run-preview.mjs";
+import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
+import { deriveRunStatus } from "./cwf-run-state.mjs";
 
 const root = new URL("..", import.meta.url);
 
@@ -8,10 +10,12 @@ const requiredFiles = [
   "README.md",
   "README.zh-CN.md",
   "docs/CORE.md",
+  "docs/CWF_MVP_EVIDENCE.md",
   "docs/RUN_EXPERIENCE.md",
   "docs/WORKFLOW_JS.md",
   "skills/codex-workflows/SKILL.md",
   "scripts/cwf-run-preview.mjs",
+  "scripts/cwf-run-plan.mjs",
   "scripts/cwf-run-state.mjs",
   "workflows/classify-and-act.workflow.js",
   "workflows/adversarial-verify.workflow.js",
@@ -33,18 +37,21 @@ for (const file of requiredFiles) {
 const readme = await readText("README.md");
 const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
+const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
 mustContain(readme, "not a standalone agent platform");
 mustContain(readme, "bounded dynamic workflow");
 mustContain(readme, "run plan");
+mustContain(readme, "cwf-run-plan.mjs");
 mustContain(readme, "desktop-thread");
 mustContain(zh, "Codex 原生、有边界的动态工作流");
 mustContain(zh, "有边界的动态工作流");
 mustContain(zh, "左侧线程");
 mustContain(skill, "bounded dynamic workflow");
 mustContain(skill, "bounded run plan");
+mustContain(skill, "cwf-run-plan.mjs");
 mustContain(skill, "Do not execute these files with Node");
 mustContain(skill, "native Codex subagents");
 mustContain(skill, "Worker Visibility");
@@ -52,6 +59,11 @@ mustContain(skill, "Budget");
 mustContain(skill, "Quarantine");
 mustContain(skill, "Save As Skill");
 mustContain(skill, "Run Experience");
+mustContain(evidence, "real-smoke pass");
+mustContain(evidence, "fixture pass");
+mustContain(evidence, "dry-run pass");
+mustContain(evidence, "requires_approval");
+mustContain(evidence, "safe-fix-loop");
 mustContain(gitignore, ".cwf/");
 if (packageJson.bin) {
   throw new Error("package.json must not expose a standalone CLI bin");
@@ -62,8 +74,8 @@ if (!Array.isArray(packageJson.files) || packageJson.files.includes(".cwf/")) {
 
 const workflowDir = join(root.pathname, "workflows");
 const workflows = (await readdir(workflowDir)).filter((file) => file.endsWith(".workflow.js"));
-if (workflows.length < 6) {
-  throw new Error("Expected at least six workflow templates");
+if (workflows.length !== 7) {
+  throw new Error(`Expected exactly seven workflow templates, found ${workflows.length}`);
 }
 
 for (const file of workflows) {
@@ -98,6 +110,8 @@ for (const file of workflows) {
 }
 
 checkPreviewAndVisibilityRules();
+await checkRunPlanRules();
+checkRunStateRules();
 
 console.log(`core check passed: ${workflows.length} workflow templates`);
 
@@ -320,4 +334,71 @@ function assertRejectsExecutableWorkflow() {
     return;
   }
   throw new Error("workflow parser must reject executable tokens");
+}
+
+async function checkRunPlanRules() {
+  const plan = await buildRunPlanFromWorkflow("workflows/repo-audit.workflow.js", {
+    runId: "check",
+    objective: "audit this repo",
+  });
+  const markdown = renderRunPlanMarkdown(plan);
+  for (const needle of [
+    "## Scope",
+    "## Exclusions",
+    "## Workers",
+    "## Verifier",
+    "## Quarantine",
+    "## Budget",
+    "## Stop Rules",
+    "## Evidence",
+    "## Resume Checkpoint",
+    ".cwf/runs/check/",
+  ]) {
+    mustContain(markdown, needle);
+  }
+
+  const followUpPlan = await buildRunPlanFromWorkflow("workflows/pipeline.workflow.js", {
+    runId: "check-follow-up",
+    objective: "continue this worker separately",
+  });
+  if (!followUpPlan.preview.agents.some((agent) => agent.resolved_visibility === "desktop-thread")) {
+    throw new Error("run plan must preserve objective-driven auto visibility");
+  }
+
+  const adversarialPlan = renderRunPlanMarkdown(
+    await buildRunPlanFromWorkflow("workflows/adversarial-verify.workflow.js", {
+      runId: "check-adversarial",
+      objective: "verify roadmap",
+    }),
+  );
+  mustContain(adversarialPlan, "correctness-challenger");
+  mustContain(adversarialPlan, "safety-challenger");
+  mustContain(adversarialPlan, "evidence-checker");
+  mustContain(adversarialPlan, "Required verifier findings must be applied or explicitly waived with reason.");
+
+  const safeFixPlan = await buildRunPlanFromWorkflow("workflows/safe-fix-loop.workflow.js", {
+    runId: "check-safe-fix",
+    objective: "dry-run a bounded fix without writing real target files",
+  });
+  const safeFixMarkdown = renderRunPlanMarkdown(safeFixPlan);
+  if (!safeFixPlan.preview.agents.some((agent) => agent.write_scope)) {
+    throw new Error("safe-fix-loop must expose write scopes for dry-run proof");
+  }
+  if (!safeFixPlan.preview.agents.some((agent) => agent.resolved_visibility === "desktop-thread")) {
+    throw new Error("safe-fix-loop write worker must remain approval-gated through desktop-thread visibility");
+  }
+  mustContain(safeFixMarkdown, "write_scope=Only the files needed for the approved bounded fix.");
+  mustContain(safeFixMarkdown, "Preview required because");
+  mustContain(safeFixMarkdown, "worker write scope is present");
+}
+
+function checkRunStateRules() {
+  const status = deriveRunStatus({
+    status: "planned",
+    phases: [{ id: "verify", status: "blocked" }],
+    workers: [],
+  });
+  if (status !== "blocked") {
+    throw new Error(`phase blocker must make run status blocked, got ${status}`);
+  }
 }

@@ -79,7 +79,7 @@ Verification level:
 Review requirement:
 
 - Reasonix/v4Pro review required before treating this plan as final.
-- Current status: `reviewed_with_findings_applied`.
+- Current status: `approved`.
 
 Historical context:
 

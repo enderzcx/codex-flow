@@ -1,7 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { buildPreview, loadWorkflow, renderPreviewMarkdown } from "./cwf-run-preview.mjs";
+import { loadWorkflow, renderPreviewMarkdown } from "./cwf-run-preview.mjs";
+import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
 
 const DEFAULT_STATE_DIR = ".cwf/runs";
 const STATUSES = new Set(["planned", "running", "completed", "blocked", "cancelled"]);
@@ -14,7 +15,11 @@ async function initRun(args) {
   const stateDir = resolve(DEFAULT_STATE_DIR);
   const runDir = safeRunDir(stateDir, options["run-id"]);
   const loaded = await loadWorkflow(options.workflow);
-  const preview = buildPreview(loaded.workflow, { runImmediately: false });
+  const runPlan = await buildRunPlanFromWorkflow(options.workflow, {
+    runId: options["run-id"],
+    objective: options.objective ?? "",
+  });
+  const preview = runPlan.preview;
   const now = new Date().toISOString();
   const state = {
     run_id: options["run-id"],
@@ -55,6 +60,7 @@ async function initRun(args) {
   await mkdir(runDir, { recursive: true });
   await writeJson(join(runDir, "state.json"), state);
   await writeFile(join(runDir, "preview.md"), renderPreviewMarkdown(preview, options.workflow), "utf8");
+  await writeFile(join(runDir, "run-plan.md"), renderRunPlanMarkdown(runPlan), "utf8");
   await writeFile(join(runDir, "final.md"), "", "utf8");
   console.log(JSON.stringify({ run_id: state.run_id, state: join(runDir, "state.json") }, null, 2));
 }
@@ -195,9 +201,10 @@ function refreshResume(state) {
   };
 }
 
-function deriveRunStatus(state) {
+export function deriveRunStatus(state) {
   if (state.status === "cancelled") return "cancelled";
   if (state.workers.some((worker) => worker.status === "blocked")) return "blocked";
+  if (state.phases.some((phase) => phase.status === "blocked")) return "blocked";
   if (
     state.phases.every((phase) => phase.status === "completed") &&
     state.workers.every((worker) => worker.status === "completed")
@@ -214,7 +221,11 @@ function deriveRunStatus(state) {
 }
 
 function currentPhase(state) {
-  return state.phases.find((phase) => phase.status === "running") ?? state.phases.find((phase) => phase.status !== "completed");
+  return (
+    state.phases.find((phase) => phase.status === "running") ??
+    state.phases.find((phase) => phase.status === "blocked") ??
+    state.phases.find((phase) => phase.status !== "completed")
+  );
 }
 
 function elapsedMs(state) {

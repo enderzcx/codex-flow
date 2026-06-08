@@ -132,11 +132,17 @@ Mechanical preview:
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 ```
 
+Persist a bounded run plan:
+
+```bash
+node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+```
+
 During long workflows, report compact status: current phase, worker counts, elapsed time, budget pressure, and blockers. Do not dump raw worker logs.
 
 Cancel means stop spawning new workers and summarize partial evidence. Resume means continue from the last known phase and worker outputs; if exact state is unavailable, restart from the smallest safe checkpoint and say so.
 
-Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, and `.cwf/runs/RUN_ID/final.md`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
+Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, `.cwf/runs/RUN_ID/run-plan.md`, and `.cwf/runs/RUN_ID/final.md`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
 
 ## Budget
 
