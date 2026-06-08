@@ -1,328 +1,118 @@
-# Codex Flow
+# Codex Workflows
 
-A lightweight, Codex-native workflow layer for multi-agent engineering review.
+> 中文优先: [README.zh-CN.md](README.zh-CN.md)
 
-中文文档: [README.zh-CN.md](README.zh-CN.md)
+Codex Workflows is a native dynamic workflow skill for Codex.
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC. v1.12 adds a host-facing result return contract through `cwf result <run-id> --json` and keeps Desktop-visible write proposals on the same isolated patch path; `codex-app-thread` remains read-only and cannot be configured as the direct writer for original-target mutations.
-
-The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
-
-It is designed for engineers who already use Codex and want repeatable, inspectable review runs. A workflow writes state, events, gate decisions, worker outputs, logs, and final results to disk, so a run can be polled, audited, cancelled, approved, rejected, resumed, and revisited later.
-
-This is the v1.0 public CLI release. It is intentionally narrow: CLI-first, filesystem-backed state, readable status, local workflow discovery, and read-only review by default.
-
-## What It Does
-
-The default catalog includes:
-
-- `diff-review`: correctness, tests, and safety review for a tracked git diff
-- `repo-audit`: maintainability, project hygiene, and release-risk audit
-- `implementation-plan`: scope, sequencing, and verification review for plan or implementation diffs
-- `research-crosscheck`: source fidelity and unsupported-claim review for research or documentation diffs
-- `release-review`: ship readiness, rollout, rollback, and regression review
-- `doc-refresh`: gated documentation-only write workflow with dry-run preview, approval, diff summary, rollback, and verification artifacts
-- `dynamic-js`: preview-first JavaScript harness execution through `cwf.git`, `cwf.agent.run`, `cwf.safePatch`, `cwf.map`, `cwf.artifacts`, and `cwf.report`
-
-The reducer merges duplicate findings, drops weak unsupported claims, ranks severity, preserves worker provenance, and writes a final report. If a worker fails or falls back from malformed structured output, the final verdict can be `DEGRADED` and the report says which evidence is partial.
-
-## Install
-
-```bash
-npm install
-npm run build
-npm link
-```
-
-The linked CLI is:
-
-```bash
-cwf --help
-```
-
-## Usage
-
-Validate the workflow before starting workers:
-
-```bash
-cwf validate workflows/diff-review.yaml
-cwf workflows validate
-```
-
-Discover and inspect workflows:
-
-```bash
-cwf workflows list
-cwf workflows show diff-review
-cwf workflows show repo-audit
-```
-
-Run by workflow id or path:
-
-```bash
-cwf run diff-review --target <repo>
-cwf run repo-audit --target <repo>
-cwf run implementation-plan --target <repo>
-cwf run research-crosscheck --target <repo>
-cwf run release-review --target <repo>
-cwf run doc-refresh --target <repo>
-cwf run workflows/diff-review.yaml --target <repo>
-```
-
-Preview a local dynamic JavaScript workflow:
-
-```bash
-cwf dynamic list
-cwf dynamic show change-summary
-cwf dynamic generate --goal "Summarize this repo diff" --target <repo>
-cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
-cwf dynamic run change-summary --target <repo>
-cwf dynamic save ./workflow.js --id local-review
-cwf approve <run-id> approve-dynamic
-cwf resume <run-id>
-```
-
-Run in the background:
-
-```bash
-cwf run workflows/diff-review.yaml --target <repo> --background
-cwf status <run-id>
-cwf watch <run-id>
-cwf latest --target <repo>
-cwf list --target <repo>
-cwf show <run-id>
-cwf approve <run-id> <gate-id>
-cwf reject <run-id> <gate-id> --reason <text>
-cwf resume <run-id>
-cwf result <run-id>
-cwf result <run-id> --json
-cwf cancel <run-id>
-```
-
-Return a completed run to Codex:
-
-```bash
-cwf desktop check
-cwf desktop result <run-id> --print
-cwf desktop result <run-id>
-cwf desktop result <run-id> --new-thread
-cwf desktop result <run-id> --thread <thread-id>
-cwf github-pr <run-id> --format comment
-cwf github-pr <run-id> --format review
-cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>
-cwf suggest-workflow --goal "Review docs changes" --target <repo>
-cwf suggest-workflow --from-run <run-id>
-```
-
-Workflow discovery searches these local paths in order:
+It is not a standalone agent platform and not a Node CLI runner. The core loop is:
 
 ```text
-./.codex-flow/workflows/
-./workflows/
-~/.codex-flow/workflows/
+User goal
+  -> Codex main session writes or selects a workflow.js harness
+  -> Codex main session interprets that harness
+  -> Codex spawns native subagents
+  -> subagents inherit the current Codex sandbox and approval policy
+  -> important workers may be promoted to visible Desktop threads
+  -> Codex waits, adapts, verifies, and summarizes back in the same conversation
 ```
 
-Duplicate workflow ids fail clearly instead of picking one silently.
+## What Stays
 
-`cwf status` is meant to be readable during a real run. It tells you what is happening now, how many workers completed, whether raw fallback happened, and where to find the state, events, worker JSON, reduced JSON, manifest, result, and log files.
+- A Codex skill: `skills/codex-workflows/SKILL.md`
+- JavaScript workflow harness templates under `workflows/`
+- Native Codex subagents as the execution surface
+- Same-conversation result synthesis
+- Optional Desktop-thread visibility for long, writable, or follow-up-worthy workers
+- Human-readable stop conditions, gates, and verification rules
 
-`cwf watch <run-id>` refreshes the same status view until the run reaches `completed`, `failed`, or `cancelled`. Use `--interval <ms>` to tune the refresh rate, or `--once` for one non-clearing snapshot.
+## What Was Removed
 
-`cwf list`, `cwf latest`, and `cwf show` help you find and inspect older runs without remembering run ids. Discovery uses `~/.codex-workflows/index.json`, but run folders remain the source of truth. If the index is missing, stale, or corrupt, Codex Flow rebuilds it from `~/.codex-workflows/runs/*/state.json`.
+The old external runtime has been removed from the product core:
 
-Gated workflows can pause before a risky or write-capable phase. `cwf status` and `cwf show` explain the waiting gate and print the exact approve/reject commands. `cwf approve <run-id> <gate-id>` records the approval, and `cwf resume <run-id>` continues only pending phases. `cwf reject <run-id> <gate-id> --reason <text>` stops the run cleanly. Write workflows write `artifacts/write-plan.md`, `artifacts/dry-run-preview.md`, `artifacts/verification-plan.md`, and `artifacts/rollback.md` before approval. After approval the writer runs in an isolated target, CWF stores `artifacts/proposed.patch`, checks `write_policy` paths and `git apply --check --3way`, applies the patch, and records diff, verification, and rollback artifacts. The bundled `doc-refresh` workflow uses `direct-docs` only as a docs/readme/release-note policy preset; it still goes through the same isolated patch apply path.
+- no TypeScript CLI runner
+- no YAML workflow registry
+- no app-server thread simulation as the main path
+- no safePatch engine as the default experience
+- no CI-shaped smoke matrix as the primary product surface
 
-Dynamic JavaScript workflows are also gated. `cwf dynamic run <workflow.js-or-id> --target <repo>` writes `artifacts/workflow.js`, `workflow.sha256`, `dynamic-preview.md`, `dynamic-capabilities.json`, and `dynamic-budget.json`, then pauses at `approve-dynamic`. The script must export one async default function. The AST gate rejects imports, dynamic import, `require`, `eval`, `Function`, `globalThis`, `process`, `fetch`, constructor/prototype escape paths, direct shell strings, and call expressions outside `cwf` or approved builtins. Execution fails closed unless the child process can run with Node Permission Model active and without target repo filesystem, network, child-process, worker, native-addon, WASI, FFI, or inspector permissions. `cwf.agent.run` defaults to `read-only`; read-only agents fail the run if the target diff changes. `cwf.safePatch.apply` is the only dynamic write path that applies patches directly: the script must declare `metadata.safe_patch_policy` so the policy is visible in preview, and the runtime `write_policy` must exactly match that metadata. CWF stores `dynamic-proposed.patch`, checks policy and `git apply --check --3way`, applies through the parent process, runs verification, records rollback evidence, and reverse-applies the patch if verification fails. `inherit-session` is allowed only for `generated-current-session` scripts with matching SHA-256 and a known write-capable parent permission cap; copied, remote, unknown, and hash-mismatched workflows fail closed. Remote dynamic workflow URLs cannot run directly; inspect and save a local trusted copy first.
+Those ideas may return only as optional adapters after the native workflow skill is solid.
 
-Dynamic template discovery is local-only:
+## Workflow Templates
 
-```text
-./workflows/dynamic/
-./.codex-flow/dynamic-workflows/
-~/.codex-workflows/dynamic/
-```
+Current templates:
 
-`cwf dynamic save <workflow.js> --id <trusted-id>` copies a validated script into `~/.codex-workflows/dynamic/` and writes a `.trust.json` sidecar bound to the source SHA-256. If the saved script changes without a matching trust record, discovery fails instead of running the tampered copy.
+- `workflows/classify-and-act.workflow.js`
+- `workflows/pipeline.workflow.js`
+- `workflows/repo-audit.workflow.js`
+- `workflows/safe-fix-loop.workflow.js`
+- `workflows/tournament.workflow.js`
+- `workflows/ui-copy-review.workflow.js`
 
-`cwf desktop result` bridges completed filesystem runs back into Codex. When CWF is launched by a Codex skill from an active conversation, the primary UX is for the skill to read the completed run and answer in that same conversation. `--print` prints a concise handoff prompt for that path. Without app-server, the command still writes `artifacts/handoff-prompt.md`. `--new-thread` and `--thread <thread-id>` require a Codex CLI with app-server support, a running app-server daemon, and remote control enabled:
+These files are not executed by Node. They are readable harness specs for Codex to interpret with the native subagent tools available in the current session.
 
-```bash
-codex app-server daemon start
-codex app-server daemon enable-remote-control
-```
+## Worker Visibility
 
-If multiple Codex CLIs are installed, set `CWF_CODEX_PATH=/path/to/codex` for the app-server-capable CLI. With app-server available, `--new-thread` explicitly creates a separate coordinator/result thread and `--thread <thread-id>` posts to a known thread. Codex Flow confirms new threads with `thread/read`, falls back to `thread/list`, and never guesses the current thread from `thread/list`.
+Most workers should stay `inline`: their result returns to the main conversation without creating sidebar noise.
 
-`cwf github-pr <run-id>` turns a completed local run into PR-ready artifacts. Without `--post`, it only writes `artifacts/github-pr-comment.md` and `artifacts/github-pr-review.json`. Posting to GitHub requires explicit `--post --repo <owner/repo> --pr <number>` and uses the local `gh` CLI.
+Use `desktop-thread` only when the worker is worth opening later:
 
-`cwf suggest-workflow` drafts a constrained YAML workflow spec and validates it immediately. Suggestions are saved under `~/.codex-workflows/suggestions/` by default, are not installed in the workflow registry, and are never run automatically. `--output` will not overwrite an existing file. To use a suggestion, run it by explicit path or move it manually into a workflow search path.
+- long-running research or review;
+- implementation / write workers;
+- work that the user may want to inspect, steer, or continue separately.
 
-Run artifacts are stored under:
+Use `auto` when the workflow wants Codex to decide from task length, risk, write scope, and whether the worker needs follow-up.
 
-```text
-~/.codex-workflows/index.json
-~/.codex-workflows/runs/<run-id>/
-  workflow.json
-  state.json
-  events.jsonl
-  context.json
-  run.log
-  workers/
-    correctness.json
-    tests.json
-    safety.json
-  artifacts/
-    workflow.js
-    workflow.sha256
-    dynamic-preview.md
-    dynamic-capabilities.json
-    dynamic-budget.json
-    dynamic-events.jsonl
-    dynamic-final.json
-    dynamic-proposed.patch
-    dynamic-safe-patch.json
-    write-plan.md
-    dry-run-preview.md
-    verification-plan.md
-    proposed.patch
-    proposed-patch.md
-    diff-summary.md
-    rollback.md
-    verification.md
-    github-pr-comment.md
-    github-pr-review.json
-    reduced-result.json
-    manifest.json
-  result.md
-```
+The invariant: final synthesis always returns to the conversation that launched the workflow.
 
-Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
+## Failure Modes
 
-Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. `codex-app-thread` uses Codex app-server thread lifecycle methods to create one Desktop-visible read-only thread per worker when available; write-capable workflows cannot set `codex-app-thread` as the preferred direct runtime. Reducers keep the same worker envelope and preserve runtime metadata in worker provenance. The final result still returns to the initiating conversation when launched from Codex; worker threads are inspection/evidence surfaces.
+Use a workflow when a single long Codex context is likely to fail structurally:
 
-## Examples
+- `agentic laziness`: a long task stops after partial progress and calls itself done;
+- `self-preferential bias`: the same agent produces and judges its own answer;
+- `goal drift`: the task loses original constraints after many turns or compactions.
 
-```bash
-cwf run workflows/diff-review.yaml --target fixtures/diff-review --background
-cwf watch run_...
-cwf result run_...
-cwf result run_... --json
-```
+CWF solves these with isolated worker contexts, separate verifiers, explicit stop conditions, and a final synthesis step in the originating conversation.
 
-See [Workflow catalog](docs/workflow-catalog.md) for when to use and when not to use each bundled workflow.
+## Run Experience
 
-Example status:
+CWF should preview the harness before non-trivial runs, keep compact status while workers run, support cancel/resume semantics, and return the final synthesis to the originating conversation.
 
-```text
-Run ID: run_...
-Workflow: diff-review
-Status: completed
-Now: done; open the result report
-Target: /path/to/repo
-Failure policy: worker failures are tolerated when at least one Codex worker succeeds; all-worker failure, target diff changes, and unhandled errors fail the run.
-Workers: 3/3 completed, 0 fallback
-Phases:
-- collect: completed (1s)
-- review: completed (14s)
-- reduce: completed (0s)
-Workers:
-- correctness: completed (12s), findings=1, artifacts=0
-- tests: completed (14s), findings=0, artifacts=0
-- safety: completed (11s), findings=0, artifacts=0
-Artifacts:
-- State: ~/.codex-workflows/runs/run_.../state.json
-- Events: ~/.codex-workflows/runs/run_.../events.jsonl
-- Workers: ~/.codex-workflows/runs/run_.../workers/*.json
-- Result: ~/.codex-workflows/runs/run_.../result.md
-- Manifest: ~/.codex-workflows/runs/run_.../artifacts/manifest.json
-```
+Inline workers stay quiet. Desktop-thread workers are only used when their process is worth inspecting or continuing separately.
 
-Example discovery:
+## Budget And Quarantine
 
-```bash
-cwf list --limit 5
-cwf list --status failed
-cwf latest --target fixtures/diff-review
-cwf show run_...
-```
+Every saved workflow should name a budget and stop rule. Dynamic workflows can spend far more tokens than a normal turn, so templates should make the limit visible.
 
-Failed runs include a readable failure summary in `status` and `show`, including the failed phase, failed workers when known, and the next artifact or connectivity check to inspect.
+Any workflow that reads untrusted public or user-submitted content should quarantine it:
 
-## How It Differs From Claude Dynamic Workflows
+- raw readers stay read-only;
+- privileged workers receive sanitized summaries;
+- write/deploy/payment/database actions require explicit approval.
 
-Codex Flow borrows the useful operating principle: move orchestration out of a single chat context and into a small runner that owns phases, worker fan-out, state, and reduction.
+## Save As Skill
 
-It does not attempt exact product parity with Claude Code Dynamic Workflows:
+When a workflow proves useful, save it as a template and ship it inside a Codex skill. Treat saved workflows as adaptable harness specs, not scripts to execute verbatim.
 
-- no native `/workflows` UI
-- no automatic `workflow` keyword trigger
-- no unrestricted `node workflow.js`; JavaScript dynamic workflows must pass preview, AST policy, approval, and permissioned child-process execution
-- no non-Codex model routing
-- no web UI
+## When To Use
 
-See [docs/claude-vs-codex-workflows.md](docs/claude-vs-codex-workflows.md).
+Use Codex Workflows when the task benefits from separate clean contexts:
 
-## Current Limitations
+- repo audit or release review
+- root-cause investigation
+- adversarial verification
+- safe fix loops
+- UI/copy/design review
+- migration or refactor planning
+- claim checking
+- sorting or tournament-style evaluation
 
-- Bundled review workflows are read-only examples; they review tracked git diffs and do not crawl the entire repo.
-- `doc-refresh` remains the only bundled user-facing write workflow. It is documentation-only, gated, reversible, and applies through the isolated patch path after explicit approval.
-- General non-doc write-capable workflows must declare `write_policy` and use patch mode. CWF refuses paths outside `allowed_paths`, forbidden paths, target drift after preview, `git apply --check --3way` conflicts, and failed workflow verification commands. If patch-mode verification fails after apply, CWF attempts to reverse-apply the same proposed patch before returning a failed run.
-- `direct-docs` is a compatibility policy for `doc-refresh`; source/config write workflows must use explicit patch-mode policy with their own allowed paths and verification commands.
-- Dynamic JavaScript workflows do not receive `fs`, `process`, network, shell, or target repo access. All git, agent, artifact, and report actions go through parent CWF APIs.
-- GitHub PR output is local by default. Nothing is posted unless `cwf github-pr` is run with explicit `--post --repo <owner/repo> --pr <number>`.
-- Workflow suggestions are YAML specs only. They are validated after generation, but they are not installed or run automatically.
-- Reviews tracked git diffs; untracked file contents are not included.
-- Background mode is process-based, not a daemon or queue.
-- Cancellation sends `SIGTERM` to the background process, then marks pending work cancelled.
-- Successful runs usually have an empty `run.log`; progress lives in `events.jsonl`.
-- Run discovery is local and rebuildable.
-- Workflow registry is local filesystem discovery only; there is no remote marketplace.
-- Gates are safety primitives for specs, fixtures, and the narrow `doc-refresh` workflow.
-- Codex App result handoff is explicit and fallback-safe; app-thread workers depend on host app-server availability and fall back only when the workflow config says so.
+Do not use it for trivial edits, one-off commands, or normal coding tasks that one Codex turn can finish cleanly.
 
-## Verification
+## Check
 
 ```bash
 npm run check
-npm pack --dry-run
-bash scripts/smoke-cli.sh
 ```
 
-Release CI runs the same non-live command smoke on push to `main` and on pull requests. The smoke validates the local workflow registry, validates `diff-review` plus gated write fixtures, and confirms write-capable specs still require a prior gate without starting live Codex workers.
-
-The v1.0 release has been smoke-tested on:
-
-- a fixture diff
-- a real larger repo diff
-- foreground and background runs
-- cancellation
-- mocked Codex SDK worker failure
-- partial worker failure with degraded reducer output
-- malformed worker output fallback visibility
-- artifact manifest and reduced-result envelope generation
-- run discovery, latest lookup, index rebuild, and show formatting
-- gate pause, approve/resume, reject, and write-without-gate validation
-- workflow registry list/show/validate, duplicate-id detection, and id-or-path runs
-- workflow validation and human-readable status formatting
-- bundled workflow catalog and example workflow registry validation
-- gated doc-refresh preview, approve/resume, reject, rollback, and verification artifact coverage
-- patch-mode safe write fixture preview, approve/resume, proposed patch, policy rejection, apply, rollback, and verification failure coverage
-- GitHub PR comment/review artifact generation and mocked `gh` post success/failure
-- workflow suggestion generation, invalid diagnostics, registry non-installation, and explicit-path run with mocked worker
-- documented command surface and install/build/link flow
-
-For release preparation, use [Release checklist](docs/RELEASE_CHECKLIST.md).
-
-## Docs
-
-- [Release notes](RELEASE_NOTES.md)
-- [Release checklist](docs/RELEASE_CHECKLIST.md)
-- [PRD](docs/PRD.md)
-- [Spec](docs/SPEC.md)
-- [Full plan](docs/FULL_PLAN.md)
-- [Phase contracts](docs/PHASE_CONTRACTS.md)
-- [Post-v1 plan](docs/POST_V1_PLAN.md)
-- [Codex native capability audit](docs/CODEX_NATIVE_CAPABILITY_AUDIT.md)
-- [Skill plan](docs/SKILL_PLAN.md)
-- [Workflow catalog](docs/workflow-catalog.md)
-- [Claude comparison](docs/claude-vs-codex-workflows.md)
+This validates the native skill and workflow templates. It intentionally does not build an external runtime.

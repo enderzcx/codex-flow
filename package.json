@@ -1,40 +1,18 @@
 {
-  "name": "codex-flow",
-  "version": "1.0.0",
-  "description": "Codex-native workflow runner for inspectable multi-worker review.",
+  "name": "codex-workflows",
+  "version": "0.1.0",
+  "description": "Native dynamic workflow skill and workflow.js harness templates for Codex.",
   "type": "module",
   "files": [
-    "dist/",
-    "workflows/",
-    "fixtures/",
-    "skills/",
-    "scripts/",
-    "docs/",
     "README.md",
     "README.zh-CN.md",
-    "RELEASE_NOTES.md",
-    "CONTRIBUTING.md",
-    "ACCEPTANCE.md"
+    "docs/",
+    "skills/",
+    "workflows/",
+    "scripts/"
   ],
-  "bin": {
-    "cwf": "./dist/cli.js"
-  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run tests",
-    "check": "npm run build && npm test",
-    "dev": "tsx src/cli.ts"
-  },
-  "dependencies": {
-    "@openai/codex-sdk": "^0.136.0",
-    "acorn": "^8.16.0",
-    "yaml": "^2.8.1"
-  },
-  "devDependencies": {
-    "@types/node": "^24.10.1",
-    "tsx": "^4.20.6",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.15"
+    "check": "node scripts/check-core.mjs"
   },
   "engines": {
     "node": ">=18"

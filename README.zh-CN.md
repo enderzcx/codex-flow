@@ -1,325 +1,130 @@
-# Codex Flow
+# Codex Workflows
 
-一个轻量的 Codex 原生工作流层，用来把一次工程审查拆成多个 Codex worker（工作者）并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
+Codex Workflows 是一个 **Codex 原生动态工作流 skill**。
 
-它只依赖 Codex 原生能力：不接第三方模型路由，不接私有 adapter，不再造一个单独的 agent 平台。公开版默认还是只读 workflow；v1.4 额外带一个很窄的 `doc-refresh`，只允许文档写入，并且必须先生成 preview、过 gate、显式 approve 后才进入写入阶段。v1.10 增加了更安全的通用写 worker 路径：writer 先在 isolated target 里产出 `artifacts/proposed.patch`，CWF 检查 allowed/forbidden path，跑 `git apply --check --3way`，再 apply 到真实 target；非文档写必须声明显式 `write_policy`。v1.11 增加第一版 JavaScript dynamic workflow runtime：本地 `workflow.js` 先过 AST policy、复制到 run artifacts、生成 preview、显式 approve，再放进 Node Permission Model child process 执行；child 只能通过 JSON-RPC 调 parent CWF API。v1.12 增加 host-facing 的结果返回契约：Codex skill wrapper 可以读 `cwf result <run-id> --json` 并回到发起会话；Desktop-visible write proposal 仍然只走 isolated patch 路径，`codex-app-thread` 保持 read-only，不能作为直接改真实 target 的 writer runtime。
+它的核心不是 CLI、不是外部 Node runtime、也不是自己再造一个 agent 平台。
 
-Codex 负责线程、子 agent、权限和写文件边界；Codex Flow 负责 workflow spec、run store、events、gate、reducer 和 artifact manifest。
-
-## 它解决什么
-
-平时让 Codex 看大 diff，常见问题是：
-
-- 提示词每次手写，审查标准不稳定。
-- 中间结果留在聊天里，过几天找不到。
-- 跑很久时不知道它卡在哪一步。
-- worker 失败后不好复盘。
-
-Codex Flow 把这些东西落到磁盘：状态、事件、每个 worker 的标准 envelope、reduced-result JSON、artifact manifest、日志和最终 Markdown 报告都能查。
-
-## 安装
-
-```bash
-npm install
-npm run build
-npm link
-```
-
-确认 CLI 可用：
-
-```bash
-cwf --help
-```
-
-查看可用 workflow：
-
-```bash
-cwf workflows list
-cwf workflows show diff-review
-cwf workflows show repo-audit
-cwf workflows validate
-```
-
-## 推荐用法
-
-先检查 workflow 文件有没有问题，不启动 Codex worker：
-
-```bash
-cwf validate workflows/diff-review.yaml
-```
-
-小 diff 可以前台跑：
-
-```bash
-cwf run diff-review --target <repo>
-cwf run repo-audit --target <repo>
-cwf run implementation-plan --target <repo>
-cwf run research-crosscheck --target <repo>
-cwf run release-review --target <repo>
-cwf run doc-refresh --target <repo>
-cwf run workflows/diff-review.yaml --target <repo>
-```
-
-本地 dynamic JavaScript workflow 先 preview，不会直接启动 worker：
-
-```bash
-cwf dynamic list
-cwf dynamic show change-summary
-cwf dynamic generate --goal "Summarize this repo diff" --target <repo>
-cwf dynamic run fixtures/dynamic/read-only.workflow.js --target <repo>
-cwf dynamic run change-summary --target <repo>
-cwf dynamic save ./workflow.js --id local-review
-cwf approve <run-id> approve-dynamic
-cwf resume <run-id>
-```
-
-大 diff 推荐后台跑：
-
-```bash
-cwf run workflows/diff-review.yaml --target <repo> --background
-cwf status <run-id>
-cwf watch <run-id>
-cwf latest --target <repo>
-cwf list --target <repo>
-cwf show <run-id>
-cwf approve <run-id> <gate-id>
-cwf reject <run-id> <gate-id> --reason <text>
-cwf resume <run-id>
-cwf result <run-id>
-cwf result <run-id> --json
-```
-
-workflow 可以用 id 或 path。Registry 只扫本地文件：
+核心只有一句话：
 
 ```text
-./.codex-flow/workflows/
-./workflows/
-~/.codex-flow/workflows/
+Codex 主会话动态生成/读取 workflow.js harness，
+然后用 Codex 原生 subagents 执行，
+最后在当前会话中收口。
 ```
 
-如果多个文件声明同一个 workflow id，CLI 会报 duplicate id，不会静默挑一个。
-
-需要停掉时：
-
-```bash
-cwf cancel <run-id>
-```
-
-把已完成 run 带回 Codex：
-
-```bash
-cwf desktop check
-cwf desktop result <run-id> --print
-cwf desktop result <run-id>
-cwf desktop result <run-id> --new-thread
-cwf desktop result <run-id> --thread <thread-id>
-cwf github-pr <run-id> --format comment
-cwf github-pr <run-id> --format review
-cwf github-pr <run-id> --post --repo <owner/repo> --pr <number>
-cwf suggest-workflow --goal "Review docs changes" --target <repo>
-cwf suggest-workflow --from-run <run-id>
-```
-
-## 跑起来后怎么看
-
-`cwf status <run-id>` 会尽量用人话告诉你：
-
-- 现在在做什么
-- 哪些 phase 完成了
-- 几个 worker 完成了
-- 有没有 raw fallback
-- 最终报告、reduced JSON、manifest、日志、事件、worker JSON 放在哪里
-
-想实时看进度，用：
-
-```bash
-cwf watch <run-id>
-```
-
-它会自动刷新同一份状态视图，直到 run 变成 `completed`、`failed` 或 `cancelled` 后退出。可以用 `--interval <ms>` 调整刷新间隔，或者用 `--once` 输出一次不清屏的快照。
-
-忘了 run id 时，用 discovery 命令找：
-
-```bash
-cwf list --limit 5
-cwf list --status failed
-cwf latest --target <repo>
-cwf show <run-id>
-```
-
-`cwf list` / `latest` / `show` 背后会用 `~/.codex-workflows/index.json`。这个 index 只是可重建缓存；如果缺失、过期或损坏，CLI 会从 `~/.codex-workflows/runs/*/state.json` 自动重建。
-
-worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex-sdk-headless`。workflow 可以用 `runtime.preferred_worker_adapter` 指定 `codex-app-thread`、`codex-subagent` 或 `codex-review-detached`，并用 `runtime.fallback_worker_adapter: codex-sdk-headless` 声明 fallback。`codex-app-thread` 会在 app-server 可用时为每个 read-only worker 创建一个 Desktop 左侧可见线程；只有配置了 fallback 才会退回 SDK。write-capable workflow 不能把 `codex-app-thread` 配成直接 writer runtime。reducer 不关心 adapter，worker provenance 会保留 runtime metadata。如果 workflow 是从当前 Codex 会话发起，最终总结仍然应该回到这个发起会话，worker thread 只是执行和证据面。
-
-带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。写 workflow 在 approval 前只写 run artifact（`write-plan.md`、`dry-run-preview.md`、`verification-plan.md`、`rollback.md`）。approval 后 writer 只在 isolated target 里写，CWF 保存 `proposed.patch`，检查 `write_policy` 路径和 `git apply --check --3way` 后才 apply 到真实 target，并记录 diff、verification 和 rollback artifact。如果 verification 在 apply 后失败，CWF 会尝试用同一个 patch 做 reverse apply，然后返回 failed run。内置 `doc-refresh` 的 `direct-docs` 只是 docs/readme/release-note policy preset，也走同一条 isolated patch apply 路径；源码/配置写入要用显式 patch policy。
-
-Dynamic JavaScript workflow 也是 gated。`cwf dynamic run <workflow.js-or-id> --target <repo>` 会写 `artifacts/workflow.js`、`workflow.sha256`、`dynamic-preview.md`、`dynamic-capabilities.json`、`dynamic-budget.json`，然后停在 `approve-dynamic`。脚本只能导出一个 async default function。AST gate 会拒绝 import、dynamic import、`require`、`eval`、`Function`、`globalThis`、`process`、`fetch`、constructor/prototype escape、直接 shell 字符串，以及不从 `cwf` 或允许 builtin 发起的 call expression。执行时 child process 必须启用 Node Permission Model，且不给 target repo filesystem、network、child-process、worker、native-addon、WASI、FFI、inspector 权限。`cwf.agent.run` 默认 `read-only`；read-only worker 如果改动 target diff，会让 run failed。`cwf.safePatch.apply` 是 dynamic runtime 里唯一会直接 apply patch 的写路径：脚本必须先声明 `metadata.safe_patch_policy`，让 policy 出现在 preview 里；runtime 传入的 `write_policy` 必须和 metadata 完全一致。CWF 会保存 `dynamic-proposed.patch`，检查 policy 和 `git apply --check --3way`，由 parent process apply，跑 verification，记录 rollback evidence；如果 verification 失败，会尝试 reverse apply，然后返回 failed run。`inherit-session` 只允许 `generated-current-session`、SHA-256 匹配、parent permission cap 已知且可写的脚本，copied/remote/unknown/hash mismatch 都 fail closed。远程 dynamic workflow URL 不能直接运行，必须先 inspect 并保存本地 trusted copy。
-
-Dynamic template discovery 只扫本地：
+## 核心链路
 
 ```text
-./workflows/dynamic/
-./.codex-flow/dynamic-workflows/
-~/.codex-workflows/dynamic/
+用户目标
+  -> Codex 主会话写出或选择 workflow.js
+  -> Codex 主会话解释 workflow
+  -> Codex spawn 原生 explorer / worker subagents
+  -> subagents 继承当前 Codex sandbox / approval
+  -> 重要 worker 可升级成左侧 Desktop thread
+  -> Codex 等待 / 汇总 / 按需补派 / 验证
+  -> 当前会话用人话收口
 ```
 
-`cwf dynamic save <workflow.js> --id <trusted-id>` 会把通过校验的脚本复制到 `~/.codex-workflows/dynamic/`，并写一个绑定 SHA-256 的 `.trust.json` sidecar。保存后的脚本如果被改但 trust record 没同步，discovery 会失败，不会继续运行。
+## 保留什么
 
-`cwf desktop result` 用来把已完成的文件系统 run 带回 Codex。如果 CWF 是由当前 Codex 会话里的 skill 发起，主路径应该是 skill 读取 run 结果，然后直接在这个发起会话里回复。`--print` 会打印一段适合这条路径的简洁 handoff prompt；不依赖 app-server 时也会写 `artifacts/handoff-prompt.md`。`--new-thread` 和 `--thread <thread-id>` 需要支持 app-server 的 Codex CLI、运行中的 app-server daemon，以及已开启 remote control：
+- `skills/codex-workflows/SKILL.md`: 原生 Codex skill。
+- `workflows/*.workflow.js`: workflow harness 模板。
+- Codex 原生 subagents: 真正执行者。
+- 当前会话回流: 结果由主 Codex 汇总回来。
+- 可选左侧线程: 只有长任务、写文件、需要后续单独追问的 worker 才进左侧。
+- stop condition / gate / verification: 防止跑偏和早停。
 
-```bash
-codex app-server daemon start
-codex app-server daemon enable-remote-control
-```
+## 删除了什么
 
-如果本机有多个 Codex CLI，用 `CWF_CODEX_PATH=/path/to/codex` 指向支持 app-server 的那个。app-server 可用时，`--new-thread` 会显式创建一个单独的 coordinator/result thread，`--thread <thread-id>` 会发到明确指定的 thread。Codex Flow 会优先用 `thread/read` 确认新线程，失败时再用 `thread/list` 兜底，但不会从 `thread/list` 猜“当前线程”。
+旧的外部 runtime 主线已经砍掉：
 
-`cwf github-pr <run-id>` 会把本地 run 转成适合 PR 的 artifact。默认只写 `artifacts/github-pr-comment.md` 和 `artifacts/github-pr-review.json`，不会发到 GitHub。只有显式加 `--post --repo <owner/repo> --pr <number>` 时才会调用本机 `gh` CLI。
+- TypeScript CLI runner
+- YAML workflow registry
+- app-server 线程模拟主路径
+- safePatch 作为默认体验
+- 大量 v1.x 计划文档和 smoke 矩阵
 
-`cwf suggest-workflow` 只生成受约束的 YAML workflow spec，并立刻 validate。默认保存到 `~/.codex-workflows/suggestions/`，不会自动安装进 registry，也不会自动运行；`--output` 不会覆盖已有文件。要使用时必须显式 `cwf run <suggestion-path> --target <repo>`，或手动移动到 workflow 搜索路径。
+这些不是完全没价值，但它们不再是核心。以后如果要回来，只能作为 native skill 稳定后的可选 adapter。
 
-示例：
+## 当前模板
 
-```text
-Run ID: run_...
-Workflow: diff-review
-Status: running
-Now: reviewing diff with tests, safety
-Target: /path/to/repo
-Failure policy: worker failures are tolerated when at least one Codex worker succeeds; all-worker failure, target diff changes, and unhandled errors fail the run.
-Workers: 1/3 completed, 0 fallback
-Active phase: review
-Phases:
-- collect: completed (1s)
-- review: running (8s)
-- reduce: pending
-Workers:
-- correctness: completed (6s), findings=1, artifacts=0
-- tests: running (7s)
-- safety: running (7s)
-Artifacts:
-- State: ~/.codex-workflows/runs/run_.../state.json
-- Events: ~/.codex-workflows/runs/run_.../events.jsonl
-- Workers: ~/.codex-workflows/runs/run_.../workers/*.json
-- Result: not ready yet
-- Log: ~/.codex-workflows/runs/run_.../run.log
-```
+- `workflows/classify-and-act.workflow.js`
+- `workflows/pipeline.workflow.js`
+- `workflows/repo-audit.workflow.js`
+- `workflows/safe-fix-loop.workflow.js`
+- `workflows/tournament.workflow.js`
+- `workflows/ui-copy-review.workflow.js`
 
-## 结果在哪里
+这些 JS 不是给 Node 直接执行的。它们是给 Codex 读的 harness/spec：描述怎么拆任务、派哪些 subagent、哪些 worker 可写、怎么验证、何时停止。
 
-每次运行都会写到：
+## 左侧线程怎么用
 
-```text
-~/.codex-workflows/index.json
-~/.codex-workflows/runs/<run-id>/
-  workflow.json
-  state.json
-  events.jsonl
-  context.json
-  run.log
-  workers/
-    correctness.json
-    tests.json
-    safety.json
-  artifacts/
-    workflow.js
-    workflow.sha256
-    dynamic-preview.md
-    dynamic-capabilities.json
-    dynamic-budget.json
-    dynamic-events.jsonl
-    dynamic-final.json
-    dynamic-proposed.patch
-    dynamic-safe-patch.json
-    write-plan.md
-    dry-run-preview.md
-    verification-plan.md
-    proposed.patch
-    proposed-patch.md
-    diff-summary.md
-    rollback.md
-    verification.md
-    github-pr-comment.md
-    github-pr-review.json
-    reduced-result.json
-    manifest.json
-  result.md
-```
+默认不要每个 worker 都建左侧线程。大多数短 explorer 只需要把结果回到主会话，别污染侧边栏。
 
-每个 worker JSON 都有同一套 envelope：status、confidence、summary、findings、verification、artifacts、retry_count、raw_fallback、时间、prompt、raw output，以及可选 error/usage。`artifacts/reduced-result.json` 保存 reducer 的稳定结果：verdict、summary、findings、verification_gaps、next_actions、worker_provenance 和 artifact 列表。`artifacts/manifest.json` 是这次 run 的证据清单，方便之后复盘。
+三种可见性：
 
-如果只有部分 worker 失败，Codex Flow 会按默认 failure policy 继续 reduce，但最终结果会把失败 worker 和降级证据写清楚。结构化输出坏掉时，raw fallback 也会出现在 status/result 里。
+- `visibility: "inline"`: 默认。worker 在后台跑，结果回主会话。
+- `visibility: "desktop-thread"`: 明确进入左侧线程，适合长任务、写文件 worker、需要单独追问的 worker。
+- `visibility: "auto"`: 由 Codex 按任务长度、风险、是否写文件、是否需要后续继续聊来决定。
 
-每个内置 workflow 的使用边界见 [Workflow catalog](docs/workflow-catalog.md)。
+不管 worker 是否进左侧，最终结果都必须回到发起 CWF 的当前会话。
 
-最终报告可以直接看：
+## 它解决什么问题
 
-```bash
-cwf result <run-id>
-```
+CWF 不是为了“显得高级”才多 agent。它主要解决单个长上下文容易出现的三类失败：
 
-失败时，`cwf status` 和 `cwf show` 会直接给出 failure summary：失败 phase、失败 worker、默认 failure policy，以及下一步该看 Codex SDK 连接、事件日志还是 worker JSON。
+- `agentic laziness`: 长任务只做了一部分就说完成。
+- `self-preferential bias`: 同一个 agent 写答案，又自己给自己当裁判。
+- `goal drift`: 多轮执行或压缩后，原始目标和限制慢慢丢失。
 
-## 它不是什么
+CWF 的结构性解法是：隔离 worker 上下文、让独立 verifier 审查、写清楚 stop condition，并由主会话最终收口。
 
-Codex Flow 不是一个大而全的 agent 平台。当前公开版明确不做：
+## 运行体验
 
-- 非 Codex 模型路由
-- 私有 adapter
-- 无界自动改代码
-- Web UI
-- 自动猜当前 Codex thread
-- worker agent thread 集成
-- remote workflow marketplace
-- 非文档类生产写文件 workflow
-- 自动发 GitHub 评论
-- Claude Dynamic Workflows 的完全复刻
+CWF 跑复杂任务前应该先展示 harness preview：会用什么模式、分几个阶段、派哪些 worker、哪些进左侧线程、预算多少、怎么隔离不可信输入、什么时候停。
 
-它更像一个小而清楚的底座：让 Codex 的多 worker 审查变得可重复、可观察、可复盘。
+运行中只给紧凑状态：当前阶段、worker 完成/阻塞、耗时、预算压力。inline worker 不刷屏；只有值得继续看的 worker 才进左侧线程。
 
-## 验证
+取消时要停止继续派工，并汇总已知结果。恢复时从上次阶段和已有 worker 输出继续；如果状态不完整，必须说明并从最小安全 checkpoint 重启。
+
+## Budget 和隔离
+
+每个可复用 workflow 都应该写清楚预算和停止规则。动态工作流很容易比普通单轮多消耗 5-10 倍 token，预算必须显式可见。
+
+任何读取用户反馈、网页、issue、support ticket、X 内容等不可信输入的 workflow，都要用 quarantine：
+
+- 读原始不可信内容的 agent 只能只读；
+- 真正写文件或执行动作的 worker 只能拿到清洗后的摘要；
+- 涉及 deploy、数据库、支付、权限、凭据、不可逆外部写入时必须先要明确批准。
+
+## 保存成 Skill
+
+跑得好的 workflow 应该保存成模板，并随 Codex skill 分发。保存后的 workflow 仍然是可调整的 harness/spec，不是逐字执行的脚本。
+
+## 什么时候用
+
+适合：
+
+- repo audit / release review
+- root-cause investigation
+- adversarial verification
+- safe fix loop
+- UI / copy / design review
+- migration / refactor plan
+- claim checking
+- tournament / sorting / 多方案评估
+
+不适合：
+
+- 单文件小改
+- 普通 lint/test
+- 一句话能做完的常规编码
+- 为了看起来高级而硬开多 agent
+
+## 检查
 
 ```bash
 npm run check
-npm pack --dry-run
-bash scripts/smoke-cli.sh
 ```
 
-CI 会在 push 到 `main` 和 pull request 时跑同一组非 live smoke。它会检查本地 workflow registry、验证 `diff-review` 和 gated write fixture，并确认带写能力但没有 gate 的 workflow 会失败；默认不会在 CI 里启动 live Codex worker。
-
-v1.0 已覆盖：
-
-- fixture diff
-- 真实大 diff smoke
-- 前台和后台运行
-- cancel
-- Codex SDK worker 全失败 mock
-- 部分 worker 失败时 degraded 输出
-- malformed worker 输出 raw fallback 可见
-- artifact manifest / reduced-result envelope 生成
-- run discovery / latest / show / index rebuild
-- gate pause / approve resume / reject / write-without-gate validation
-- doc-refresh gated preview / approve resume / reject / rollback / verification artifact coverage
-- patch-mode safe write fixture 的 preview / approve resume / proposed patch / policy rejection / apply / rollback / verification failure coverage
-- GitHub PR comment / review artifact generation 和 mocked `gh` post success/failure
-- workflow suggestion generation / invalid diagnostics / registry 不自动安装 / mocked worker explicit-path run
-- workflow registry list / show / validate / duplicate-id detection / id-or-path run
-- workflow validate
-- 人能读懂的 status 输出
-- 内置 example workflow 的 registry validate 和 catalog docs
-- documented command surface 和 install/build/link flow
-
-发版前按 [Release checklist](docs/RELEASE_CHECKLIST.md) 逐项核对。
-
-更多设计说明见：
-
-- [Release notes](RELEASE_NOTES.md)
-- [Release checklist](docs/RELEASE_CHECKLIST.md)
-- [PRD](docs/PRD.md)
-- [Spec](docs/SPEC.md)
-- [Full plan](docs/FULL_PLAN.md)
-- [Phase contracts](docs/PHASE_CONTRACTS.md)
-- [Post-v1 plan](docs/POST_V1_PLAN.md)
-- [Skill plan](docs/SKILL_PLAN.md)
-- [Workflow catalog](docs/workflow-catalog.md)
-- [Claude comparison](docs/claude-vs-codex-workflows.md)
+这个检查只验证 native skill 和 workflow 模板，不再构建外部 runtime。

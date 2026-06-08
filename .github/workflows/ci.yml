@@ -17,16 +17,9 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22
-          cache: npm
 
-      - name: Install
-        run: npm ci
-
-      - name: Build and test
+      - name: Check native workflow core
         run: npm run check
 
       - name: Package dry-run
         run: npm pack --dry-run
-
-      - name: CLI smoke
-        run: bash scripts/smoke-cli.sh
