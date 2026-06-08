@@ -3,14 +3,14 @@ half_life: 30d
 archive_at: 2026-07-06
 scope_type: roadmap
 scope_name: CWF complete-state staged goal prompts
-coverage: Copy-ready staged goal prompts for implementing the complete-state roadmap from Phase A through Phase G.
-not_complete_for: A single all-in-one goal, exact Claude parity, unrestricted JS, hosted scheduling, non-Codex routing, production deploys, database/credential/payment/permission writes.
+coverage: Copy-ready staged goal prompts for implementing the complete-state roadmap from Phase A through Phase H.
+not_complete_for: A single all-in-one goal, exact Claude parity, unrestricted JS, hosted scheduling, non-Codex routing, direct app-thread mutation of original targets, production deploys, database/credential/payment/permission writes.
 verification_level: docs-only
 real_smoke_status: requires_approval
 review_status: reviewed
 reviewer: reasonix-v4pro
-review_command: crb delegate --mode final-review --json review-payload-for-cwf-planning-docs-after-trq212-minli
-review_notes: Derived from reviewed complete-state and usage plans.
+review_command: crb delegate --mode final-review --background --json review-mq4gvwrl-uml18p
+review_notes: Reasonix approved Phase H docs; medium wording issue about proposal apply path resolved by making app-thread write proposals safePatch-only.
 review_owner: Codex
 review_due: resolved 2026-06-06
 ---
@@ -328,4 +328,75 @@ Stop/Pause conditions:
 - Stop complete when public docs and skill routing are aligned, local validation passes, and CI is green.
 - Pause for Ender if product positioning changes or public release timing needs a decision.
 - Stop as blocked after three repeated review findings about the same overclaim.
+```
+
+## Phase H: Native Host Return And Visible Write Proposals
+
+```text
+/goal
+Outcome:
+Build Phase H of the CWF complete-state roadmap in /Users/sunny/Work/CODEX/codex-workflows: make CWF feel native in Codex Desktop by adding a Codex skill-wrapper result return path and a Desktop-visible write-proposal worker path, without allowing hidden direct app-thread writes to the original target.
+
+Boundaries:
+Allowed writes:
+- src/cli.ts
+- src/desktop-bridge.ts
+- src/adapters/worker-adapter.ts or a focused new adapter module
+- src/safe-write.ts only if proposal apply integration needs it
+- tests for result-return routing, no thread-list parent guessing, write-proposal isolation, direct app-thread write rejection, and safePatch reuse
+- fixtures/workflows/ or fixtures/dynamic/ for write-proposal smoke
+- skills/codex-workflows/SKILL.md if the skill wrapper contract changes
+- README.md
+- README.zh-CN.md
+- docs/CWF_COMPLETE_STATE_PLAN.md
+- docs/cwf-complete-state/
+- docs/workflow-catalog.md
+- docs/CODEX_NATIVE_CAPABILITY_AUDIT.md
+
+Forbidden:
+- Do not let Desktop app-thread workers directly mutate the original target repo in public/default workflows.
+- Do not guess the current Codex thread from `thread/list`.
+- Do not make Codex Desktop mandatory for CLI users.
+- Do not claim official platform-level automatic backfill unless the Codex host provides a stable current-thread/callback contract.
+- Do not weaken approve-dynamic, approve-write, allowed_paths, forbidden_paths, drift check, verification, or rollback gates.
+- Do not add hosted scheduling, non-Codex model routing, production deploys, database writes, credentials, payments, permissions, or external messages.
+
+Do not edit:
+- Same as Forbidden above; keep direct app-thread original-target writes, thread-list current-thread guessing, Desktop-only behavior, and weakened write gates out of scope.
+
+Verification:
+- git diff --check
+- npm run check
+- bash scripts/smoke-cli.sh
+- focused unit tests for current-conversation return routing and no current-thread inference
+- focused unit tests proving write-proposal workers leave the original target unchanged before safePatch approval
+- focused unit tests proving direct app-thread original-target writes are rejected
+- fixture proving app-thread proposed patches reuse v1.10 safe-write checks: allowed/forbidden paths, drift, `git apply --check --3way`, verification, and rollback
+- controlled local smoke showing a write-proposal worker creates a patch artifact and CWF applies it only after approval
+- if app-server execution is locally available, controlled Desktop app-thread smoke records thread_id and turn_id; otherwise record exact fallback reason and do not claim live Desktop proof
+- Reasonix/v4Pro final review
+
+Constraints:
+- Treat app-thread worker permissions as copied/capped metadata, not true platform inheritance, unless Codex host APIs explicitly provide inheritance.
+- The original target may be changed only by CWF's parent apply path through safePatch or a separately reviewed trusted inherit-session path.
+- Result return belongs to the Codex skill wrapper or host callback when launched from a conversation; CLI-only users still use `cwf result`.
+- All proposal/apply/verification/rollback evidence must be stored in the run folder and summarized in the final result.
+
+Iteration policy:
+- First harden result-return contract and no-current-thread-guessing tests.
+- Then implement write-proposal isolation and patch artifact capture.
+- Then reuse safePatch apply and verification.
+- Run live Desktop smoke only after deterministic tests pass.
+
+Stop/Pause conditions:
+- Stop complete when same-conversation return and write-proposal safePatch flow are verified, docs are aligned, and Reasonix has no blocker/high findings.
+- Pause for Ender if true current-thread callback support requires a Codex host feature outside this repo.
+- Pause for Ender if the implementation needs direct app-thread writes to the original target.
+- Stop as blocked after three repeated failures with the same app-server execution/readback root cause.
+
+Stop when:
+- Same-conversation return and write-proposal safePatch flow are verified, docs are aligned, and Reasonix has no blocker/high findings.
+
+Pause if:
+- True current-thread callback support requires a Codex host feature outside this repo, or implementation needs direct app-thread writes to the original target.
 ```

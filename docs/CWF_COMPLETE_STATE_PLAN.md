@@ -3,14 +3,14 @@ half_life: 30d
 archive_at: 2026-07-06
 scope_type: roadmap
 scope_name: CWF complete Claude-like dynamic workflow state
-coverage: Complete roadmap for moving Codex Flow from the current v1.11 preview state to a Claude-like, Codex-native complete state, including usage boundaries and phase acceptance criteria.
-not_complete_for: Exact Claude product parity, hosted platform scheduling, unrestricted JavaScript, non-Codex model routing, production deploy automation, database writes, credentials, payments, permissions, or unreviewed autonomous writes.
+coverage: Complete roadmap for moving Codex Flow from the current v1.11 preview state to a Claude-like, Codex-native complete state, including usage boundaries, native Codex host return, visible write-proposal workers, and phase acceptance criteria.
+not_complete_for: Exact Claude product parity, hosted platform scheduling, unrestricted JavaScript, non-Codex model routing, production deploy automation, direct app-thread mutation of original targets, database writes, credentials, payments, permissions, or unreviewed autonomous writes.
 verification_level: docs-only
 real_smoke_status: requires_approval
 review_status: reviewed
 reviewer: reasonix-v4pro
-review_command: crb delegate --mode final-review --json review-payload-for-cwf-planning-docs-after-trq212-minli
-review_notes: Approved; no blocker/high/real medium issues after integrating trq212/MinLi failure modes, pattern library, quarantine, and use-case guidance.
+review_command: crb delegate --mode final-review --background --json review-mq4gvwrl-uml18p
+review_notes: Reasonix approved Phase H docs; medium wording issue about proposal apply path resolved by making app-thread write proposals safePatch-only.
 review_owner: Codex
 review_due: resolved 2026-06-06
 ---
@@ -19,7 +19,7 @@ review_due: resolved 2026-06-06
 
 ## Alignment Snapshot
 
-- **Building**: the full roadmap for making CWF feel like Claude Dynamic Workflows while staying Codex-native.
+- **Building**: the full roadmap for making CWF feel like Claude Dynamic Workflows while staying Codex-native, including current-conversation result return and Desktop-visible write-proposal workers.
 - **Not building**: a one-step next-phase plan only, an unrestricted Node runtime, an exact Claude clone, hosted queues, model routing, or broad autonomous writes.
 - **Source of truth**: current CWF docs and implementation state, especially `README.md`, `docs/POST_V1_PLAN.md`, `docs/JS_DYNAMIC_WORKFLOWS_PLAN.md`, `docs/WHEN_TO_USE_CWF.md`, `docs/WORKER_APP_THREADS_PLAN.md`, `docs/WRITE_WORKERS_PLAN.md`, and PR #1 state on `codex/v1.11-js-dynamic-runtime`.
 - **External references**: trq212's "A harness for every task" article and MinLi's Chinese annotated breakdown, both cached under `.superx/articles/`.
@@ -29,7 +29,7 @@ review_due: resolved 2026-06-06
 - **Verification level**: docs-only for this plan. Each implementation phase below has its own required local, CI, controlled real-smoke, and review evidence.
 - **Review requirement**: Reasonix/v4Pro review required before this plan is treated as final.
 - **Verification**: `git diff --check`, delivery-doc validator, Reasonix review, then per-phase commands listed in acceptance.
-- **Open decisions**: none blocking. Phase A has an MVP in the current working tree; if that slice is accepted, the next roadmap phase is Phase B: same-conversation result return.
+- **Open decisions**: none blocking. A-G remain the core complete-state roadmap; Phase H is the native Codex host integration layer that makes the UX feel natural in Codex Desktop without direct hidden writes.
 
 Capability sentence:
 
@@ -44,6 +44,7 @@ The list below is the **complete-state roadmap**, not just the next stage:
 3. Workers become visible when useful: read-only workers can run as Desktop threads, write workers stay behind `safePatch` or trusted `inherit-session`.
 4. CWF ships built-in dynamic modes such as deep research, repo audit, migration planning, adversarial review, and safe fix loop.
 5. Good dynamic workflows can be saved, reused, and packaged as workflow templates or skills.
+6. Codex host integration makes result return and Desktop-visible write proposals feel native: the host wrapper returns results to the active conversation, while app-thread writers propose patches that CWF applies through `safePatch`.
 
 The first vertical slice of that roadmap is:
 
@@ -95,8 +96,9 @@ And the system does this:
 7. Write work uses only approved paths:
    - `safePatch` for public/auditable patch mode;
    - `inherit-session` only for trusted generated scripts and never beyond the parent Codex permission cap.
+   - `app-thread-write-proposal` only for Desktop-visible workers that write in isolation and return a patch artifact for CWF to apply.
 8. CWF stores full evidence: script, SHA, preview, events, workers, findings, patches, verification, rollback, result.
-9. The initiating Codex conversation receives a short human result and links to artifacts.
+9. The initiating Codex conversation receives a short human result and links to artifacts through a Codex skill wrapper, host-provided callback, or explicit known thread id.
 10. The user can save the workflow as a reusable local workflow template or skill.
 
 Complete does not mean:
@@ -106,6 +108,8 @@ Complete does not mean:
 - CWF becomes a hosted agent platform.
 - Dynamic JavaScript can touch files, network, process, shell, or target repo directly.
 - Writes happen without approval, policy, verification, and rollback evidence.
+- Desktop app-thread workers directly mutate the original target repo by default.
+- CWF guesses the active Codex thread from `thread/list`.
 
 ## Current State vs Complete State
 
@@ -114,9 +118,9 @@ Complete does not mean:
 | Static workflows | Stable CLI workflows exist | Still supported as the reliable repeatable base |
 | Safe writes | v1.10 patch-mode path exists | Used as the default write path for dynamic workflows |
 | Dynamic JS runtime | v1.11 preview branch supports local `workflow.js` with preview, gate, AST policy, child runtime, and CWF APIs | Codex can generate the script from user intent and run it through the same guarded path |
-| Same-conversation return | Skill wrapper/manual result handoff is the intended default | CWF invocation from Codex reliably returns a plain result to the initiating thread |
+| Same-conversation return | Skill wrapper/manual result handoff is the intended default; explicit `--thread` and `--new-thread` exist | CWF invocation from Codex reliably returns a plain result to the initiating thread through wrapper/callback/known thread id |
 | Worker visibility | app-thread worker path exists with capability/probe constraints | Read-only workers can be visible Desktop worker threads when available; SDK fallback remains explicit |
-| Write worker visibility | Safe writes run through isolated patch application, not Desktop app-thread writes | Write workers remain safePatch/inherit-session controlled; no hidden Desktop direct writes |
+| Write worker visibility | Safe writes run through isolated patch application, not Desktop app-thread writes | Desktop-visible write workers can propose patches in isolation; proposal apply to the original target is safePatch-only, while trusted non-proposal `inherit-session` remains a separate path |
 | Built-in modes | Static catalog plus dynamic fixture | Dynamic catalog: deep-research, repo-audit, migration-plan, adversarial-review, safe-fix-loop, root-cause-investigation, rule-mining, tournament-selection, triage-quarantine, eval-and-rubric |
 | Save/reuse | Local YAML registry and suggestions exist; dynamic JS is preview execution | Approved dynamic scripts can become templates, local workflows, or skills with trust metadata |
 | Native UI parity | CLI status/watch/artifacts; no Claude `/workflows` panel | Codex-native best effort: same-conversation summaries, visible worker threads, artifact links, optional explicit new thread |
@@ -205,9 +209,9 @@ user asks for complex workflow
   -> user approves approve-dynamic
   -> CWF child runtime executes through cwf APIs only
   -> workers run through Codex-native adapters
-  -> safe writes go through safePatch or capped inherit-session
+  -> safe writes go through safePatch, capped inherit-session, or visible write-proposal workers
   -> reducer produces result and artifacts
-  -> initiating Codex conversation receives summary + artifact links
+  -> Codex skill wrapper or known host callback returns summary + artifact links to the initiating conversation
   -> user may save workflow as template/skill
 ```
 
@@ -229,6 +233,13 @@ Required `cwf` APIs:
 - `cwf.quarantine.read`
 - `cwf.template.save`
 
+Host-facing APIs:
+
+- `cwf result RUN_ID --json`: stable machine-readable result for a Codex skill wrapper.
+- `cwf desktop result RUN_ID --print`: plain handoff prompt for current-conversation return.
+- `cwf desktop result RUN_ID --thread THREAD_ID`: post to a host-provided known thread id.
+- `cwf desktop result RUN_ID --new-thread`: explicitly create a separate coordinator/result thread.
+
 Required runtime controls:
 
 - source SHA binding;
@@ -249,13 +260,19 @@ Required runtime controls:
 
 Default:
 
-- result returns to the initiating Codex conversation when launched from Codex.
+- result returns to the initiating Codex conversation when launched from Codex through the invoking skill wrapper or host-provided callback.
 
 Optional:
 
+- a host may pass a known current `threadId` or callback handle to post the result;
 - `--new-thread` creates a separate coordinator/result thread only when explicitly requested;
 - worker app threads are visible only when app-server execution is available and preflight proves real execution;
 - CLI-only users still get `cwf result RUN_ID`.
+
+Forbidden:
+
+- do not guess the current thread from `thread/list`;
+- do not claim platform-level automatic backfill unless the Codex host explicitly provides the current thread or callback.
 
 ### Write Contract
 
@@ -280,8 +297,17 @@ Allowed write routes:
    - records runtime metadata;
    - still bounded by task prompt and CWF artifacts.
 
+3. `app-thread-write-proposal`
+   - Desktop-visible Codex worker thread;
+   - may receive copied parent permission metadata only as an upper bound, not as proof of true platform inheritance;
+   - writes only inside an isolated target or worktree;
+   - returns `artifacts/proposed.patch` plus changed-file metadata;
+   - CWF applies to the original target only through `safePatch`;
+   - final result records thread id, turn id, patch path, verification, and rollback evidence.
+
 Forbidden:
 
+- direct Desktop app-thread mutation of the original target repo in public/default workflows;
 - direct Desktop app-thread writes without a stable Codex approval path;
 - remote untrusted dynamic scripts with write permissions;
 - external irreversible writes.
@@ -496,6 +522,33 @@ Acceptance:
   - Evidence: `bash scripts/smoke-cli.sh`.
 - [ ] CI passes.
   - Evidence: GitHub Actions success.
+
+### Phase H: Native Host Return And Visible Write Proposals
+
+Purpose:
+
+Make CWF feel native inside Codex Desktop without turning Desktop worker threads into hidden direct writers.
+
+Deliverables:
+
+- Codex skill wrapper path that runs CWF, watches or reads result output, and replies in the initiating conversation;
+- host callback/thread-id contract documented for future official current-thread support;
+- `app-thread-write-proposal` adapter or equivalent mode that creates Desktop-visible worker threads but writes only in an isolated target/worktree;
+- patch artifact extraction and `safePatch` apply reuse;
+- status/result language that distinguishes proposal, apply, verification, rollback, fallback, and unsupported direct-write attempts.
+
+Acceptance:
+
+- [ ] CWF launched from a Codex conversation returns the final result in the initiating conversation without requiring the user to inspect CLI files.
+  - Evidence: skill-wrapper smoke or app-host callback smoke records run id, result path, and final same-conversation answer.
+- [ ] CWF never chooses the parent/current thread from `thread/list`.
+  - Evidence: source audit and unit test require wrapper/callback, explicit `--thread`, or explicit `--new-thread`.
+- [ ] Desktop-visible write-proposal workers leave the original target unchanged before approval.
+  - Evidence: fixture run shows patch artifact creation from an isolated target.
+- [ ] App-thread proposed patches reuse the v1.10 safe-write checks.
+  - Evidence: allowed/forbidden path, drift, `git apply --check --3way`, verification, and rollback fixtures pass.
+- [ ] Direct app-thread mutation of the original target remains rejected by default.
+  - Evidence: adapter/schema test and source audit.
 
 ## Staged Goal Prompts
 
@@ -781,4 +834,65 @@ Stop/Pause conditions:
 - Stop complete when public docs and skill routing are aligned, local validation passes, and CI is green.
 - Pause for Ender if product positioning changes or public release timing needs a decision.
 - Stop as blocked after three repeated review findings about the same overclaim.
+```
+
+### Goal 7: Native Host Return And Visible Write Proposals
+
+```text
+/goal
+Outcome:
+Build Phase H of the CWF complete-state roadmap: make CWF feel native in Codex Desktop by adding a Codex skill-wrapper result return path and a Desktop-visible write-proposal worker path, without allowing hidden direct app-thread writes to the original target.
+
+Allowed writes:
+- src/cli.ts
+- src/desktop-bridge.ts
+- src/adapters/worker-adapter.ts or a focused new adapter module
+- src/safe-write.ts only if proposal apply integration needs it
+- tests for result-return routing, no thread-list parent guessing, write-proposal isolation, direct app-thread write rejection, and safePatch reuse
+- fixtures/workflows/ or fixtures/dynamic/ for write-proposal smoke
+- skills/codex-workflows/SKILL.md if the skill wrapper contract changes
+- README.md
+- README.zh-CN.md
+- docs/CWF_COMPLETE_STATE_PLAN.md
+- docs/cwf-complete-state/
+- docs/workflow-catalog.md
+- docs/CODEX_NATIVE_CAPABILITY_AUDIT.md
+
+Forbidden:
+- Do not let Desktop app-thread workers directly mutate the original target repo in public/default workflows.
+- Do not guess the current Codex thread from `thread/list`.
+- Do not make Codex Desktop mandatory for CLI users.
+- Do not claim official platform-level automatic backfill unless the Codex host provides a stable current-thread/callback contract.
+- Do not weaken approve-dynamic, approve-write, allowed_paths, forbidden_paths, drift check, verification, or rollback gates.
+- Do not add hosted scheduling, non-Codex model routing, production deploys, database writes, credentials, payments, permissions, or external messages.
+
+Verification:
+- git diff --check
+- npm run check
+- bash scripts/smoke-cli.sh
+- focused unit tests for current-conversation return routing and no current-thread inference
+- focused unit tests proving write-proposal workers leave the original target unchanged before safePatch approval
+- focused unit tests proving direct app-thread original-target writes are rejected
+- fixture proving app-thread proposed patches reuse v1.10 safe-write checks: allowed/forbidden paths, drift, `git apply --check --3way`, verification, and rollback
+- controlled local smoke showing a write-proposal worker creates a patch artifact and CWF applies it only after approval
+- if app-server execution is locally available, controlled Desktop app-thread smoke records thread_id and turn_id; otherwise record exact fallback reason and do not claim live Desktop proof
+- Reasonix/v4Pro final review
+
+Constraints:
+- Treat app-thread worker permissions as copied/capped metadata, not true platform inheritance, unless Codex host APIs explicitly provide inheritance.
+- The original target may be changed only by CWF's parent apply path through safePatch or a separately reviewed trusted inherit-session path.
+- Result return belongs to the Codex skill wrapper or host callback when launched from a conversation; CLI-only users still use `cwf result`.
+- All proposal/apply/verification/rollback evidence must be stored in the run folder and summarized in the final result.
+
+Iteration policy:
+- First harden result-return contract and no-current-thread-guessing tests.
+- Then implement write-proposal isolation and patch artifact capture.
+- Then reuse safePatch apply and verification.
+- Run live Desktop smoke only after deterministic tests pass.
+
+Stop/Pause conditions:
+- Stop complete when same-conversation return and write-proposal safePatch flow are verified, docs are aligned, and Reasonix has no blocker/high findings.
+- Pause for Ender if true current-thread callback support requires a Codex host feature outside this repo.
+- Pause for Ender if the implementation needs direct app-thread writes to the original target.
+- Stop as blocked after three repeated failures with the same app-server execution/readback root cause.
 ```

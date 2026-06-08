@@ -364,7 +364,7 @@ describe("executeWorkflow", () => {
     expect(status).not.toContain("docs/codex-flow-v14-fixture.md");
   });
 
-  it("applies a patch-mode write from an isolated target after approval", async () => {
+  it("keeps write-proposal workers isolated until approval, then applies through safe patch", async () => {
     const target = await createGitRepoWithDiff();
     const runsRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
     cleanup.push(runsRoot);
@@ -377,6 +377,12 @@ describe("executeWorkflow", () => {
       target,
       store,
     });
+
+    const beforeApprovalStatus = await gitOutput(target, ["status", "--short"]);
+    expect(beforeApprovalStatus).not.toContain("src/generated/safe-write-result.js");
+    await expect(readFile(join(target, "src", "generated", "safe-write-result.js"), "utf8")).rejects.toThrow();
+    await expect(readFile(join(store.runDir, "artifacts", "proposed.patch"), "utf8")).rejects.toThrow();
+
     await store.approveGate("approve-write");
     await executeWorkflow({
       spec: writeSpec,

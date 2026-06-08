@@ -14,7 +14,8 @@ Plain Chinese summary:
 - Codex already has App Server threads, turns, approvals, sandboxing, skills, plugins, and subagents.
 - For Desktop users, workflow coordination should appear as a Codex thread in the left sidebar.
 - Results should come back to the Codex conversation through a known thread id or through the Codex skill wrapper.
-- Write-capable workflows should run through Codex's own sandbox, approval, and worktree/thread model, not through a custom file editor.
+- Write-capable workflows should reuse Codex sandbox/approval/worktree/thread capabilities, but CWF should keep original-target writes behind `safePatch` or trusted `inherit-session`.
+- Desktop app-thread writers should first be visible write-proposal workers: they may produce patch artifacts in isolation, while CWF owns the final apply, verification, rollback, and summary.
 - In CWF terms, an agent is a role/config and a thread is the concrete execution instance.
 
 ## What Exists Now
@@ -24,7 +25,7 @@ Plain Chinese summary:
 | Visible left-sidebar work | App Server `thread/start`, `thread/list`, `thread/read`, `thread/name/set`, `turn/start`, `turn/steer`; generated schema includes `thread/started` and `thread/status/changed` notifications | Official manual plus local `codex app-server generate-ts --experimental`; read-only `thread/list` smoke passed | Build an app-server coordinator-thread adapter instead of inventing a sidebar/task UI |
 | Result back into Codex | App Server can start/steer turns and inject items into a known thread with `thread/inject_items`; Codex skill calls can also read `cwf result` and answer in the current conversation | Generated schema includes `thread/inject_items`; current session can return CLI output through normal Codex response | Support both: structured CLI result for skill return, and explicit app-server post to a known thread id |
 | Parallel subagents | Codex subagents are enabled by default, surfaced in Codex app and CLI, and inherit sandbox/approval controls | Official Subagents manual; current tool surface exposes `spawn_agent`, `wait_agent`, `send_input`, `close_agent` | Prefer Codex subagents/threads for future worker execution instead of only SDK headless workers |
-| Code/file edits | Codex App, CLI, SDK, and app-server support workspace-write/full-access sandbox modes, approval policy, permissions profiles, worktrees, file-change events, and diff updates | Official approvals/sandbox/app-server schema; schema includes file-change notifications and sandbox/permissions params | Write-capable workflows must run as Codex threads/worktrees after a CWF approval gate, not as raw `fs.writeFile` workflow steps |
+| Code/file edits | Codex App, CLI, SDK, and app-server support workspace-write/full-access sandbox modes, approval policy, permissions profiles, worktrees, file-change events, and diff updates | Official approvals/sandbox/app-server schema; schema includes file-change notifications and sandbox/permissions params | Write-capable workflows may use Codex threads/worktrees after a CWF approval gate, but original-target apply remains CWF-controlled through `safePatch` unless a separately reviewed trusted `inherit-session` path applies |
 | Workflow source | Codex skills are repo/user/admin/system scoped; plugins distribute skills and integrations | Official Skills/Plugins manual | Keep built-in YAML workflows, support user workflows, and later package Codex Flow as a Codex skill/plugin |
 | Safety boundary | Codex sandbox, permissions profiles, approval policy, auto-review, protected paths, network policy, and subagent inheritance | Official security and permissions docs | Reuse Codex safety controls; Codex Flow adds spec validation/gates but does not replace the sandbox |
 | Git review | App Server exposes `review/start` with `delivery: "inline"` or `"detached"` and returns `reviewThreadId` | Generated local schema | Use detached native review threads where a workflow is really just Codex review |
@@ -43,7 +44,7 @@ So the next integrations should stay additive:
 2. Keep the v1.2 Codex App Server result bridge explicit and fallback-safe.
 3. Add worker adapters that can map workflow workers to Codex worker agent threads/subagents.
 4. Add a Codex skill wrapper that runs `cwf`, reads the result, and returns the human summary in the current Codex conversation.
-5. Add write-capable workflows only through Codex thread/worktree execution with explicit gates.
+5. Add write-capable workflows through Codex thread/worktree execution only as isolated proposal workers first; CWF applies accepted patches through `safePatch`.
 
 ## v1.2 Implementation Note
 
@@ -87,6 +88,7 @@ There are two valid return paths:
 
 - Skill path: Codex invokes the `codex-flow` skill, the skill runs `cwf`, reads `result.md` or `result --json`, and the parent Codex session summarizes the result directly to the user.
 - Thread path: a caller passes an explicit thread id, and `cwf` posts or steers the result into that known Codex thread through App Server.
+- Host callback path: a future Codex host passes a stable current-thread/callback handle; CWF uses that explicit handle and records it as the return path.
 
 Do not guess the "current" thread from `thread/list` unless the host passes a thread id or a future stable current-thread API exists.
 
@@ -96,8 +98,9 @@ Write workflows must follow the subagent safety shape:
 
 - workflow spec declares `capabilities.writes: true`;
 - a gate appears before any write phase;
-- write phase runs in a Codex thread or worktree with `workspace-write` or a named permissions profile;
-- CWF gate approval happens before the SDK write phase; future interactive native writers may also use per-action Codex approval;
+- write-proposal phase may run in a Codex thread or worktree with `workspace-write` or a named permissions profile, but only against an isolated target/worktree unless the trusted `inherit-session` path has been separately approved;
+- CWF gate approval happens before any apply to the original target; future interactive native writers may also use per-action Codex approval;
+- app-thread writers return `artifacts/proposed.patch` and metadata; CWF performs original-target apply through `safePatch`;
 - final artifact includes diff summary, changed files, tests run, and rollback note;
 - no credentials, production deploy, database mutation, or irreversible external write in the public default pack.
 

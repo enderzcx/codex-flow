@@ -34,6 +34,7 @@ export function validateWorkflowSpec(value: unknown): WorkflowSpec {
   const phases = phasesRaw.map((phase, index) => validatePhase(phase, `phases[${index}]`));
   validateWriteCapabilities(capabilities, phases);
   validateWriteGates(phases);
+  validateAppThreadWriteBoundary(capabilities, runtime);
   const writePolicy = validateWritePolicy(spec.write_policy, capabilities, id);
   const phaseIds = phases.map((phase) => phase.id);
   for (const required of ["collect", "reduce"]) {
@@ -288,6 +289,13 @@ function validateWriteCapabilities(capabilities: WorkflowCapabilities, phases: W
   if (hasWritePhase(phases) && !capabilities.writes) {
     throw new Error("capabilities.writes must be true when any phase or worker declares writes:true");
   }
+}
+
+function validateAppThreadWriteBoundary(capabilities: WorkflowCapabilities, runtime?: WorkflowRuntime): void {
+  if (!capabilities.writes || runtime?.preferred_worker_adapter !== "codex-app-thread") {
+    return;
+  }
+  throw new Error("codex-app-thread is read-only only; write-capable workflows must use a gated write-proposal safePatch path");
 }
 
 function hasWritePhase(phases: WorkflowPhase[]): boolean {

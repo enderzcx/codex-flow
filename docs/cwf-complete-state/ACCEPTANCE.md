@@ -3,14 +3,14 @@ half_life: 30d
 archive_at: 2026-07-06
 scope_type: roadmap
 scope_name: CWF complete-state acceptance matrix
-coverage: Evidence-bound acceptance criteria for each complete-state phase.
-not_complete_for: Runtime implementation, exact Claude parity, hosted scheduling, unrestricted JS, non-Codex routing, production deploys, database/credential/payment/permission writes.
+coverage: Evidence-bound acceptance criteria for each complete-state phase, including native Codex host return and visible write-proposal workers.
+not_complete_for: Runtime implementation, exact Claude parity, hosted scheduling, unrestricted JS, non-Codex routing, direct app-thread mutation of original targets, production deploys, database/credential/payment/permission writes.
 verification_level: docs-only
 real_smoke_status: requires_approval
 review_status: reviewed
 reviewer: reasonix-v4pro
-review_command: crb delegate --mode final-review --json review-payload-for-cwf-planning-docs-after-trq212-minli
-review_notes: Derived from reviewed complete-state and usage plans.
+review_command: crb delegate --mode final-review --background --json review-mq4gvwrl-uml18p
+review_notes: Reasonix approved Phase H docs; medium wording issue about proposal apply path resolved by making app-thread write proposals safePatch-only.
 review_owner: Codex
 review_due: resolved 2026-06-06
 ---
@@ -35,7 +35,7 @@ review_due: resolved 2026-06-06
 - [ ] `--new-thread` remains explicit.
   - Test: docs and tests show no default new-thread behavior.
 - [ ] CLI-only users still work.
-  - Test: `cwf result RUN_ID`.
+  - Test: `cwf result RUN_ID` and `cwf result RUN_ID --json`.
 
 ## Phase C: Worker Visibility
 
@@ -87,3 +87,16 @@ review_due: resolved 2026-06-06
   - Test: `bash scripts/smoke-cli.sh`.
 - [ ] CI passes after push.
   - Manual evidence: GitHub Actions success.
+
+## Phase H: Native Host Return And Visible Write Proposals
+
+- [ ] CWF has a Codex skill wrapper path that runs a workflow, reads structured result output, and replies in the initiating Codex conversation.
+  - Test: `cwf result RUN_ID --json`, local skill-wrapper smoke, or app-host callback smoke records run id, result path, and same-conversation summary.
+- [ ] CWF never infers the current initiating thread from `thread/list`.
+  - Test: source audit and unit test prove thread posting requires a skill wrapper, host callback, explicit `--thread`, or explicit `--new-thread`.
+- [ ] Desktop-visible write-proposal workers can run only in an isolated target/worktree.
+  - Test: fixture shows worker writes produce `artifacts/proposed.patch` while the original target is unchanged before approval.
+- [ ] Proposed patches from app-thread workers are applied only through `safePatch`.
+  - Test: allowed/forbidden paths, drift check, `git apply --check --3way`, verification, and rollback fixtures reuse the v1.10 safe-write assertions.
+- [ ] Direct app-thread mutation of the original target remains rejected by default.
+  - Test: source audit and adapter test show public/default workflows cannot set `codex-app-thread` as an original-target write adapter.

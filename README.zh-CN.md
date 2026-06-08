@@ -2,7 +2,7 @@
 
 一个轻量的 Codex 原生工作流层，用来把一次工程审查拆成多个 Codex worker（工作者）并行做，再合成一份可追踪的 reduced JSON 和 Markdown 报告。
 
-它只依赖 Codex 原生能力：不接第三方模型路由，不接私有 adapter，不再造一个单独的 agent 平台。公开版默认还是只读 workflow；v1.4 额外带一个很窄的 `doc-refresh`，只允许文档写入，并且必须先生成 preview、过 gate、显式 approve 后才进入写入阶段。v1.10 增加了更安全的通用写 worker 路径：writer 先在 isolated target 里产出 `artifacts/proposed.patch`，CWF 检查 allowed/forbidden path，跑 `git apply --check --3way`，再 apply 到真实 target；非文档写必须声明显式 `write_policy`。v1.11 增加第一版 JavaScript dynamic workflow runtime：本地 `workflow.js` 先过 AST policy、复制到 run artifacts、生成 preview、显式 approve，再放进 Node Permission Model child process 执行；child 只能通过 JSON-RPC 调 parent CWF API。这个 preview 面现在还包括 intent-to-preview 生成、内置本地 dynamic template、本地 save/reuse + SHA trust metadata，以及受控 dynamic `safePatch`。
+它只依赖 Codex 原生能力：不接第三方模型路由，不接私有 adapter，不再造一个单独的 agent 平台。公开版默认还是只读 workflow；v1.4 额外带一个很窄的 `doc-refresh`，只允许文档写入，并且必须先生成 preview、过 gate、显式 approve 后才进入写入阶段。v1.10 增加了更安全的通用写 worker 路径：writer 先在 isolated target 里产出 `artifacts/proposed.patch`，CWF 检查 allowed/forbidden path，跑 `git apply --check --3way`，再 apply 到真实 target；非文档写必须声明显式 `write_policy`。v1.11 增加第一版 JavaScript dynamic workflow runtime：本地 `workflow.js` 先过 AST policy、复制到 run artifacts、生成 preview、显式 approve，再放进 Node Permission Model child process 执行；child 只能通过 JSON-RPC 调 parent CWF API。v1.12 增加 host-facing 的结果返回契约：Codex skill wrapper 可以读 `cwf result <run-id> --json` 并回到发起会话；Desktop-visible write proposal 仍然只走 isolated patch 路径，`codex-app-thread` 保持 read-only，不能作为直接改真实 target 的 writer runtime。
 
 Codex 负责线程、子 agent、权限和写文件边界；Codex Flow 负责 workflow spec、run store、events、gate、reducer 和 artifact manifest。
 
@@ -86,6 +86,7 @@ cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id> --reason <text>
 cwf resume <run-id>
 cwf result <run-id>
+cwf result <run-id> --json
 ```
 
 workflow 可以用 id 或 path。Registry 只扫本地文件：
@@ -148,7 +149,7 @@ cwf show <run-id>
 
 `cwf list` / `latest` / `show` 背后会用 `~/.codex-workflows/index.json`。这个 index 只是可重建缓存；如果缺失、过期或损坏，CLI 会从 `~/.codex-workflows/runs/*/state.json` 自动重建。
 
-worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex-sdk-headless`。workflow 可以用 `runtime.preferred_worker_adapter` 指定 `codex-app-thread`、`codex-subagent` 或 `codex-review-detached`，并用 `runtime.fallback_worker_adapter: codex-sdk-headless` 声明 fallback。`codex-app-thread` 会在 app-server 可用时为每个 read-only worker 创建一个 Desktop 左侧可见线程；只有配置了 fallback 才会退回 SDK。reducer 不关心 adapter，worker provenance 会保留 runtime metadata。如果 workflow 是从当前 Codex 会话发起，最终总结仍然应该回到这个发起会话，worker thread 只是执行和证据面。
+worker 执行现在走 adapter 层，但仍然只使用 Codex。默认是 `codex-sdk-headless`。workflow 可以用 `runtime.preferred_worker_adapter` 指定 `codex-app-thread`、`codex-subagent` 或 `codex-review-detached`，并用 `runtime.fallback_worker_adapter: codex-sdk-headless` 声明 fallback。`codex-app-thread` 会在 app-server 可用时为每个 read-only worker 创建一个 Desktop 左侧可见线程；只有配置了 fallback 才会退回 SDK。write-capable workflow 不能把 `codex-app-thread` 配成直接 writer runtime。reducer 不关心 adapter，worker provenance 会保留 runtime metadata。如果 workflow 是从当前 Codex 会话发起，最终总结仍然应该回到这个发起会话，worker thread 只是执行和证据面。
 
 带 gate 的 workflow 会在风险步骤前暂停。`cwf status` / `cwf show` 会直接说明卡在哪个 gate，并给出 approve / reject 命令。`cwf approve <run-id> <gate-id>` 记录批准，`cwf resume <run-id>` 只继续还没完成的后续 phase；`cwf reject <run-id> <gate-id> --reason <text>` 会干净地停止 run。写 workflow 在 approval 前只写 run artifact（`write-plan.md`、`dry-run-preview.md`、`verification-plan.md`、`rollback.md`）。approval 后 writer 只在 isolated target 里写，CWF 保存 `proposed.patch`，检查 `write_policy` 路径和 `git apply --check --3way` 后才 apply 到真实 target，并记录 diff、verification 和 rollback artifact。如果 verification 在 apply 后失败，CWF 会尝试用同一个 patch 做 reverse apply，然后返回 failed run。内置 `doc-refresh` 的 `direct-docs` 只是 docs/readme/release-note policy preset，也走同一条 isolated patch apply 路径；源码/配置写入要用显式 patch policy。
 

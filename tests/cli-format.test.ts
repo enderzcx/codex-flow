@@ -1,7 +1,22 @@
-import { describe, expect, it } from "vitest";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_FAILURE_POLICY } from "../src/run-index.js";
-import { formatHelp, formatRunList, formatRunShow, formatStatus, formatWatchFrame } from "../src/cli.js";
+import { buildRunResultEnvelope, formatHelp, formatRunList, formatRunShow, formatStatus, formatWatchFrame } from "../src/cli.js";
+import { RunStore } from "../src/run-store.js";
 import type { RunState, WorkerResult } from "../src/types.js";
+
+const cleanup: string[] = [];
+
+afterEach(async () => {
+  while (cleanup.length > 0) {
+    const path = cleanup.pop();
+    if (path) {
+      await rm(path, { recursive: true, force: true });
+    }
+  }
+});
 
 describe("CLI output formatting", () => {
   it("shows the normal workflow path in help", () => {
@@ -29,6 +44,8 @@ describe("CLI output formatting", () => {
     expect(help).toContain("cwf list [--limit <n>] [--status <status>] [--target <repo>]");
     expect(help).toContain("cwf latest [--target <repo>]");
     expect(help).toContain("cwf show <run-id>");
+    expect(help).toContain("cwf result <run-id> [--json]");
+    expect(help).toContain("cwf result <run-id> --json");
   });
 
   it("explains active work and artifact paths in status output", () => {
@@ -143,6 +160,75 @@ describe("CLI output formatting", () => {
     expect(output).toContain("Now: done; open the result report");
     expect(output).toContain("- Result: /tmp/cwf/result.md");
     expect(output).toContain("- Manifest: /tmp/cwf/artifacts/manifest.json");
+  });
+
+  it("builds a stable JSON result envelope for Codex skill wrappers", async () => {
+    const runDir = await mkdtemp(join(tmpdir(), "cwf-result-envelope-"));
+    cleanup.push(runDir);
+    await mkdir(join(runDir, "artifacts"), { recursive: true });
+    const state = createState({
+      status: "completed",
+      run_dir: runDir,
+      result_path: join(runDir, "result.md"),
+      artifact_manifest_path: join(runDir, "artifacts", "manifest.json"),
+    });
+    await writeFile(join(runDir, "state.json"), `${JSON.stringify(state, null, 2)}\n`);
+    await writeFile(join(runDir, "result.md"), "# Result\n\n- Verdict: PASS\n");
+    await writeFile(
+      join(runDir, "artifacts", "manifest.json"),
+      `${JSON.stringify(
+        {
+          version: 1,
+          run_id: state.id,
+          workflow: state.workflow,
+          generated_at: "2026-01-01T00:00:00.000Z",
+          artifacts: [{ id: "result", type: "result", path: join(runDir, "result.md"), description: "Rendered result." }],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+
+    const envelope = await buildRunResultEnvelope(new RunStore(state.id, runDir, join(runDir, "index.json")));
+
+    expect(envelope).toMatchObject({
+      schema_version: 1,
+      run_id: state.id,
+      workflow: "diff-review",
+      status: "completed",
+      result_return_path: "stdout-json",
+    });
+    expect(envelope.result_markdown).toContain("Verdict: PASS");
+    expect(envelope.artifacts.map((artifact) => artifact.id)).toEqual(["result"]);
+  });
+
+  it("fails the JSON result envelope when a run has no result yet", async () => {
+    const runDir = await mkdtemp(join(tmpdir(), "cwf-result-missing-"));
+    cleanup.push(runDir);
+    const state = createState({ run_dir: runDir, status: "running" });
+    await writeFile(join(runDir, "state.json"), `${JSON.stringify(state, null, 2)}\n`);
+
+    await expect(buildRunResultEnvelope(new RunStore(state.id, runDir, join(runDir, "index.json")))).rejects.toThrow();
+  });
+
+  it("keeps the JSON result envelope usable when the manifest is corrupt", async () => {
+    const runDir = await mkdtemp(join(tmpdir(), "cwf-result-corrupt-manifest-"));
+    cleanup.push(runDir);
+    await mkdir(join(runDir, "artifacts"), { recursive: true });
+    const state = createState({
+      status: "completed",
+      run_dir: runDir,
+      result_path: join(runDir, "result.md"),
+      artifact_manifest_path: join(runDir, "artifacts", "manifest.json"),
+    });
+    await writeFile(join(runDir, "state.json"), `${JSON.stringify(state, null, 2)}\n`);
+    await writeFile(join(runDir, "result.md"), "# Result\n\n- Verdict: PASS\n");
+    await writeFile(join(runDir, "artifacts", "manifest.json"), "{not-json\n");
+
+    const envelope = await buildRunResultEnvelope(new RunStore(state.id, runDir, join(runDir, "index.json")));
+
+    expect(envelope.artifacts).toEqual([]);
+    expect(envelope.result_markdown).toContain("Verdict: PASS");
   });
 
   it("renders a live watch frame around status output", () => {

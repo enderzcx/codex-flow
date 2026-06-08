@@ -3,14 +3,14 @@ half_life: 30d
 archive_at: 2026-07-06
 scope_type: roadmap
 scope_name: CWF complete-state SPEC
-coverage: Runtime and safety contract for implementing the complete CWF dynamic workflow roadmap.
-not_complete_for: Exact implementation details for every phase, hosted scheduling, unrestricted JS, non-Codex routing, production deploys, database/credential/payment/permission writes.
+coverage: Runtime and safety contract for implementing the complete CWF dynamic workflow roadmap, including Codex host return and Desktop-visible write-proposal workers.
+not_complete_for: Exact implementation details for every phase, hosted scheduling, unrestricted JS, non-Codex routing, direct app-thread mutation of original targets, production deploys, database/credential/payment/permission writes.
 verification_level: docs-only
 real_smoke_status: not_required
 review_status: reviewed
 reviewer: reasonix-v4pro
-review_command: crb delegate --mode final-review --json review-payload-for-cwf-planning-docs-after-trq212-minli
-review_notes: Derived from reviewed complete-state and usage plans.
+review_command: crb delegate --mode final-review --background --json review-mq4gvwrl-uml18p
+review_notes: Reasonix approved Phase H docs; medium wording issue about proposal apply path resolved by making app-thread write proposals safePatch-only.
 review_owner: Codex
 review_due: resolved 2026-06-06
 ---
@@ -28,9 +28,9 @@ user asks for complex workflow
   -> user approves approve-dynamic
   -> CWF child runtime executes through cwf APIs only
   -> workers run through Codex-native adapters
-  -> safe writes go through safePatch or capped inherit-session
+  -> safe writes go through safePatch, capped inherit-session, or visible write-proposal workers
   -> reducer produces result and artifacts
-  -> initiating Codex conversation receives summary + artifact links
+  -> Codex skill wrapper or known host callback returns summary + artifact links to the initiating conversation
   -> user may save workflow as template/skill
 ```
 
@@ -51,6 +51,13 @@ Required `cwf` APIs:
 - `cwf.loop.until`
 - `cwf.quarantine.read`
 - `cwf.template.save`
+
+Host-facing APIs:
+
+- `cwf result RUN_ID --json`: stable machine-readable result for a Codex skill wrapper.
+- `cwf desktop result RUN_ID --print`: plain handoff prompt for current-conversation return.
+- `cwf desktop result RUN_ID --thread THREAD_ID`: post to a host-provided known thread id.
+- `cwf desktop result RUN_ID --new-thread`: explicitly create a separate coordinator/result thread.
 
 ## Runtime Controls
 
@@ -73,10 +80,11 @@ Required `cwf` APIs:
 
 Default:
 
-- result returns to the initiating Codex conversation when launched from Codex.
+- result returns to the initiating Codex conversation when launched from Codex through the invoking skill wrapper or host-provided callback.
 
 Optional:
 
+- a host may pass a known current `threadId` or callback handle to post the result;
 - `--new-thread` creates a separate coordinator/result thread only when explicitly requested;
 - worker app threads are visible only when app-server execution is available and preflight proves real execution;
 - CLI-only users still get `cwf result RUN_ID`.
@@ -86,6 +94,7 @@ Forbidden:
 - do not guess the current thread from `thread/list`;
 - do not make Desktop required for CLI users;
 - do not hide fallback status.
+- do not claim platform-level automatic backfill unless the Codex host explicitly provides the current thread or callback.
 
 ## Write Contract
 
@@ -110,9 +119,18 @@ Allowed write routes:
    - records runtime metadata;
    - still bounded by task prompt and artifacts.
 
+3. `app-thread-write-proposal`
+   - Desktop-visible Codex worker thread;
+   - may receive copied parent permission metadata only as an upper bound, not as proof of true platform inheritance;
+   - writes only in an isolated target or worktree;
+   - returns `artifacts/proposed.patch` plus changed-file metadata;
+   - original target apply is performed by CWF through `safePatch`;
+   - final summary records worker thread id, turn id, inherited permission metadata, patch path, verification, and rollback result.
+
 Forbidden write routes:
 
 - direct Desktop app-thread writes without stable Codex approval support;
+- direct Desktop app-thread mutation of the original target repo in public/default workflows;
 - remote untrusted dynamic scripts with write permissions;
 - external irreversible writes.
 

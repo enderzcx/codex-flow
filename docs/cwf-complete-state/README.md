@@ -4,13 +4,13 @@ archive_at: 2026-07-06
 scope_type: roadmap
 scope_name: CWF complete-state delivery pack
 coverage: Index for the PRD, SPEC, acceptance matrix, and staged goal prompts that turn the CWF complete-state plan into implementable phases.
-not_complete_for: Runtime implementation, exact Claude parity, hosted scheduling, unrestricted JavaScript, non-Codex model routing, production deploy automation, or broad autonomous writes.
+not_complete_for: Runtime implementation, exact Claude parity, hosted scheduling, unrestricted JavaScript, non-Codex model routing, production deploy automation, direct app-thread mutation of original targets, or broad autonomous writes.
 verification_level: docs-only
 real_smoke_status: not_required
 review_status: reviewed
 reviewer: reasonix-v4pro
-review_command: crb delegate --mode final-review --json review-payload-for-cwf-planning-docs-after-trq212-minli
-review_notes: Based on the reviewed CWF complete-state plan and usage guide; no blocker/high/real medium issues in the source plan.
+review_command: crb delegate --mode final-review --background --json review-mq4gvwrl-uml18p
+review_notes: Reasonix approved Phase H docs; medium wording issue about proposal apply path resolved by making app-thread write proposals safePatch-only.
 review_owner: Codex
 review_due: resolved 2026-06-06
 ---
@@ -29,7 +29,7 @@ Use this pack when a future Codex goal needs the concrete PRD, SPEC, acceptance 
 | `SPEC.md` | Runtime contract: flow, APIs, safety boundaries, result return, save/reuse. |
 | `CURRENT_VS_COMPLETE.md` | What already exists, what complete state still needs, and what future goals must not rebuild. |
 | `ACCEPTANCE.md` | Evidence-bound checklist for each phase. |
-| `GOAL_PROMPTS.md` | Copy-ready staged `/goal` prompts from Phase A through Phase G. |
+| `GOAL_PROMPTS.md` | Copy-ready staged `/goal` prompts from Phase A through Phase H. |
 
 ## Source Of Truth
 
@@ -50,8 +50,8 @@ CWF complete-state means:
 4. The user approves before execution.
 5. Workers run through Codex-native execution paths.
 6. Read-only workers may become visible Desktop threads when available.
-7. Writes only happen through `safePatch` or tightly capped trusted `inherit-session`.
-8. The initiating Codex conversation receives the final reduced result.
+7. Writes only happen through `safePatch`, tightly capped trusted `inherit-session`, or Desktop-visible write proposals that CWF applies through `safePatch`.
+8. The initiating Codex conversation receives the final reduced result through a skill wrapper, host callback, or explicit known thread id.
 9. Good workflows can be saved as local templates or skills.
 
 This is not an exact Claude clone. It is the Codex-native version: Codex remains the brain and permission boundary; CWF is the plan/evidence/gate/reducer layer.

@@ -17,6 +17,7 @@ grep -q "cwf run <workflow-id-or-path> --target <repo>" /tmp/cwf-help-smoke.txt
 grep -q "cwf dynamic list" /tmp/cwf-help-smoke.txt
 grep -q "cwf dynamic generate" /tmp/cwf-help-smoke.txt
 grep -q "cwf dynamic run <workflow.js-or-id> --target <repo>" /tmp/cwf-help-smoke.txt
+grep -q "cwf result <run-id> --json" /tmp/cwf-help-smoke.txt
 
 echo "==> workflow registry smoke"
 node dist/cli.js workflows list
@@ -42,6 +43,178 @@ if node dist/cli.js validate fixtures/workflows/write-without-gate.yaml >/tmp/cw
   exit 1
 fi
 grep -q "writes:true" /tmp/cwf-write-without-gate.txt
+
+echo "==> app-thread direct write rejection smoke"
+tmp_app_thread_write_workflow=$(mktemp /tmp/cwf-app-thread-write-XXXXXX.yaml)
+cat > "$tmp_app_thread_write_workflow" <<'YAML'
+id: app-thread-write-rejected
+version: 1.12.0-smoke
+title: App Thread Write Rejected
+tags:
+  - write-capable
+  - app-thread
+capabilities:
+  writes: true
+runtime:
+  preferred_worker_adapter: codex-app-thread
+  fallback_worker_adapter: codex-sdk-headless
+write_policy:
+  mode: patch
+  allowed_paths:
+    - src/generated/**
+inputs:
+  target:
+    type: path
+    required: true
+requires:
+  target: git-repo
+defaults:
+  sandbox: read-only
+  timeout_ms: 300000
+phases:
+  - id: collect
+    kind: command
+  - id: preview-write
+    kind: write-preview
+    prompt: Preview rejected app-thread write.
+  - id: approve-write
+    kind: gate
+    prompt: Approve rejected app-thread write.
+    requires_approval: true
+  - id: review
+    kind: codex-write
+    writes: true
+    worker:
+      id: app-thread-writer
+      perspective: rejected app-thread writer
+      prompt: This direct app-thread write should be rejected.
+  - id: reduce
+    kind: reducer
+    reducer: diff-review
+artifacts:
+  - result.md
+YAML
+if node dist/cli.js validate "$tmp_app_thread_write_workflow" >/tmp/cwf-app-thread-write.txt 2>&1; then
+  echo "Expected app-thread write workflow validation to fail, but it passed." >&2
+  cat /tmp/cwf-app-thread-write.txt >&2
+  exit 1
+fi
+grep -q "codex-app-thread is read-only only" /tmp/cwf-app-thread-write.txt
+rm -f "$tmp_app_thread_write_workflow" /tmp/cwf-app-thread-write.txt
+
+echo "==> write-proposal safePatch smoke"
+tmp_write_proposal_target=$(mktemp -d /tmp/cwf-write-proposal-target-XXXXXX)
+mkdir -p "$tmp_write_proposal_target/src"
+printf '{"name":"write-proposal-smoke","version":"0.0.0"}\n' > "$tmp_write_proposal_target/package.json"
+printf 'export const answer = 42;\n' > "$tmp_write_proposal_target/src/calc.js"
+git -C "$tmp_write_proposal_target" init >/dev/null
+git -C "$tmp_write_proposal_target" config user.email codex-workflows@example.invalid
+git -C "$tmp_write_proposal_target" config user.name codex-workflows
+git -C "$tmp_write_proposal_target" add .
+git -C "$tmp_write_proposal_target" commit -m baseline >/dev/null
+printf 'export const answer = 0;\n' > "$tmp_write_proposal_target/src/calc.js"
+write_proposal_run=$(
+  TARGET="$tmp_write_proposal_target" node --input-type=module <<'NODE'
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { executeWorkflow } from "./dist/phase-engine.js";
+import { RunStore } from "./dist/run-store.js";
+
+const target = process.env.TARGET;
+const spec = {
+  id: "write-proposal-smoke",
+  version: "1.12.0-smoke",
+  title: "Write Proposal Smoke",
+  tags: ["write-proposal", "safe-write", "smoke"],
+  inputs: { target: { type: "path", required: true } },
+  capabilities: { writes: true },
+  write_policy: {
+    mode: "patch",
+    allowed_paths: ["src/generated/**"],
+    forbidden_paths: [".env", ".git", ".git/**"],
+    verification_commands: ["test -f src/generated/proposal.js"],
+  },
+  requires: { target: "git-repo" },
+  defaults: { sandbox: "read-only", timeout_ms: 300000 },
+  phases: [
+    { id: "collect", kind: "command" },
+    { id: "preview-write", kind: "write-preview", prompt: "Preview proposal write." },
+    { id: "approve-write", kind: "gate", prompt: "Approve proposal apply.", requires_approval: true },
+    {
+      id: "review",
+      kind: "codex-write",
+      writes: true,
+      worker: {
+        id: "proposal-writer",
+        perspective: "safe proposal writer",
+        prompt: "Create src/generated/proposal.js.",
+        writes: true,
+      },
+    },
+    { id: "reduce", kind: "reducer", reducer: "diff-review" },
+  ],
+  artifacts: ["result.md"],
+};
+
+const store = await RunStore.create(spec, target);
+await executeWorkflow({ spec, specPath: "smoke/write-proposal.yaml", target, store });
+try {
+  await readFile(join(target, "src", "generated", "proposal.js"), "utf8");
+  throw new Error("original target changed before approval");
+} catch (error) {
+  if (!String(error).includes("ENOENT")) {
+    throw error;
+  }
+}
+await store.approveGate("approve-write");
+await executeWorkflow({
+  spec,
+  specPath: "smoke/write-proposal.yaml",
+  target,
+  store,
+  resume: true,
+  writeRunner: async (worker, _context, options) => {
+    // The mock writer mutates only the isolated target. CWF then extracts
+    // proposed.patch and applies it to the original target through safe-write.
+    await mkdir(join(options.target, "src", "generated"), { recursive: true });
+    await writeFile(join(options.target, "src", "generated", "proposal.js"), "export const proposal = true;\n");
+    return {
+      worker_id: worker.id,
+      status: "completed",
+      confidence: "high",
+      summary: "proposal writer completed",
+      findings: [],
+      verification: ["mock writer completed"],
+      artifacts: ["src/generated/proposal.js"],
+      started_at: "2026-01-01T00:00:00.000Z",
+      completed_at: "2026-01-01T00:00:01.000Z",
+      duration_ms: 1000,
+      prompt: "mock proposal writer",
+      raw: "{}",
+      raw_fallback: false,
+      retry_count: 0,
+      runtime: {
+        adapter: "codex-sdk-headless",
+        fallback_used: false,
+        agent_role: worker.perspective,
+        transcript_read: false,
+        sandbox: "workspace-write",
+        approval_policy: "never",
+        worktree_path: options.target,
+      },
+    };
+  },
+});
+console.log(store.runId);
+NODE
+)
+test -n "$write_proposal_run"
+test -f "$tmp_write_proposal_target/src/generated/proposal.js"
+grep -q "src/generated/proposal.js" "$HOME/.codex-workflows/runs/$write_proposal_run/artifacts/proposed.patch"
+grep -q "Policy-Applied Files" "$HOME/.codex-workflows/runs/$write_proposal_run/artifacts/diff-summary.md"
+grep -q "src/generated/proposal.js" "$HOME/.codex-workflows/runs/$write_proposal_run/artifacts/diff-summary.md"
+grep -q "passed: \`test -f src/generated/proposal.js\`" "$HOME/.codex-workflows/runs/$write_proposal_run/artifacts/verification.md"
+rm -rf "$tmp_write_proposal_target" "$HOME/.codex-workflows/runs/$write_proposal_run"
 
 echo "==> dynamic workflow preview smoke"
 tmp_dynamic_target=$(mktemp -d /tmp/cwf-dynamic-target-XXXXXX)
@@ -220,9 +393,13 @@ NODE
 )
 node dist/cli.js github-pr "$run_id" --format comment
 node dist/cli.js github-pr "$run_id" --format review
+node dist/cli.js result "$run_id" --json >/tmp/cwf-result-json.txt
+grep -q '"schema_version": 1' /tmp/cwf-result-json.txt
+grep -q '"result_return_path": "stdout-json"' /tmp/cwf-result-json.txt
+grep -q '"result_markdown"' /tmp/cwf-result-json.txt
 test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-comment.md"
 test -f "$HOME/.codex-workflows/runs/$run_id/artifacts/github-pr-review.json"
-rm -rf "$tmp_target" "$HOME/.codex-workflows/runs/$run_id"
+rm -rf "$tmp_target" "$HOME/.codex-workflows/runs/$run_id" /tmp/cwf-result-json.txt
 
 echo "==> suggest-workflow smoke"
 tmp_suggest_target=$(mktemp -d /tmp/cwf-suggest-target-XXXXXX)

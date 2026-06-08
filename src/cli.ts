@@ -30,7 +30,7 @@ import {
   validateWorkflowRegistry,
   workflowSearchPaths,
 } from "./workflow-registry.js";
-import type { PhaseState, PhaseStatus, RunIndexEntry, RunState, WorkerResult } from "./types.js";
+import type { ArtifactManifest, ArtifactRef, PhaseState, PhaseStatus, RunIndexEntry, RunState, WorkerResult } from "./types.js";
 
 type ParsedArgs = {
   command?: string;
@@ -64,6 +64,7 @@ type ParsedArgs = {
   parentSandbox?: ParentPermissionCap["sandbox"];
   parentApproval?: ParentPermissionCap["approval_policy"];
   approve?: boolean;
+  json?: boolean;
 };
 
 async function main(argv: string[]): Promise<void> {
@@ -414,11 +415,15 @@ async function main(argv: string[]): Promise<void> {
 
   if (args.command === "result") {
     if (!args.runId) {
-      throw new Error("Usage: cwf result <run-id>");
+      throw new Error("Usage: cwf result <run-id> [--json]");
     }
     const store = RunStore.fromRunId(args.runId);
     try {
-      process.stdout.write(await store.readResult());
+      if (args.json) {
+        console.log(JSON.stringify(await buildRunResultEnvelope(store), null, 2));
+      } else {
+        process.stdout.write(await store.readResult());
+      }
     } catch {
       const state = await store.readState();
       throw new Error(`No result yet for ${args.runId}. Current status is ${state.status}. Try: cwf status ${args.runId}`);
@@ -545,6 +550,8 @@ function parseArgs(argv: string[]): ParsedArgs {
       } else if (token === "--interval") {
         parsed.intervalMs = parseInterval(rest[index + 1]);
         index += 1;
+      } else if (token === "--json") {
+        parsed.json = true;
       }
     }
   } else if (command === "approve" || command === "reject") {
@@ -642,7 +649,7 @@ Usage:
   cwf approve <run-id> <gate-id>
   cwf reject <run-id> <gate-id> [--reason <text>]
   cwf resume <run-id>
-  cwf result <run-id>
+  cwf result <run-id> [--json]
   cwf cancel <run-id>
 
 Common flow:
@@ -655,6 +662,7 @@ Common flow:
   cwf watch <run-id>
   cwf latest
   cwf result <run-id>
+  cwf result <run-id> --json
   cwf desktop result <run-id> --print
   cwf github-pr <run-id> --format comment
   cwf suggest-workflow --goal "Review docs changes" --target .
@@ -815,6 +823,48 @@ export function formatRunShow(state: RunState, workerResults: WorkerResult[] = [
     `- Latest for target: cwf latest --target ${shellArg(state.target)}`,
     `- List similar: cwf list --target ${shellArg(state.target)} --status ${state.status}`,
   ].join("\n");
+}
+
+export type RunResultEnvelope = {
+  schema_version: 1;
+  run_id: string;
+  workflow: string;
+  status: PhaseStatus;
+  target: string;
+  result_path?: string;
+  artifact_manifest_path?: string;
+  result_markdown: string;
+  artifacts: ArtifactRef[];
+  result_return_path: "stdout-json";
+};
+
+export async function buildRunResultEnvelope(store: RunStore): Promise<RunResultEnvelope> {
+  const state = normalizeRunState(await store.readState());
+  const resultMarkdown = await store.readResult();
+  return {
+    schema_version: 1,
+    run_id: state.id,
+    workflow: state.workflow,
+    status: state.status,
+    target: state.target,
+    result_path: state.result_path,
+    artifact_manifest_path: state.artifact_manifest_path,
+    result_markdown: resultMarkdown,
+    artifacts: await readManifestArtifacts(state),
+    result_return_path: "stdout-json",
+  };
+}
+
+async function readManifestArtifacts(state: RunState): Promise<ArtifactRef[]> {
+  if (!state.artifact_manifest_path) {
+    return [];
+  }
+  try {
+    const manifest = JSON.parse(await readFile(state.artifact_manifest_path, "utf8")) as ArtifactManifest;
+    return Array.isArray(manifest.artifacts) ? manifest.artifacts : [];
+  } catch {
+    return [];
+  }
 }
 
 async function readWorkerResults(runDir: string): Promise<WorkerResult[]> {

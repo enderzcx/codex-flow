@@ -4,7 +4,7 @@ A lightweight, Codex-native workflow layer for multi-agent engineering review.
 
 中文文档: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC. The implemented preview also includes intent-to-preview generation, built-in local dynamic templates, local save/reuse with SHA-bound trust metadata, and guarded dynamic `safePatch`.
+Codex Flow lets you run repeatable multi-worker workflows using only Codex-native surfaces: no external LLM routers, no private adapters, no separate agent platform. The public pack is read-only by default: review workflows start Codex workers in parallel and aggregate their findings into a stable reduced JSON envelope plus a readable Markdown report. v1.4 ships one narrow gated write workflow, `doc-refresh`, for documentation-only edits after preview and explicit approval. v1.10 adds a safer general write-worker path for bounded patch-mode workflows: a writer works in an isolated target, Codex Flow extracts `artifacts/proposed.patch`, checks `write_policy` paths, runs `git apply --check --3way`, then applies only after the existing approval gate and drift check. v1.11 adds the first JavaScript dynamic workflow runtime: local `workflow.js` harnesses are parsed with an AST policy, copied into run artifacts, previewed, approved, then executed in a Node Permission Model child process that can only talk to parent CWF through JSON-RPC. v1.12 adds a host-facing result return contract through `cwf result <run-id> --json` and keeps Desktop-visible write proposals on the same isolated patch path; `codex-app-thread` remains read-only and cannot be configured as the direct writer for original-target mutations.
 
 The long-term shape (post-v1) is a thin layer over Codex itself: Codex owns threads, subagents, sandbox, approvals, permissions, skills, plugins, and worktrees; Codex Flow owns workflow specs, run-state evidence, gates, reducer output, and artifact manifests.
 
@@ -95,6 +95,7 @@ cwf approve <run-id> <gate-id>
 cwf reject <run-id> <gate-id> --reason <text>
 cwf resume <run-id>
 cwf result <run-id>
+cwf result <run-id> --json
 cwf cancel <run-id>
 ```
 
@@ -197,7 +198,7 @@ Run artifacts are stored under:
 
 Each worker JSON uses the same envelope: status, confidence, summary, findings, verification checks, referenced artifacts, retry count, raw fallback flag, timing, prompt, raw output, and optional usage/error. `artifacts/reduced-result.json` stores the reducer envelope: verdict, summary, findings, verification gaps, next actions, worker provenance, and artifact references. `artifacts/manifest.json` lists the run evidence needed to reconstruct what happened, including `run.log` for background runs.
 
-Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. `codex-app-thread` uses Codex app-server thread lifecycle methods to create one Desktop-visible read-only thread per worker when available; reducers keep the same worker envelope and preserve runtime metadata in worker provenance. The final result still returns to the initiating conversation when launched from Codex; worker threads are inspection/evidence surfaces.
+Worker execution is adapter-based but still Codex-only. The default adapter is `codex-sdk-headless`. Workflow specs may ask for `codex-app-thread`, `codex-subagent`, or `codex-review-detached` with `runtime.preferred_worker_adapter`, and may declare `runtime.fallback_worker_adapter: codex-sdk-headless`. `codex-app-thread` uses Codex app-server thread lifecycle methods to create one Desktop-visible read-only thread per worker when available; write-capable workflows cannot set `codex-app-thread` as the preferred direct runtime. Reducers keep the same worker envelope and preserve runtime metadata in worker provenance. The final result still returns to the initiating conversation when launched from Codex; worker threads are inspection/evidence surfaces.
 
 ## Examples
 
@@ -205,6 +206,7 @@ Worker execution is adapter-based but still Codex-only. The default adapter is `
 cwf run workflows/diff-review.yaml --target fixtures/diff-review --background
 cwf watch run_...
 cwf result run_...
+cwf result run_... --json
 ```
 
 See [Workflow catalog](docs/workflow-catalog.md) for when to use and when not to use each bundled workflow.

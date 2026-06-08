@@ -260,6 +260,40 @@ describe("validateWorkflowSpec", () => {
     });
   });
 
+  it("rejects app-thread as a direct runtime for write-capable workflows", () => {
+    expect(() =>
+      validateWorkflowSpec({
+        ...validSpec,
+        id: "app-thread-write-fixture",
+        capabilities: { writes: true },
+        runtime: {
+          preferred_worker_adapter: "codex-app-thread",
+          fallback_worker_adapter: "codex-sdk-headless",
+        },
+        write_policy: {
+          mode: "patch",
+          allowed_paths: ["src/generated/**"],
+        },
+        phases: [
+          { id: "collect", kind: "command" },
+          { id: "preview-write", kind: "write-preview", prompt: "Preview safe write." },
+          { id: "approve-write", kind: "gate", prompt: "Approve safe write.", requires_approval: true },
+          {
+            id: "review",
+            kind: "codex-write",
+            writes: true,
+            worker: {
+              id: "safe-write",
+              perspective: "safe write",
+              prompt: "Update a bounded file.",
+            },
+          },
+          { id: "reduce", kind: "reducer", reducer: "diff-review" },
+        ],
+      }),
+    ).toThrow("codex-app-thread is read-only only");
+  });
+
   it("rejects non-Codex or private worker runtime adapters", () => {
     expect(() =>
       validateWorkflowSpec({
