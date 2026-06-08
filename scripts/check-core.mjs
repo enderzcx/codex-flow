@@ -14,6 +14,7 @@ const requiredFiles = [
   "scripts/cwf-run-preview.mjs",
   "scripts/cwf-run-state.mjs",
   "workflows/classify-and-act.workflow.js",
+  "workflows/adversarial-verify.workflow.js",
   "workflows/pipeline.workflow.js",
   "workflows/repo-audit.workflow.js",
   "workflows/safe-fix-loop.workflow.js",
@@ -36,9 +37,14 @@ const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
 mustContain(readme, "not a standalone agent platform");
+mustContain(readme, "bounded dynamic workflow");
+mustContain(readme, "run plan");
 mustContain(readme, "desktop-thread");
-mustContain(zh, "Codex 原生动态工作流");
+mustContain(zh, "Codex 原生、有边界的动态工作流");
+mustContain(zh, "有边界的动态工作流");
 mustContain(zh, "左侧线程");
+mustContain(skill, "bounded dynamic workflow");
+mustContain(skill, "bounded run plan");
 mustContain(skill, "Do not execute these files with Node");
 mustContain(skill, "native Codex subagents");
 mustContain(skill, "Worker Visibility");
@@ -117,6 +123,15 @@ function checkWorkflowShape(file, text) {
     mustContain(text, 'type: "worker"');
     mustContain(text, "write_scope:");
     mustContain(text, "route");
+    return;
+  }
+
+  if (file === "adversarial-verify.workflow.js") {
+    mustContain(text, 'pattern: "adversarial-verification"');
+    mustContain(text, "correctness-challenger");
+    mustContain(text, "safety-challenger");
+    mustContain(text, "evidence-checker");
+    mustContain(text, "waived with reason");
     return;
   }
 

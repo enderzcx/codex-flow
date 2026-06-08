@@ -1,11 +1,12 @@
 # CWF Core
 
-Codex Workflows is a native dynamic workflow skill for Codex.
+Codex Workflows is a native bounded dynamic workflow skill for Codex.
 
 ## Product Definition
 
 ```text
 Codex main session dynamically writes or selects workflow.js,
+then creates a bounded run plan,
 then executes it with native Codex subagents,
 then returns the result to the same conversation.
 ```
@@ -14,14 +15,15 @@ then returns the result to the same conversation.
 
 1. Native first: Codex subagents are the execution layer.
 2. Dynamic first: workflows are custom harnesses for the current task.
-3. JS as harness: JavaScript describes orchestration; Node does not execute the workflow.
-4. Same conversation: the main Codex session synthesizes the final answer.
-5. Write by inheritance: write workers inherit current Codex sandbox and approval policy.
-6. Selective visibility: only important workers become Desktop sidebar threads.
-7. Budgeted execution: reusable workflows state a token budget and stop rule.
-8. Quarantine untrusted input: readers of raw external content stay read-only.
-9. Preview and status: non-trivial workflows expose run shape before and during execution.
-10. Small templates: reusable workflows should be templates, not rigid scripts.
+3. Bounded first: every serious workflow has scope, budget, verifier, quarantine, and stop rules.
+4. JS as harness: JavaScript describes orchestration; Node does not execute the workflow.
+5. Same conversation: the main Codex session synthesizes the final answer.
+6. Write by inheritance: write workers inherit current Codex sandbox and approval policy.
+7. Selective visibility: only important workers become Desktop sidebar threads.
+8. Budgeted execution: reusable workflows state a token budget and stop rule.
+9. Quarantine untrusted input: readers of raw external content stay read-only.
+10. Preview and status: non-trivial workflows expose run shape before and during execution.
+11. Small templates: reusable workflows should be templates, not rigid scripts.
 
 ## Failure Modes
 
@@ -32,6 +34,23 @@ Use CWF when a normal single-context run is likely to fail because of:
 - `goal drift`: original constraints fade across long runs, summaries, or compactions.
 
 CWF addresses these structurally with isolated workers, separate verifiers, explicit stop conditions, and same-conversation synthesis.
+
+## Bounded Dynamic Contract
+
+CWF follows a `loop > prompt` model for complex work: the main session turns the user's goal into a small run plan, runs bounded workers, verifies the result, and only loops while the stop rules allow it.
+
+Dynamic does not mean unbounded. CWF should avoid default hundreds-agent swarms. It should scale from a few well-chosen workers, then add more only when the run plan says why.
+
+A non-trivial run plan should name:
+
+- exact scope and exclusions;
+- phases and workers;
+- verifier or challenger role;
+- write scopes;
+- untrusted input route;
+- token budget and stop rule;
+- verification evidence;
+- resume checkpoint.
 
 ## Worker Visibility
 

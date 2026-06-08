@@ -5,15 +5,18 @@ description: Use when the user asks Codex to run a dynamic workflow, orchestrate
 
 # Codex Workflows
 
-Codex Workflows is a native Codex dynamic workflow skill.
+Codex Workflows is a native Codex bounded dynamic workflow skill.
 
 The main session is the coordinator. Workflow JavaScript files are harness specs for Codex to read, adapt, and execute with native subagents. Do not execute these files with Node.
+
+The goal is not to spawn many agents for its own sake. The goal is to move complex orchestration into a small bounded run plan: scope first, fan out only where useful, challenge important results, verify, and return one coordinated answer.
 
 ## Core Contract
 
 ```text
 Goal
   -> choose or draft workflow.js
+  -> scope and draft bounded run plan
   -> spawn native Codex subagents
   -> optionally promote important workers to Desktop threads
   -> wait and synthesize
@@ -27,6 +30,7 @@ Goal
 Use this skill when at least one is true:
 
 - The task benefits from separate clean contexts.
+- The task is a migration, repo audit, bug hunt, source-backed research, adversarial review, or safe fix loop.
 - Multiple independent perspectives should run in parallel.
 - The task needs adversarial verification.
 - A long task has an unknown amount of work and needs a stop condition.
@@ -43,6 +47,7 @@ Do not use this skill for:
 - background scheduling;
 - external model routing;
 - CI-only automation.
+- tasks where the workflow overhead is larger than the work.
 
 ## Native Execution Rules
 
@@ -83,6 +88,8 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 - `failure_policy`
 
 When a template is useful, read it and adapt it in the main session before spawning agents. If no template fits, draft a small workflow inline and optionally save it when the user asks.
+
+For non-trivial workflows, draft a bounded run plan before spawning workers. It should include scope, exclusions, phases, workers, verifier/challenger role, write scopes, quarantine path, budget, stop rule, evidence, and resume checkpoint. If a run id exists, the future persisted path is `.cwf/runs/RUN_ID/run-plan.md`.
 
 ## Recommended Patterns
 

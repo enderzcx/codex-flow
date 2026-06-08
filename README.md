@@ -2,13 +2,16 @@
 
 > 中文优先: [README.zh-CN.md](README.zh-CN.md)
 
-Codex Workflows is a native dynamic workflow skill for Codex.
+Codex Workflows is a native bounded dynamic workflow skill for Codex.
+
+The point is not "open more agents." The point is to move hard orchestration out of a drifting chat context and into a small, inspectable run plan: scope first, fan out only where useful, challenge important results, verify, then summarize back to the same conversation.
 
 It is not a standalone agent platform and not a Node CLI runner. The core loop is:
 
 ```text
 User goal
   -> Codex main session writes or selects a workflow.js harness
+  -> Codex main session produces a bounded run plan
   -> Codex main session interprets that harness
   -> Codex spawns native subagents
   -> subagents inherit the current Codex sandbox and approval policy
@@ -21,6 +24,7 @@ User goal
 - A Codex skill: `skills/codex-workflows/SKILL.md`
 - JavaScript workflow harness templates under `workflows/`
 - Native Codex subagents as the execution surface
+- Scope-first run plans for non-trivial workflows
 - Same-conversation result synthesis
 - Optional Desktop-thread visibility for long, writable, or follow-up-worthy workers
 - Human-readable stop conditions, gates, and verification rules
@@ -42,6 +46,7 @@ Those ideas may return only as optional adapters after the native workflow skill
 Current templates:
 
 - `workflows/classify-and-act.workflow.js`
+- `workflows/adversarial-verify.workflow.js`
 - `workflows/pipeline.workflow.js`
 - `workflows/repo-audit.workflow.js`
 - `workflows/safe-fix-loop.workflow.js`
@@ -74,9 +79,17 @@ Use a workflow when a single long Codex context is likely to fail structurally:
 
 CWF solves these with isolated worker contexts, separate verifiers, explicit stop conditions, and a final synthesis step in the originating conversation.
 
+## Bounded Dynamic Workflows
+
+CWF is inspired by Claude Dynamic Workflows, but it intentionally keeps a smaller native Codex shape: no unbounded agent swarm, no hidden scheduler, no standalone runtime. For CWF, "dynamic" means Codex can draft or adapt a run plan for the current task. "Bounded" means the plan has scope, budget, quarantine, verifier, and stop rules before serious work starts.
+
+Use this shape for large migrations, repo audits, bug hunts, source-backed research, adversarial review, and safe fix loops. Do not use it for daily small edits where one Codex turn is cheaper and clearer.
+
 ## Run Experience
 
 CWF should preview the harness before non-trivial runs, keep compact status while workers run, support cancel/resume semantics, and return the final synthesis to the originating conversation.
+
+For non-trivial work, the preview should include the generated run plan: scope, phases, workers, verifier/challenger, write scopes, quarantine path, budget, and stop conditions.
 
 Inline workers stay quiet. Desktop-thread workers are only used when their process is worth inspecting or continuing separately.
 

@@ -4,6 +4,8 @@
 
 They are intentionally not executable Node programs. They describe how the Codex main session should coordinate native subagents.
 
+For non-trivial work, the main session should adapt the template into a bounded run plan before workers start. The run plan is task-specific; the template is reusable.
+
 ## Shape
 
 ```js
@@ -37,10 +39,12 @@ The interpreter is the current Codex session:
 
 1. Read the workflow.
 2. Adapt it to the user's goal.
-3. Spawn native subagents.
-4. Wait for results.
-5. Dynamically spawn follow-up agents only when needed.
-6. Verify and summarize in the current conversation.
+3. Scope the task and draft a bounded run plan.
+4. Spawn native subagents.
+5. Wait for results.
+6. Dynamically spawn follow-up agents only when needed.
+7. Verify with a separate challenger when risk justifies it.
+8. Summarize in the current conversation.
 
 The helper scripts parse workflow specs as plain data. They reject executable tokens and do not provide a general Node runtime for workflow files.
 
@@ -83,6 +87,22 @@ budget: {
 ```
 
 This keeps dynamic workflows from quietly becoming open-ended token sinks.
+
+## Run Plan
+
+A generated run plan should include:
+
+- objective and scope;
+- chosen pattern;
+- phases and workers;
+- verifier/challenger role;
+- write scopes;
+- quarantine path;
+- budget and stop rule;
+- verification evidence;
+- resume checkpoint.
+
+When persisted, use `.cwf/runs/RUN_ID/run-plan.md`. Do not treat it as executable code.
 
 ## Quarantine
 

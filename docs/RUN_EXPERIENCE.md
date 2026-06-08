@@ -8,6 +8,8 @@ The main Codex conversation remains the control room. It previews the workflow, 
 
 ```text
 request
+  -> scope first
+  -> generate bounded run plan
   -> preview harness
   -> user or coordinator confirms scope
   -> run inline workers and selected Desktop-thread workers
@@ -21,8 +23,10 @@ request
 Before a non-trivial workflow runs, Codex should show a short preview:
 
 - selected pattern;
+- scope and explicit exclusions;
 - phases;
 - planned agents;
+- verifier or challenger role;
 - worker visibility: `inline`, `desktop-thread`, or `auto`;
 - write scopes;
 - token budget;
@@ -46,6 +50,14 @@ Generate a mechanical preview with:
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 ```
 
+For non-trivial workflows, save or display a generated run plan. If a run id exists, the planned future path is:
+
+```text
+.cwf/runs/RUN_ID/run-plan.md
+```
+
+The run plan is a compact local contract, not a standalone runtime script.
+
 ## Status
 
 Status should be compact and human-readable:
@@ -55,6 +67,7 @@ Status should be compact and human-readable:
 - elapsed time;
 - budget used or rough budget pressure;
 - current blocker, if any.
+- verifier state, when the workflow has a challenger.
 
 Inline workers should not flood the main conversation with raw logs. Desktop-thread workers are visible only when the workflow marks them as worth following separately.
 
@@ -101,6 +114,7 @@ The final output always returns to the conversation that launched the workflow. 
 - what workers mattered;
 - what changed, if anything;
 - verification evidence;
+- verifier or challenger conclusion, when relevant;
 - remaining blockers or risks;
 - the plain-language result.
 
