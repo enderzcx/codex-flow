@@ -3,6 +3,7 @@ import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { parseWorkflowSpec } from "./cwf-run-preview.mjs";
+import { parseArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
 export const BUILT_IN_CATALOG = [
   entry("adversarial-verify.workflow.js", "Challenge important plans, claims, diffs, or artifacts.", "High-confidence review before acceptance.", "inline", "read-only", "blocked/waiver/advisory verifier", "local"),
@@ -71,7 +72,45 @@ function entry(file, purpose, when, visibilityDefault, writePolicy, verifierPoli
 }
 
 async function main() {
-  process.stdout.write(`${JSON.stringify(BUILT_IN_CATALOG, null, 2)}\n`);
+  const options = parseArgs(process.argv.slice(2));
+  if (wantsHelp(options)) {
+    printHelp(`
+Usage:
+  node scripts/cwf-catalog.mjs
+  node scripts/cwf-catalog.mjs --project-root .
+  node scripts/cwf-catalog.mjs --format markdown
+
+Options:
+  --project-root <path>  Also discover .cwf/workflows/*.workflow.js in a project.
+  --format <json|markdown>  Default: json. Without --project-root, json remains the legacy built-in array.
+  --help                 Show this help.
+`);
+    return;
+  }
+  const result = {
+    built_ins: BUILT_IN_CATALOG,
+    project_workflows: options["project-root"] ? await discoverProjectWorkflows(options["project-root"]) : [],
+  };
+  if (options.format === "markdown") {
+    process.stdout.write(renderCatalogMarkdown(result));
+    return;
+  }
+  const jsonOutput = options["project-root"] ? result : BUILT_IN_CATALOG;
+  process.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
+}
+
+function renderCatalogMarkdown(result) {
+  const lines = ["# CWF Workflow Catalog", "", "## Built-ins"];
+  for (const item of result.built_ins) {
+    lines.push(`- ${item.file}: ${item.purpose} Use when: ${item.when_to_use}`);
+  }
+  lines.push("", "## Project Workflows");
+  if (result.project_workflows.length === 0) {
+    lines.push("- none");
+  } else {
+    for (const item of result.project_workflows) lines.push(`- ${item.name}: ${item.path} (${item.pattern})`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {

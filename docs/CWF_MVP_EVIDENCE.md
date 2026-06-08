@@ -4,7 +4,7 @@ archive_at: 2026-06-15
 scope_type: evidence
 scope_name: cwf-mvp-completion
 verification_level: local
-real_smoke_status: inline_native_and_desktop_thread_passed_auto_callback_deferred
+real_smoke_status: inline_native_and_desktop_thread_passed_auto_callback_deferred_real_dynamic_smoke_blockers_fixed_locally
 review_status: reasonix_second_pass_go
 ---
 
@@ -22,7 +22,8 @@ review_status: reasonix_second_pass_go
 | Phase 3 verifier blocker prevents PASS | fixture pass | `node scripts/cwf-run-state.mjs init --run-id adversarial-blocked --workflow workflows/adversarial-verify.workflow.js --objective "verify unsupported Desktop automatic callback claim"` then `node scripts/cwf-run-state.mjs phase --run-id adversarial-blocked --phase verify --status blocked --evidence "Verifier blocks PASS: platform-level automatic callback is not observed; roadmap marks automatic return as not currently proven."` |
 | Phase 4 Desktop-thread visibility | real-smoke pass | After Ender GO, exactly one same-directory Codex Desktop thread was created: `019ea65c-5b14-7a52-9923-62797c5366ff`. It returned `CWF_DESKTOP_THREAD_SMOKE_OK thread_id=019ea65c-5b14-7a52-9923-62797c5366ff`. |
 | Phase 4 automatic return | deferred | The originating coordinator read the Desktop-thread marker through `read_thread` and synthesized it back here. Platform-level automatic callback remains unproven and must not be claimed. |
-| Enhancement E2 Desktop execution preflight | deferred_with_fixture_only | No new visible Desktop thread was created for the enhancement goal. E2 remains deferred until Ender approves a new execution preflight smoke that checks both thread creation and actual model marker response. Inline-only downstream phases continue honestly. |
+| Enhancement E2 Desktop execution preflight | observed local smoke | Root cause of the failed optimization probe was the wrong transport path: `codex app-server proxy` against the remote-control socket did not answer the attempted framing. The working path is a fresh `codex app-server --listen stdio://` JSONL session. Historical evidence: `thread/start` created `019ea726-a070-73f2-b182-602b905cd9ec`, `thread/name/set` named it `CWF stdio left-thread smoke 1780920786999`, a separate process required `thread/resume` before `turn/start`, marker `CWF_LEFT_THREAD_TURN_OK_20260608` returned, `thread/read` showed `turns: 1`, and `thread/list` found the thread in `/Users/sunny/Work/CODEX/codex-workflows`. Platform automatic callback remains unproven. Latest checked-in local evidence: [docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md](evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md). |
+| Real dynamic workflow smoke | blocked then fixed locally | `repo-audit` ran with two native Codex explorer subagents plus one Codex Desktop app-server stdio thread. The dynamic chain proved coordinator synthesis, native subagents, Desktop-thread creation/execution/readback, and run-state blocking. It surfaced helper help/evidence-honesty blockers, which were fixed by adding `cwf-run-plan.mjs --help`, helper help smoke in `check-core`, and this durable evidence document. Details: [docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md](evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md). |
 | Phase 5 repo-audit path | real-smoke pass | Three native inline repo-audit explorers returned to the coordinator; the coordinator applied required findings and kept final synthesis in this conversation. |
 | Phase 5 adversarial path | fixture pass | Adversarial preview and blocked-state fixture prove verifier roles and blocked completion semantics locally. |
 | Phase 5 safe-fix-loop path | dry-run pass | `node scripts/cwf-run-plan.mjs workflows/safe-fix-loop.workflow.js --objective "dry-run a bounded fix without writing real target files" --run-id safe-fix-dry-run`; `node scripts/cwf-run-preview.mjs workflows/safe-fix-loop.workflow.js --format json`; no real target files were modified by this dry-run. |
@@ -82,7 +83,8 @@ Return-path proof: each subagent final response was delivered to the originating
 
 ## Known Limits
 
-- Desktop-thread smoke passed after explicit Ender GO.
+- Desktop-thread smoke passed historically after explicit Ender GO.
+- A later approved E2 execution-preflight optimization initially failed because it used `codex app-server proxy` and the wrong framing. The corrected `codex app-server --listen stdio://` JSONL path created and ran a visible thread: `019ea726-a070-73f2-b182-602b905cd9ec`, marker `CWF_LEFT_THREAD_TURN_OK_20260608`. The latest checked-in dynamic smoke evidence is [docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md](evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md).
 - Platform-level automatic callback into the originating conversation is not proven; current proof is manual coordinator synthesis from a visible Desktop thread.
 - `safe-fix-loop` evidence is dry-run/write-shaped only in this goal.
 - Reasonix/v4Pro direct shell/file review was unavailable, so final review used packet-based Reasonix. The second packet review returned GO.

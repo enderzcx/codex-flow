@@ -6,11 +6,11 @@ scope_name: cwf-post-mvp-enhancements
 coverage: Complete post-MVP enhancement roadmap for making CWF a stronger Codex-native dynamic workflow experience after the current MVP evidence state.
 not_complete_for: Hosted scheduler, marketplace operation, non-Codex model routing, unrestricted JavaScript execution, production deployment, paid-user release, or full Claude platform parity that Codex does not expose.
 verification_level: local
-real_smoke_status: enhancement_local_helpers_fixture_pass_safe_write_disposable_real_smoke_pass_desktop_deferred_with_fixture_only_auto_callback_deferred
-review_status: reviewed_with_findings_applied
+real_smoke_status: enhancement_local_helpers_fixture_pass_safe_write_disposable_real_smoke_pass_desktop_stdio_observed_real_dynamic_smoke_blockers_fixed_locally_auto_callback_deferred
+review_status: reasonix_go_after_real_dynamic_smoke_fix
 reviewer: reasonix-v4pro
-review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-full-implementation-review-2.jsonl
-review_notes: Reasonix full implementation second pass returned GO after E8 expensive-run warning and unbounded-workflow refusal fixtures were implemented, and after E2 was labeled deferred_with_fixture_only.
+review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-fix-reasonix-review.jsonl
+review_notes: Reasonix full implementation second pass returned GO after E8 expensive-run warning and unbounded-workflow refusal fixtures were implemented, and after E2 was labeled deferred_with_fixture_only. A later real dynamic smoke found helper-help and evidence-honesty blockers; the fixes added helper help guards and checked-in evidence. Follow-up Reasonix review returned GO with no blocker/high findings.
 review_owner: Ender
 review_due: 2026-06-09
 ---
@@ -25,7 +25,7 @@ Implementation update:
 
 - E1/E3/E5/E6/E7/E8/E9 now have local helper and fixture coverage in `scripts/` plus `npm run check`.
 - E4 has an approval-gated safe-write evaluator, positive/negative fixtures, and one disposable `/tmp` git-repo real-smoke with `git apply --check`, apply, verification, changed-file, and rollback evidence.
-- E2 enhanced execution preflight is `deferred_with_fixture_only` until Ender approves a new visible Desktop-thread smoke. The existing MVP Desktop-thread smoke proves one visible thread and manual coordinator synthesis, not platform automatic callback.
+- E2 enhanced execution preflight is `desktop-thread-stdio-observed` for the latest optimization pass. The failed path was using `codex app-server proxy` plus the wrong framing against the remote-control socket. The working path is a fresh `codex app-server --listen stdio://` JSONL session. Historical smoke created visible thread `019ea726-a070-73f2-b182-602b905cd9ec` and returned marker `CWF_LEFT_THREAD_TURN_OK_20260608`; the latest checked-in dynamic smoke evidence is [docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md](evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md). This proves Desktop-thread creation/execution/readback locally, not platform automatic callback.
 - E10 has local release-readiness evidence in `docs/CWF_RELEASE_READINESS.md`; publish/tag/deploy remain out of scope.
 
 Building:

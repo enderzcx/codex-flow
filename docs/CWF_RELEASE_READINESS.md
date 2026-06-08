@@ -4,11 +4,11 @@ archive_at: 2026-07-08
 scope_type: evidence
 scope_name: cwf-release-readiness
 verification_level: local
-real_smoke_status: local_fixture_and_safe_write_disposable_real_smoke
-review_status: reasonix_go
+real_smoke_status: local_fixture_and_safe_write_disposable_real_smoke_desktop_stdio_observed_real_dynamic_smoke_blockers_fixed_locally
+review_status: reasonix_go_after_real_dynamic_smoke_fix
 reviewer: reasonix-v4pro
-review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-full-implementation-review-2.jsonl
-review_notes: First full implementation pass blocked on missing E8 expensive-run warning and unbounded refusal fixtures. E8 was implemented in `cwf-run-preview.mjs` and `check-core.mjs`, E2 was relabeled `deferred_with_fixture_only`, and second pass returned GO.
+review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-fix-reasonix-review.jsonl
+review_notes: First full implementation pass blocked on missing E8 expensive-run warning and unbounded refusal fixtures. E8 was implemented in `cwf-run-preview.mjs` and `check-core.mjs`, E2 was relabeled `deferred_with_fixture_only`, and second pass returned GO. A later real dynamic smoke found helper-help and evidence-honesty blockers; the fixes added helper help guards and checked-in evidence. Follow-up Reasonix review returned GO with no blocker/high findings.
 ---
 
 # CWF Release Readiness
@@ -32,7 +32,7 @@ This checklist tracks public-release readiness evidence. It is not an npm publis
 | Phase | Current implementation evidence |
 |---|---|
 | E1 Return envelope | `scripts/cwf-return-envelope.mjs`; `cwf-run-state init/update` writes `.cwf/runs/RUN_ID/return-envelope.json`; `npm run check` validates required fields and deferred platform callback status. |
-| E2 Desktop-thread preflight | `deferred_with_fixture_only`: no new visible Desktop thread was created for the enhancement goal. Existing MVP Desktop-thread smoke is historical proof of visible thread creation and manual coordinator synthesis, not platform automatic callback. |
+| E2 Desktop-thread preflight | `desktop-thread-stdio-observed`: the failed probe used the wrong path (`codex app-server proxy` against the remote-control socket). The correct path is a fresh `codex app-server --listen stdio://` JSONL session. Historical evidence recorded thread `019ea726-a070-73f2-b182-602b905cd9ec` and marker `CWF_LEFT_THREAD_TURN_OK_20260608`. Latest checked-in local dynamic smoke evidence is [docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md](evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md). This proves Desktop-thread creation/execution/readback locally, not platform automatic callback. |
 | E3 Resume/checkpoint | `scripts/cwf-run-state.mjs` resumes only from the last contiguous completed phase boundary; `npm run check` covers completed, blocked, failed, skipped, missing, and partial fixtures. |
 | E4 Safe write | `scripts/cwf-safe-write.mjs` evaluates approval gate, changed paths, forbidden/out-of-scope paths, apply-check result, verification status, changed files, and rollback command. A disposable `/tmp` git-repo real-smoke passed after approval with `git apply --check`, apply, verification, changed files, and rollback evidence. |
 | E5 Dynamic generation | `scripts/cwf-generate-workflow.mjs` generates bounded data-only repo-audit and safe-fix-loop workflows and rejects unsafe generated content tokens. |
@@ -45,6 +45,6 @@ This checklist tracks public-release readiness evidence. It is not an npm publis
 ## Deferred Or Approval-Gated Items
 
 - Platform-level automatic callback remains deferred until Codex exposes a stable API and a real smoke proves it.
-- Enhanced Desktop-thread execution preflight requires explicit Ender GO before creating a visible thread.
+- Enhanced Desktop-thread execution preflight must use `codex app-server --listen stdio://` JSONL. Do not use `codex app-server proxy` as the worker creation path unless its remote-control protocol is separately proven.
 - Further safe-write real-smoke requires explicit approval for the disposable `/tmp` target and exact write scope.
 - npm publish, git tag, deploy, hosted scheduler, and marketplace behavior are out of scope unless Ender explicitly requests them.

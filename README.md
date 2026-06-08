@@ -129,6 +129,21 @@ node scripts/cwf-catalog.mjs
 
 Safe write workers are modeled as approval-gated bounded patch flow, not direct Desktop-thread filesystem writes. `scripts/cwf-safe-write.mjs` validates preview gate, `approve-write`, path policy, apply-check result, declared verification, changed files, and rollback evidence for fixtures and approved disposable smoke targets.
 
+Evaluate a real patch file after the preview and approval gates:
+
+```bash
+node scripts/cwf-safe-write.mjs \
+  --patch change.patch \
+  --allowed docs \
+  --forbidden .env \
+  --approval approve-write \
+  --prior-gate previewed \
+  --apply-check passed \
+  --verification-status pass
+```
+
+All helper scripts support `--help`. They are local evidence helpers for the Codex-native skill, not a standalone product runtime.
+
 Current MVP evidence is summarized in [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md), with labels for real-smoke, fixture, dry-run, approval-gated, and deferred proof.
 
 Post-MVP enhancements are planned in [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md), with staged goal prompts in [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md) and one all-in implementation goal in [docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md](docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md).

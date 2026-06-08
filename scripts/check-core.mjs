@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { buildPreview, loadWorkflow, parseWorkflowSpec, resolveVisibility } from "./cwf-run-preview.mjs";
 import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
 import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
@@ -16,6 +17,7 @@ const requiredFiles = [
   "README.zh-CN.md",
   "docs/CORE.md",
   "docs/CWF_MVP_EVIDENCE.md",
+  "docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md",
   "docs/RUN_EXPERIENCE.md",
   "docs/WORKFLOW_JS.md",
   "skills/codex-workflows/SKILL.md",
@@ -26,6 +28,7 @@ const requiredFiles = [
   "scripts/cwf-safe-write.mjs",
   "scripts/cwf-generate-workflow.mjs",
   "scripts/cwf-catalog.mjs",
+  "scripts/lib/cli.mjs",
   "workflows/classify-and-act.workflow.js",
   "workflows/adversarial-verify.workflow.js",
   "workflows/pipeline.workflow.js",
@@ -47,6 +50,7 @@ const readme = await readText("README.md");
 const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
 const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
+const realDynamicEvidence = await readText("docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md");
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
@@ -74,6 +78,10 @@ mustContain(evidence, "dry-run pass");
 mustContain(evidence, "Desktop-thread smoke passed");
 mustContain(evidence, "automatic callback");
 mustContain(evidence, "safe-fix-loop");
+mustContain(evidence, "CWF_REAL_DYNAMIC_SMOKE_20260608.md");
+mustContain(realDynamicEvidence, "CWF_DESKTOP_CORRECTNESS_WORKER_OK_20260608");
+mustContain(realDynamicEvidence, "blocked_then_fixed_locally");
+mustContain(realDynamicEvidence, "Platform-level automatic callback");
 mustContain(gitignore, ".cwf/");
 if (packageJson.bin) {
   throw new Error("package.json must not expose a standalone CLI bin");
@@ -126,6 +134,7 @@ checkReturnEnvelopeRules();
 checkDynamicGenerationRules();
 await checkCatalogRules(workflows);
 checkSafeWriteAndVerifierRules();
+checkHelperHelpCommands();
 
 console.log(`core check passed: ${workflows.length} workflow templates`);
 
@@ -647,6 +656,29 @@ function checkSafeWriteAndVerifierRules() {
   const advisory = evaluateVerifierGate([{ status: "advisory", summary: "optional follow-up" }]);
   if (!advisory.final_pass || advisory.advisories.length !== 1) {
     throw new Error("advisory verifier finding should be visible and non-blocking");
+  }
+}
+
+function checkHelperHelpCommands() {
+  const helpers = [
+    ["scripts/cwf-run-preview.mjs", "Usage:"],
+    ["scripts/cwf-run-plan.mjs", "cwf-run-plan.mjs"],
+    ["scripts/cwf-run-state.mjs", "Usage:"],
+    ["scripts/cwf-return-envelope.mjs", "Usage:"],
+    ["scripts/cwf-safe-write.mjs", "Usage:"],
+    ["scripts/cwf-generate-workflow.mjs", "Usage:"],
+    ["scripts/cwf-catalog.mjs", "Usage:"],
+  ];
+
+  for (const [script, expected] of helpers) {
+    const output = execFileSync(process.execPath, [join(root.pathname, script), "--help"], {
+      cwd: root.pathname,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    if (!output.includes(expected)) {
+      throw new Error(`${script} --help did not include ${expected}`);
+    }
   }
 }
 

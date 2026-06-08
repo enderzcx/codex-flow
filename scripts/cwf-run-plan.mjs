@@ -2,8 +2,21 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildPreview, loadWorkflow } from "./cwf-run-preview.mjs";
+import { parseArgs as parseCliArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
 const DEFAULT_RUN_ROOT = ".cwf/runs";
+const HELP = `
+Usage:
+  node scripts/cwf-run-plan.mjs <workflow.js>
+  node scripts/cwf-run-plan.mjs <workflow.js> --objective "audit this repo" --run-id smoke
+  node scripts/cwf-run-plan.mjs <workflow.js> --format json
+
+Options:
+  --objective <text>  Objective for this run. Default: empty.
+  --run-id <id>      Safe run id used under .cwf/runs/. Default: smoke.
+  --format <format>  markdown or json. Default: markdown.
+  --help             Show this help.
+`;
 
 export async function buildRunPlanFromWorkflow(workflowPath, options = {}) {
   const loaded = await loadWorkflow(workflowPath);
@@ -134,6 +147,10 @@ function safeRunDir(root, runId) {
 }
 
 function parseArgs(argv) {
+  const parsed = parseCliArgs(argv);
+  if (wantsHelp(parsed)) {
+    return { help: true };
+  }
   const options = {
     objective: "",
     runId: "smoke",
@@ -164,7 +181,12 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { workflowPath, options } = parseArgs(process.argv.slice(2));
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.help) {
+    printHelp(HELP);
+    return;
+  }
+  const { workflowPath, options } = parsed;
   const runPlan = await buildRunPlanFromWorkflow(workflowPath, options);
   if (options.format === "json") {
     console.log(JSON.stringify(runPlan, null, 2));

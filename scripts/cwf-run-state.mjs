@@ -399,6 +399,10 @@ function parseOptions(args, schema) {
 
 async function main() {
   const [command, ...args] = process.argv.slice(2);
+  if (!command || command === "--help" || command === "-h") {
+    console.log("Usage: node scripts/cwf-run-state.mjs <init|phase|worker|cancel|status|resume-plan> --run-id <id> ...");
+    return;
+  }
   if (command === "init") return initRun(args);
   if (command === "phase") return updatePhase(args);
   if (command === "worker") return updateWorker(args);

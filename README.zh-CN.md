@@ -138,6 +138,21 @@ node scripts/cwf-catalog.mjs
 
 safe write worker 走 approval-gated bounded patch flow，不允许 Desktop-thread worker 直接写文件。`scripts/cwf-safe-write.mjs` 会检查 preview gate、`approve-write`、路径策略、apply-check、声明的 verification、changed files 和 rollback evidence，用于 fixture 和明确批准的 disposable smoke target。
 
+拿真实 patch 文件做 gate 评估：
+
+```bash
+node scripts/cwf-safe-write.mjs \
+  --patch change.patch \
+  --allowed docs \
+  --forbidden .env \
+  --approval approve-write \
+  --prior-gate previewed \
+  --apply-check passed \
+  --verification-status pass
+```
+
+所有 helper 脚本都支持 `--help`。它们是给 Codex 原生 skill 留证据和本地验证用的 helper，不是新的独立 runtime。
+
 当前 MVP 证据汇总在 [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md)，里面明确区分 real-smoke、fixture、dry-run、approval-gated 和 deferred。
 
 后续增强计划在 [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md)，分阶段目标提示词在 [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md)，一次性实现全部增强的总目标提示词在 [docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md](docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md)。

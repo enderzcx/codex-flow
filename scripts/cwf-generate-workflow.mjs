@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { parseArgs, printHelp, stringList, wantsHelp } from "./lib/cli.mjs";
 
 const FAMILY_ALIASES = [
   ["safe-fix-loop", /\b(fix|bug|repair|patch|write)\b/i],
@@ -132,9 +133,33 @@ function safeFixWorkflow(objective, options) {
 }
 
 function main() {
-  const objective = process.argv.slice(2).join(" ");
-  if (!objective) throw new Error("Usage: node scripts/cwf-generate-workflow.mjs <objective>");
-  const workflow = generateWorkflowFromObjective(objective);
+  const options = parseArgs(process.argv.slice(2), { repeatable: ["allowed-path"] });
+  if (wantsHelp(options)) {
+    printHelp(`
+Usage:
+  node scripts/cwf-generate-workflow.mjs "audit this repo"
+  node scripts/cwf-generate-workflow.mjs --family safe-fix-loop --allowed-path scripts "fix a bounded bug"
+
+Options:
+  --objective <text>       Objective text. Positional text is also accepted.
+  --family <name>          repo-audit or safe-fix-loop. If omitted, inferred from objective.
+  --allowed-path <path>    Allowed path for safe-fix-loop. Repeatable.
+  --format <js|json>       Output format. Default: js.
+  --help                   Show this help.
+`);
+    return;
+  }
+  const objective = options.objective ?? options._.join(" ");
+  if (!objective) throw new Error("Missing objective. Run with --help for usage.");
+  const allowedPaths = stringList(options["allowed-path"]);
+  const workflow = generateWorkflowFromObjective(objective, {
+    family: options.family,
+    ...(allowedPaths.length > 0 ? { allowed_paths: allowedPaths } : {}),
+  });
+  if (options.format === "json") {
+    process.stdout.write(`${JSON.stringify(workflow, null, 2)}\n`);
+    return;
+  }
   process.stdout.write(renderGeneratedWorkflow(workflow));
 }
 

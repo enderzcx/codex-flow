@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { evaluateVerifierGate } from "./cwf-safe-write.mjs";
+import { parseArgs, printHelp, readJsonFile, wantsHelp } from "./lib/cli.mjs";
 
 export function buildReturnEnvelope(state, options = {}) {
   const runDir = options.runDir ?? `.cwf/runs/${state.run_id}`;
@@ -59,12 +60,32 @@ function deriveCompletionStatus(state, verifier) {
 }
 
 async function main() {
-  const statePath = process.argv[2];
-  if (!statePath) {
-    throw new Error("Usage: node scripts/cwf-return-envelope.mjs <state.json>");
+  const options = parseArgs(process.argv.slice(2));
+  if (wantsHelp(options)) {
+    printHelp(`
+Usage:
+  node scripts/cwf-return-envelope.mjs --state .cwf/runs/RUN_ID/state.json
+  node scripts/cwf-return-envelope.mjs .cwf/runs/RUN_ID/state.json
+
+Options:
+  --state <path>                       State JSON path. Positional path is also accepted.
+  --run-dir <path>                     Override run artifact directory for rendered paths.
+  --return-mode <mode>                 Default: coordinator_synthesis.
+  --platform-callback-status <status>  Default: deferred.
+  --platform-callback-evidence <text>  Evidence string when callback is proven.
+  --help                               Show this help.
+`);
+    return;
   }
-  const state = JSON.parse(await readFile(statePath, "utf8"));
-  const envelope = buildReturnEnvelope(state);
+  const statePath = options.state ?? options._[0];
+  if (!statePath) throw new Error("Missing --state. Run with --help for usage.");
+  const state = await readJsonFile(statePath);
+  const envelopeOptions = {};
+  if (options["run-dir"]) envelopeOptions.runDir = options["run-dir"];
+  if (options["return-mode"]) envelopeOptions.returnMode = options["return-mode"];
+  if (options["platform-callback-status"]) envelopeOptions.platformCallbackStatus = options["platform-callback-status"];
+  if (options["platform-callback-evidence"]) envelopeOptions.platformCallbackEvidence = options["platform-callback-evidence"];
+  const envelope = buildReturnEnvelope(state, envelopeOptions);
   process.stdout.write(`${JSON.stringify(envelope, null, 2)}\n`);
 }
 

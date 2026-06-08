@@ -1,8 +1,23 @@
 import { readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseArgs as parseCliArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
 const AUTO_DESKTOP_RE = /\b(deploy|release|migrate|publish)\b/i;
+const HELP = `
+Usage:
+  node scripts/cwf-run-preview.mjs <workflow.js>
+  node scripts/cwf-run-preview.mjs <workflow.js> --format json
+  node scripts/cwf-run-preview.mjs <workflow.js> --run-immediately
+
+Options:
+  --format <format>          markdown or json. Default: markdown.
+  --run-immediately          Evaluate preview-skip eligibility for an immediate run.
+  --inspect-worker           Resolve auto visibility for user-inspected workers.
+  --raw-privileged-path      Mark raw untrusted content as reaching privileged path.
+  --user-request <text>      User request text used for auto visibility.
+  --help                     Show this help.
+`;
 
 export async function loadWorkflow(path) {
   const resolved = resolve(path);
@@ -284,6 +299,10 @@ function appendList(lines, items) {
 }
 
 function parseArgs(argv) {
+  const parsed = parseCliArgs(argv);
+  if (wantsHelp(parsed)) {
+    return { help: true };
+  }
   const options = {
     format: "markdown",
     runImmediately: false,
@@ -320,7 +339,12 @@ function parseArgs(argv) {
 }
 
 async function main() {
-  const { workflowPath, options } = parseArgs(process.argv.slice(2));
+  const parsed = parseArgs(process.argv.slice(2));
+  if (parsed.help) {
+    printHelp(HELP);
+    return;
+  }
+  const { workflowPath, options } = parsed;
   const loaded = await loadWorkflow(workflowPath);
   const preview = buildPreview(loaded.workflow, options);
   if (options.format === "json") {
