@@ -2,7 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { buildPreview, loadWorkflow, parseWorkflowSpec, resolveVisibility } from "./cwf-run-preview.mjs";
 import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
-import { deriveRunStatus } from "./cwf-run-state.mjs";
+import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
 
 const root = new URL("..", import.meta.url);
 
@@ -62,7 +62,8 @@ mustContain(skill, "Run Experience");
 mustContain(evidence, "real-smoke pass");
 mustContain(evidence, "fixture pass");
 mustContain(evidence, "dry-run pass");
-mustContain(evidence, "requires_approval");
+mustContain(evidence, "Desktop-thread smoke passed");
+mustContain(evidence, "automatic callback");
 mustContain(evidence, "safe-fix-loop");
 mustContain(gitignore, ".cwf/");
 if (packageJson.bin) {
@@ -400,5 +401,20 @@ function checkRunStateRules() {
   });
   if (status !== "blocked") {
     throw new Error(`phase blocker must make run status blocked, got ${status}`);
+  }
+
+  const skippedBoundary = {
+    phases: [
+      { id: "scope", index: 0, status: "planned" },
+      { id: "fanout", index: 1, status: "planned" },
+      { id: "synthesize", index: 2, status: "completed" },
+    ],
+  };
+  refreshResume(skippedBoundary);
+  if (
+    skippedBoundary.resume.last_completed_phase_id !== "" ||
+    skippedBoundary.resume.next_phase_id !== "scope"
+  ) {
+    throw new Error("resume checkpoint must use the last contiguous completed phase boundary");
   }
 }

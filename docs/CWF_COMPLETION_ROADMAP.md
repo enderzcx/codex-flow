@@ -6,7 +6,7 @@ scope_name: cwf-completion
 coverage: Complete roadmap and goal contracts for the remaining work after the native core, preview/state helpers, bounded dynamic contract, and adversarial template are already shipped.
 not_complete_for: Hosted scheduler, workflow marketplace, non-Codex model routing, unrestricted JavaScript execution, production deployment, or full Claude Dynamic Workflows parity.
 verification_level: local
-real_smoke_status: inline_native_passed_desktop_requires_approval
+real_smoke_status: inline_native_and_desktop_thread_passed_auto_callback_deferred
 review_status: reviewed_with_findings_applied
 reviewer: reasonix-v4pro
 review_command: crb delegate --mode final-review failed because Reasonix CLI rejected forwarded --mode; fallback used reasonix run -m deepseek-v4-pro:cloud --effort high

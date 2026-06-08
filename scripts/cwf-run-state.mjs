@@ -180,8 +180,13 @@ async function writeJson(path, value) {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }
 
-function refreshResume(state) {
-  const completed = state.phases.filter((phase) => phase.status === "completed").at(-1);
+export function refreshResume(state) {
+  let completed = null;
+  for (const phase of state.phases) {
+    if (phase.status !== "completed") break;
+    completed = phase;
+  }
+
   if (!completed) {
     state.resume = {
       last_completed_phase_id: "",

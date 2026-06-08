@@ -4,7 +4,7 @@ archive_at: 2026-06-15
 scope_type: evidence
 scope_name: cwf-mvp-completion
 verification_level: local
-real_smoke_status: inline_native_passed_desktop_requires_approval
+real_smoke_status: inline_native_and_desktop_thread_passed_auto_callback_deferred
 review_status: reasonix_second_pass_go
 ---
 
@@ -19,13 +19,25 @@ review_status: reasonix_second_pass_go
 | Phase 2 native inline repo-audit | real-smoke pass | Native `explorer` subagents returned in the originating conversation for correctness, tests, and maintainability. Findings were applied where required. No Desktop thread was created. |
 | Phase 3 adversarial verifier participation | fixture pass | `node scripts/cwf-run-plan.mjs workflows/adversarial-verify.workflow.js --objective "verify roadmap" --run-id smoke-adv --format json` shows `correctness-challenger`, `safety-challenger`, and `evidence-checker`. |
 | Phase 3 verifier blocker prevents PASS | fixture pass | `node scripts/cwf-run-state.mjs init --run-id adversarial-blocked --workflow workflows/adversarial-verify.workflow.js --objective "verify unsupported Desktop automatic callback claim"` then `node scripts/cwf-run-state.mjs phase --run-id adversarial-blocked --phase verify --status blocked --evidence "Verifier blocks PASS: platform-level automatic callback is not observed; roadmap marks automatic return as not currently proven."` |
-| Phase 4 Desktop-thread visibility | requires_approval | No Desktop worker thread was created because Ender has not given explicit `GO` for one selected Desktop-thread smoke. This is not claimed as real Desktop proof. |
-| Phase 4 automatic return | deferred | Same-conversation manual synthesis is required and observed for native inline subagents. Platform-level automatic callback remains unproven and must not be claimed. |
+| Phase 4 Desktop-thread visibility | real-smoke pass | After Ender GO, exactly one same-directory Codex Desktop thread was created: `019ea65c-5b14-7a52-9923-62797c5366ff`. It returned `CWF_DESKTOP_THREAD_SMOKE_OK thread_id=019ea65c-5b14-7a52-9923-62797c5366ff`. |
+| Phase 4 automatic return | deferred | The originating coordinator read the Desktop-thread marker through `read_thread` and synthesized it back here. Platform-level automatic callback remains unproven and must not be claimed. |
 | Phase 5 repo-audit path | real-smoke pass | Three native inline repo-audit explorers returned to the coordinator; the coordinator applied required findings and kept final synthesis in this conversation. |
 | Phase 5 adversarial path | fixture pass | Adversarial preview and blocked-state fixture prove verifier roles and blocked completion semantics locally. |
 | Phase 5 safe-fix-loop path | dry-run pass | `node scripts/cwf-run-plan.mjs workflows/safe-fix-loop.workflow.js --objective "dry-run a bounded fix without writing real target files" --run-id safe-fix-dry-run`; `node scripts/cwf-run-preview.mjs workflows/safe-fix-loop.workflow.js --format json`; no real target files were modified by this dry-run. |
 | Package/core boundary | local pass | `npm run check`; `git diff --check`; `npm pack --dry-run --json`; `for p in src package-lock.json tsconfig.json; do [ ! -e "$p" ] && echo "ABSENT $p"; done`. |
 | Final review | GO | `crb delegate --mode final-review --background ...` failed with `unknown option '--mode'`; first packet-based `reasonix run -m deepseek-v4-pro:cloud --effort high ...` returned BLOCKED for missing embedded native subagent evidence and safe-fix-loop guards; fixes were applied; second packet-based Reasonix review returned GO. Transcripts: `/tmp/cwf-reasonix-packet-review.jsonl`, `/tmp/cwf-reasonix-packet-review-2.jsonl`. |
+
+## Desktop Thread Smoke Evidence
+
+Ender explicitly approved the Desktop-thread smoke in the originating thread. The coordinator created exactly one same-directory Codex Desktop thread and sent a read-only smoke prompt.
+
+| Field | Evidence |
+|---|---|
+| Thread id | `019ea65c-5b14-7a52-9923-62797c5366ff` |
+| Source thread id | `019ea628-73d6-7732-936e-63fa5c0a17a5` |
+| Final marker | `CWF_DESKTOP_THREAD_SMOKE_OK thread_id=019ea65c-5b14-7a52-9923-62797c5366ff` |
+| Worker evidence line | `Evidence: checked workspace git status on main at HEAD 38c685b; only existing local resume-fix edits are modified.` |
+| Return path | Coordinator read the thread result via Codex Desktop `read_thread` and summarized it back in the originating conversation. This proves visible Desktop thread creation plus manual coordinator synthesis, not platform-level automatic callback. |
 
 ## Native Inline Subagent Evidence
 
@@ -56,11 +68,12 @@ Return-path proof: each subagent final response was delivered to the originating
 - Correctness/maintainability finding: `cwf-run-state init` could previously generate `state.json` and `run-plan.md` from different preview options; fixed by deriving state and run-plan from the same `buildRunPlanFromWorkflow` result.
 - Tests finding: `check-core` now asserts both `repo-audit` and `adversarial-verify` run-plan surfaces, plus objective-driven `auto` visibility and phase-blocked run status.
 - Roadmap finding: `docs/CWF_COMPLETION_ROADMAP.md` review status is synchronized between frontmatter and body.
+- E2E correctness finding: `refreshResume` previously used the last completed phase even when earlier phases were incomplete; fixed by using the last contiguous completed boundary from Phase 1 and adding a regression in `check-core`.
 
 ## Known Limits
 
-- Desktop-thread smoke is approval-gated and remains `requires_approval`.
-- Platform-level automatic callback into the originating conversation is not proven.
+- Desktop-thread smoke passed after explicit Ender GO.
+- Platform-level automatic callback into the originating conversation is not proven; current proof is manual coordinator synthesis from a visible Desktop thread.
 - `safe-fix-loop` evidence is dry-run/write-shaped only in this goal.
 - Reasonix/v4Pro direct shell/file review was unavailable, so final review used packet-based Reasonix. The second packet review returned GO.
 - This evidence does not include npm publish, git tag, production deploy, hosted scheduler, marketplace, non-Codex model routing, or full Claude Dynamic Workflows parity.
