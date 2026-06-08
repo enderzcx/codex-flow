@@ -109,13 +109,31 @@ Record local run state for cancel/resume fixtures:
 
 ```bash
 node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+node scripts/cwf-run-state.mjs status --run-id demo
 ```
 
-Run state and run plans live under ignored `.cwf/runs/RUN_ID/` and are not part of the npm package.
+Run state, run plans, final summaries, and return envelopes live under ignored `.cwf/runs/RUN_ID/` and are not part of the npm package. The return envelope records the final destination, return mode, evidence path, verifier status, deferred items, and completion status. The default return mode is coordinator synthesis; platform automatic callback remains deferred unless a future real smoke proves it.
+
+Generate bounded workflow drafts for the first supported families:
+
+```bash
+node scripts/cwf-generate-workflow.mjs "audit this repo for release risk"
+node scripts/cwf-generate-workflow.mjs "fix a bounded bug"
+```
+
+Inspect built-in workflow catalog data:
+
+```bash
+node scripts/cwf-catalog.mjs
+```
+
+Safe write workers are modeled as approval-gated bounded patch flow, not direct Desktop-thread filesystem writes. `scripts/cwf-safe-write.mjs` validates preview gate, `approve-write`, path policy, apply-check result, declared verification, changed files, and rollback evidence for fixtures and approved disposable smoke targets.
 
 Current MVP evidence is summarized in [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md), with labels for real-smoke, fixture, dry-run, approval-gated, and deferred proof.
 
-Post-MVP enhancements are planned in [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md), with copy-ready staged goal prompts in [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md).
+Post-MVP enhancements are planned in [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md), with staged goal prompts in [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md) and one all-in implementation goal in [docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md](docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md).
+
+Release-readiness evidence is tracked in [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md). It is local package readiness evidence, not npm publish, git tag, deploy, marketplace, or hosted scheduler proof.
 
 ## Budget And Quarantine
 

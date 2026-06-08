@@ -93,6 +93,8 @@ Local state is stored under `.cwf/runs/RUN_ID/`:
 ```text
 .cwf/runs/RUN_ID/state.json
 .cwf/runs/RUN_ID/preview.md
+.cwf/runs/RUN_ID/run-plan.md
+.cwf/runs/RUN_ID/return-envelope.json
 .cwf/runs/RUN_ID/final.md
 ```
 
@@ -103,13 +105,17 @@ Use the state helper for local fixture proof:
 ```bash
 node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
 node scripts/cwf-run-state.mjs phase --run-id demo --phase scope --status completed --evidence "scope complete"
+node scripts/cwf-run-state.mjs status --run-id demo
 node scripts/cwf-run-state.mjs resume-plan --run-id demo
 ```
+
+The return envelope records `final_destination`, `return_mode`, `final_summary_path`, `evidence_path`, `verifier_status`, deferred items, and completion status. `return_mode=coordinator_synthesis` is the proven default. Platform automatic callback remains deferred until a real platform smoke proves it.
 
 ## Output
 
 The final output always returns to the conversation that launched the workflow. It should include:
 
+- a plain-language conclusion first;
 - what ran;
 - what workers mattered;
 - what changed, if anything;

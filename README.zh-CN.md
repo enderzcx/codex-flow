@@ -118,13 +118,31 @@ node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audi
 
 ```bash
 node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+node scripts/cwf-run-state.mjs status --run-id demo
 ```
 
-run state 和 run plan 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。
+run state、run plan、final summary 和 return envelope 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。return envelope 会记录最终去向、回流模式、证据路径、verifier 状态、deferred items 和 completion status。默认回流模式是 coordinator synthesis；platform automatic callback 仍然是 deferred，除非未来有真实 smoke 证明。
+
+为第一批支持的 workflow family 生成有边界草稿：
+
+```bash
+node scripts/cwf-generate-workflow.mjs "audit this repo for release risk"
+node scripts/cwf-generate-workflow.mjs "fix a bounded bug"
+```
+
+查看内置 workflow catalog：
+
+```bash
+node scripts/cwf-catalog.mjs
+```
+
+safe write worker 走 approval-gated bounded patch flow，不允许 Desktop-thread worker 直接写文件。`scripts/cwf-safe-write.mjs` 会检查 preview gate、`approve-write`、路径策略、apply-check、声明的 verification、changed files 和 rollback evidence，用于 fixture 和明确批准的 disposable smoke target。
 
 当前 MVP 证据汇总在 [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md)，里面明确区分 real-smoke、fixture、dry-run、approval-gated 和 deferred。
 
-后续增强计划在 [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md)，每一阶段可直接开目标模式的提示词在 [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md)。
+后续增强计划在 [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md)，分阶段目标提示词在 [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md)，一次性实现全部增强的总目标提示词在 [docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md](docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md)。
+
+release-readiness 证据在 [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md)。它只代表本地 package readiness，不代表 npm publish、git tag、deploy、marketplace 或 hosted scheduler。
 
 ## Budget 和隔离
 

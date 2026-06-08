@@ -1,8 +1,13 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { buildPreview, loadWorkflow, parseWorkflowSpec, resolveVisibility } from "./cwf-run-preview.mjs";
 import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
 import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
+import { buildReturnEnvelope } from "./cwf-return-envelope.mjs";
+import { evaluateSafeWriteRequest, evaluateVerifierGate } from "./cwf-safe-write.mjs";
+import { generateWorkflowFromObjective, renderGeneratedWorkflow, scanUnsafeWorkflowText } from "./cwf-generate-workflow.mjs";
+import { BUILT_IN_CATALOG, discoverProjectWorkflows, validateCatalogCoverage } from "./cwf-catalog.mjs";
 
 const root = new URL("..", import.meta.url);
 
@@ -17,6 +22,10 @@ const requiredFiles = [
   "scripts/cwf-run-preview.mjs",
   "scripts/cwf-run-plan.mjs",
   "scripts/cwf-run-state.mjs",
+  "scripts/cwf-return-envelope.mjs",
+  "scripts/cwf-safe-write.mjs",
+  "scripts/cwf-generate-workflow.mjs",
+  "scripts/cwf-catalog.mjs",
   "workflows/classify-and-act.workflow.js",
   "workflows/adversarial-verify.workflow.js",
   "workflows/pipeline.workflow.js",
@@ -113,6 +122,10 @@ for (const file of workflows) {
 checkPreviewAndVisibilityRules();
 await checkRunPlanRules();
 checkRunStateRules();
+checkReturnEnvelopeRules();
+checkDynamicGenerationRules();
+await checkCatalogRules(workflows);
+checkSafeWriteAndVerifierRules();
 
 console.log(`core check passed: ${workflows.length} workflow templates`);
 
@@ -253,7 +266,7 @@ function checkPreviewAndVisibilityRules() {
   );
   assertPreviewRequired(
     "budget",
-    buildPreview({ ...smallWorkflow, budget: { max_tokens: 100001 } }, { runImmediately: true }),
+    buildPreview({ ...smallWorkflow, budget: { max_tokens: 100001, stop_when: "Done or blocked." } }, { runImmediately: true }),
     "budget",
   );
   assertPreviewRequired(
@@ -310,6 +323,7 @@ function checkPreviewAndVisibilityRules() {
   );
 
   assertRejectsExecutableWorkflow();
+  assertBudgetPolicy();
 }
 
 function assertPreviewRequired(label, preview, reasonNeedle) {
@@ -335,6 +349,35 @@ function assertRejectsExecutableWorkflow() {
     return;
   }
   throw new Error("workflow parser must reject executable tokens");
+}
+
+function assertBudgetPolicy() {
+  const expensive = buildPreview(
+    {
+      name: "expensive",
+      pattern: "fan-out-and-synthesize",
+      budget: { max_tokens: 50001, stop_when: "Done or blocked." },
+      phases: [{ id: "fanout", agents: [{ id: "reader", type: "explorer", visibility: "inline", prompt: "Read." }] }],
+      quarantine_rules: [],
+      stop_conditions: ["Done."],
+    },
+    { runImmediately: true },
+  );
+  if (!expensive.budget_policy.warning.includes("expensive run")) {
+    throw new Error("expensive run preview must warn before workers run");
+  }
+  if (expensive.budget_policy.token_accounting !== "estimated") {
+    throw new Error("local token accounting must be labeled estimated");
+  }
+
+  assertThrows(
+    () => buildPreview({ name: "unbounded", pattern: "fan-out-and-synthesize", phases: [] }, { runImmediately: true }),
+    "missing budget should fail closed",
+  );
+  assertThrows(
+    () => buildPreview({ name: "no-stop", pattern: "fan-out-and-synthesize", budget: { max_tokens: 1000 }, phases: [] }, { runImmediately: true }),
+    "missing stop rule should fail closed",
+  );
 }
 
 async function checkRunPlanRules() {
@@ -413,8 +456,214 @@ function checkRunStateRules() {
   refreshResume(skippedBoundary);
   if (
     skippedBoundary.resume.last_completed_phase_id !== "" ||
-    skippedBoundary.resume.next_phase_id !== "scope"
+    skippedBoundary.resume.next_phase_id !== "scope" ||
+    skippedBoundary.resume.action !== "safely_restarted"
   ) {
     throw new Error("resume checkpoint must use the last contiguous completed phase boundary");
   }
+
+  const blockedBoundary = {
+    status: "running",
+    phases: [
+      { id: "scope", index: 0, status: "completed" },
+      { id: "fanout", index: 1, status: "failed" },
+      { id: "synthesize", index: 2, status: "completed" },
+    ],
+    workers: [],
+    verifier_evaluations: [],
+  };
+  refreshResume(blockedBoundary);
+  if (
+    blockedBoundary.resume.last_completed_phase_id !== "scope" ||
+    blockedBoundary.resume.next_phase_id !== "fanout" ||
+    blockedBoundary.resume.action !== "blocked" ||
+    deriveRunStatus(blockedBoundary) !== "blocked"
+  ) {
+    throw new Error("failed phase must block resume past the last safe boundary");
+  }
+
+  for (const statusName of ["completed", "blocked", "failed", "skipped", "missing", "partial"]) {
+    const fixture = {
+      status: "running",
+      phases: [{ id: "scope", index: 0, status: statusName }],
+      workers: [],
+      verifier_evaluations: [],
+    };
+    refreshResume(fixture);
+    if (!fixture.resume?.action) {
+      throw new Error(`resume fixture missing action for ${statusName}`);
+    }
+  }
+}
+
+function checkReturnEnvelopeRules() {
+  const state = {
+    run_id: "check-envelope",
+    workflow_name: "repo-audit",
+    template_path: "workflows/repo-audit.workflow.js",
+    status: "completed",
+    updated_at: "2026-06-08T00:00:00.000Z",
+    verifier_evaluations: [{ status: "advisory", summary: "follow-up optional" }],
+    deferred_items: [{ id: "desktop-thread-execution-preflight", status: "requires_approval" }],
+  };
+  const envelope = buildReturnEnvelope(state);
+  for (const key of [
+    "run_id",
+    "workflow",
+    "final_destination",
+    "return_mode",
+    "coordinator_synthesis",
+    "platform_callback",
+    "final_summary_path",
+    "evidence_path",
+    "verifier_status",
+    "deferred_items",
+    "completion_status",
+  ]) {
+    if (envelope[key] == null) throw new Error(`return envelope missing ${key}`);
+  }
+  if (envelope.return_mode !== "coordinator_synthesis") {
+    throw new Error("return envelope must default to coordinator synthesis");
+  }
+  if (envelope.platform_callback.status !== "deferred") {
+    throw new Error("return envelope must defer platform callback unless proven");
+  }
+  if (!envelope.deferred_items.some((item) => item.status === "requires_approval")) {
+    throw new Error("return envelope must preserve deferred approval items");
+  }
+}
+
+function checkDynamicGenerationRules() {
+  const audit = generateWorkflowFromObjective("audit this repo for release risk", { family: "repo-audit" });
+  const auditText = renderGeneratedWorkflow(audit);
+  const auditParsed = parseWorkflowSpec(auditText, "generated audit");
+  for (const key of ["scope", "exclusions", "phases", "visibility_policy", "quarantine_rules", "budget", "stop_conditions"]) {
+    if (auditParsed[key] == null) throw new Error(`generated repo-audit missing ${key}`);
+  }
+
+  const safeFix = generateWorkflowFromObjective("fix a bounded bug", {
+    family: "safe-fix-loop",
+    allowed_paths: ["scripts"],
+  });
+  const safeFixText = renderGeneratedWorkflow(safeFix);
+  const safeFixParsed = parseWorkflowSpec(safeFixText, "generated safe-fix");
+  if (!JSON.stringify(safeFixParsed).includes("write_scope")) {
+    throw new Error("generated safe-fix must include write scope");
+  }
+  if (!JSON.stringify(safeFixParsed).includes("approve-write")) {
+    throw new Error("generated safe-fix must include approval gate");
+  }
+
+  for (const unsafe of ["import x", "require('fs')", "process.env", "child_process", "fs.readFile", "fetch('x')", "eval('x')", "Function('x')", "globalThis"]) {
+    assertThrows(() => scanUnsafeWorkflowText(unsafe, "unsafe fixture"), `unsafe scanner accepted ${unsafe}`);
+  }
+}
+
+async function checkCatalogRules(workflows) {
+  const coverage = validateCatalogCoverage(workflows);
+  if (!coverage.ok) {
+    throw new Error(`catalog coverage mismatch missing=${coverage.missing.join(",")} extra=${coverage.extra.join(",")}`);
+  }
+  for (const entry of BUILT_IN_CATALOG) {
+    for (const key of ["purpose", "when_to_use", "inputs", "visibility_default", "write_policy", "verifier_policy", "evidence_level"]) {
+      if (!entry[key]) throw new Error(`catalog entry ${entry.file} missing ${key}`);
+    }
+  }
+
+  const projectRoot = await mkdtemp(join(tmpdir(), "cwf-catalog-"));
+  try {
+    await mkdir(join(projectRoot, ".cwf/workflows"), { recursive: true });
+    await writeFile(
+      join(projectRoot, ".cwf/workflows/custom.workflow.js"),
+      `export default ${JSON.stringify({
+        name: "custom",
+        pattern: "fan-out-and-synthesize",
+        budget: { max_tokens: 1000, stop_when: "done" },
+        phases: [{ id: "read", agents: [] }],
+        stop_conditions: ["done"],
+        quarantine_rules: ["read-only"],
+        visibility_policy: ["inline"],
+      }, null, 2)};\n`,
+      "utf8",
+    );
+    const discovered = await discoverProjectWorkflows(projectRoot);
+    if (discovered.length !== 1 || discovered[0].name !== "custom") {
+      throw new Error("project-local workflow discovery failed");
+    }
+    await writeFile(
+      join(projectRoot, ".cwf/workflows/bad.workflow.js"),
+      'export default { name: "bad", pattern: "bad" };\n',
+      "utf8",
+    );
+    await assertRejectsAsync(() => discoverProjectWorkflows(projectRoot), "invalid custom workflow must fail closed");
+  } finally {
+    await rm(projectRoot, { recursive: true, force: true });
+  }
+}
+
+function checkSafeWriteAndVerifierRules() {
+  const patch = [
+    "diff --git a/docs/example.md b/docs/example.md",
+    "--- a/docs/example.md",
+    "+++ b/docs/example.md",
+    "@@",
+    "-old",
+    "+new",
+    "",
+  ].join("\n");
+  const positive = evaluateSafeWriteRequest({
+    prior_gate: "previewed",
+    approval: "approve-write",
+    allowed_paths: ["docs"],
+    forbidden_paths: [".env", "package.json"],
+    apply_check: "passed",
+    verification: { status: "pass", command: "npm run check" },
+    patch,
+  });
+  if (positive.status !== "pass" || positive.changed_files[0] !== "docs/example.md" || !positive.rollback_command) {
+    throw new Error("positive safe-write fixture did not pass with rollback evidence");
+  }
+
+  const negativeCases = [
+    ["no prior gate", { prior_gate: "", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch }],
+    ["forbidden path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], forbidden_paths: ["docs/example.md"], apply_check: "passed", verification: { status: "pass" }, patch }],
+    ["out-of-scope path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["scripts"], apply_check: "passed", verification: { status: "pass" }, patch }],
+    ["conflict patch", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch: `${patch}<<<<<<< HEAD\n` }],
+    ["verification failure", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "fail" }, patch }],
+  ];
+  for (const [label, request] of negativeCases) {
+    const result = evaluateSafeWriteRequest(request);
+    if (result.status !== "refused") throw new Error(`negative safe-write fixture passed unexpectedly: ${label}`);
+  }
+
+  const blocked = evaluateVerifierGate([{ status: "blocked", summary: "missing evidence" }]);
+  if (blocked.final_pass) throw new Error("blocked verifier must prevent final pass");
+  const needsWaiver = evaluateVerifierGate([{ status: "needs-waiver", summary: "risk accepted?" }]);
+  if (needsWaiver.final_pass || needsWaiver.status !== "needs-waiver") {
+    throw new Error("unwaived verifier finding must require waiver");
+  }
+  const waived = evaluateVerifierGate([{ status: "needs-waiver", summary: "known risk", waiver: { text: "accepted for fixture", owner: "Ender" } }]);
+  if (!waived.final_pass) throw new Error("waived verifier finding with text and owner should allow pass");
+  const advisory = evaluateVerifierGate([{ status: "advisory", summary: "optional follow-up" }]);
+  if (!advisory.final_pass || advisory.advisories.length !== 1) {
+    throw new Error("advisory verifier finding should be visible and non-blocking");
+  }
+}
+
+function assertThrows(fn, label) {
+  try {
+    fn();
+  } catch {
+    return;
+  }
+  throw new Error(label);
+}
+
+async function assertRejectsAsync(fn, label) {
+  try {
+    await fn();
+  } catch {
+    return;
+  }
+  throw new Error(label);
 }

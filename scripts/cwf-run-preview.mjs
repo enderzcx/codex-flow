@@ -35,6 +35,7 @@ export function parseWorkflowSpec(text, label = "workflow") {
 }
 
 export function buildPreview(workflow, options = {}) {
+  const budgetPolicy = evaluateBudgetPolicy(workflow, options.label ?? workflow.name ?? "workflow");
   const phases = Array.isArray(workflow.phases) ? workflow.phases : [];
   const agents = collectAgents(phases);
   const resolvedAgents = agents.map((agent) => {
@@ -52,6 +53,7 @@ export function buildPreview(workflow, options = {}) {
     name: workflow.name,
     pattern: workflow.pattern,
     budget: workflow.budget ?? {},
+    budget_policy: budgetPolicy,
     phases: phases.map((phase) => ({
       id: phase.id,
       label: phase.label,
@@ -75,8 +77,13 @@ export function renderPreviewMarkdown(preview, sourcePath) {
     `- Pattern: ${preview.pattern}`,
     `- Budget: ${preview.budget.max_tokens ?? "unknown"} tokens`,
     `- Stop rule: ${preview.budget.stop_when ?? "not specified"}`,
+    `- Token accounting: ${preview.budget_policy.token_accounting}`,
     `- Preview skip eligible: ${preview.preview_skip.eligible ? "yes" : "no"}`,
   ];
+
+  if (preview.budget_policy.warning) {
+    lines.push(`- Budget warning: ${preview.budget_policy.warning}`);
+  }
 
   if (!preview.preview_skip.eligible) {
     lines.push(`- Preview required because: ${preview.preview_skip.reasons.join("; ")}`);
@@ -141,6 +148,34 @@ export function evaluatePreviewSkip(workflow, phases, agents, options = {}) {
       no_desktop_thread: true,
       no_privileged_raw_content_path: true,
     },
+  };
+}
+
+export function evaluateBudgetPolicy(workflow, label = "workflow") {
+  const budget = workflow.budget;
+  if (!budget || typeof budget !== "object") {
+    throw new Error(`${label}: missing budget; workflow refuses to run unbounded`);
+  }
+  const maxTokens = Number(budget.max_tokens);
+  if (!Number.isFinite(maxTokens) || maxTokens <= 0) {
+    throw new Error(`${label}: missing budget.max_tokens; workflow refuses to run unbounded`);
+  }
+  if (typeof budget.stop_when !== "string" || budget.stop_when.trim().length === 0) {
+    throw new Error(`${label}: missing budget.stop_when; workflow refuses to run without a stop rule`);
+  }
+  const timeoutMs = budget.timeout_ms == null ? null : Number(budget.timeout_ms);
+  if (budget.timeout_ms != null && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+    throw new Error(`${label}: invalid budget.timeout_ms`);
+  }
+  return {
+    status: "bounded",
+    max_tokens: maxTokens,
+    timeout_ms: timeoutMs,
+    stop_when: budget.stop_when,
+    token_accounting: "estimated",
+    warning: maxTokens > 50000
+      ? `expensive run: max_tokens ${maxTokens} exceeds 50000; preview required before workers run`
+      : "",
   };
 }
 
@@ -218,8 +253,11 @@ function rejectExecutableTokens(body, label) {
     /\bimport\b/,
     /\brequire\s*\(/,
     /\bprocess\./,
+    /\bchild_process\b/,
+    /\bfs\b/,
     /\bfetch\s*\(/,
     /\bfunction\b/,
+    /\bFunction\s*\(/,
     /=>/,
     /\bwhile\s*\(/,
     /\bfor\s*\(/,

@@ -51,10 +51,11 @@ export default {
     },
   ],
   write_rules: [
-    "Use disjoint write scopes when spawning more than one worker.",
+    "Preview write scope before any real write.",
+    "Require explicit approve-write before applying a patch.",
+    "Use bounded patch flow: path policy, apply check, verification, changed-file list, and rollback command.",
     "Do not touch credentials, payments, databases, deploys, permissions, or irreversible external systems without explicit approval.",
-    "Workers inherit current Codex permissions; do not invent another permission model.",
-    "Use desktop-thread visibility for long write workers or work the user may need to inspect separately.",
+    "Desktop-thread workers may propose patches, but the coordinator owns the final apply gate.",
   ],
   stop_conditions: [
     "Verification passes.",

@@ -3,9 +3,11 @@ import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { loadWorkflow, renderPreviewMarkdown } from "./cwf-run-preview.mjs";
 import { buildRunPlanFromWorkflow, renderRunPlanMarkdown } from "./cwf-run-plan.mjs";
+import { buildReturnEnvelope, writeReturnEnvelope } from "./cwf-return-envelope.mjs";
+import { evaluateVerifierGate } from "./cwf-safe-write.mjs";
 
 const DEFAULT_STATE_DIR = ".cwf/runs";
-const STATUSES = new Set(["planned", "running", "completed", "blocked", "cancelled"]);
+const STATUSES = new Set(["planned", "running", "partial", "completed", "blocked", "failed", "skipped", "missing", "cancelled"]);
 
 async function initRun(args) {
   const options = parseOptions(args, {
@@ -48,10 +50,19 @@ async function initRun(args) {
       desktop_thread_id: "",
     })),
     verification_evidence: [],
+    verifier_evaluations: [],
+    deferred_items: [
+      {
+        id: "platform-automatic-callback",
+        status: "deferred",
+        reason: "Coordinator synthesis is proven locally; platform automatic callback is not claimed without real smoke.",
+      },
+    ],
     cancel: null,
     resume: {
       last_completed_phase_id: "",
       next_phase_id: preview.phases[0]?.id ?? "",
+      action: "safely_restarted",
       reason: "No phase completed yet; smallest safe checkpoint is Phase 1.",
     },
     preview_skip: preview.preview_skip,
@@ -62,6 +73,7 @@ async function initRun(args) {
   await writeFile(join(runDir, "preview.md"), renderPreviewMarkdown(preview, options.workflow), "utf8");
   await writeFile(join(runDir, "run-plan.md"), renderRunPlanMarkdown(runPlan), "utf8");
   await writeFile(join(runDir, "final.md"), "", "utf8");
+  await writeReturnEnvelope(runDir, state);
   console.log(JSON.stringify({ run_id: state.run_id, state: join(runDir, "state.json") }, null, 2));
 }
 
@@ -119,18 +131,27 @@ async function statusRun(args) {
     optional: [],
   });
   const { state } = await readState(options);
+  refreshResume(state);
   const counts = countStatuses(state.workers);
+  const envelope = buildReturnEnvelope(state);
   console.log(
     JSON.stringify(
       {
         run_id: state.run_id,
         status: state.status,
+        conclusion: humanConclusion(state),
         current_phase: currentPhase(state)?.id ?? "",
         workers: counts,
         elapsed_time_ms: elapsedMs(state),
         budget_pressure: budgetPressure(state),
         current_blocker: currentBlocker(state),
         last_verified_evidence: lastEvidence(state),
+        next_action: nextAction(state),
+        final_destination: envelope.final_destination,
+        return_mode: envelope.return_mode,
+        final_summary_path: envelope.final_summary_path,
+        evidence_path: envelope.evidence_path,
+        verifier_status: envelope.verifier_status,
         resume: state.resume,
       },
       null,
@@ -172,6 +193,7 @@ function safeRunDir(stateDir, runId) {
 async function saveState(path, state) {
   state.updated_at = new Date().toISOString();
   await writeJson(path, state);
+  await writeReturnEnvelope(dirname(path), state);
   console.log(JSON.stringify({ run_id: state.run_id, status: state.status, state: path }, null, 2));
 }
 
@@ -181,6 +203,17 @@ async function writeJson(path, value) {
 }
 
 export function refreshResume(state) {
+  const firstUnsafe = state.phases.find((phase) => ["blocked", "failed", "missing"].includes(phase.status));
+  if (firstUnsafe) {
+    state.resume = {
+      last_completed_phase_id: lastContiguousCompleted(state)?.id ?? "",
+      next_phase_id: firstUnsafe.id,
+      action: "blocked",
+      reason: `Cannot resume past ${firstUnsafe.id}; phase status is ${firstUnsafe.status}.`,
+    };
+    return;
+  }
+
   let completed = null;
   for (const phase of state.phases) {
     if (phase.status !== "completed") break;
@@ -191,6 +224,7 @@ export function refreshResume(state) {
     state.resume = {
       last_completed_phase_id: "",
       next_phase_id: state.phases[0]?.id ?? "",
+      action: "safely_restarted",
       reason: "No phase completed yet; smallest safe checkpoint is Phase 1.",
     };
     return;
@@ -200,6 +234,7 @@ export function refreshResume(state) {
   state.resume = {
     last_completed_phase_id: completed.id,
     next_phase_id: next?.id ?? "",
+    action: next ? "resumed" : "completed",
     reason: next
       ? `Resume from phase after completed boundary ${completed.id}.`
       : "All recorded phases are complete.",
@@ -208,8 +243,12 @@ export function refreshResume(state) {
 
 export function deriveRunStatus(state) {
   if (state.status === "cancelled") return "cancelled";
+  const verifier = evaluateVerifierGate(state.verifier_evaluations ?? []);
+  if (verifier.status === "blocked" || verifier.status === "needs-waiver") return "blocked";
   if (state.workers.some((worker) => worker.status === "blocked")) return "blocked";
   if (state.phases.some((phase) => phase.status === "blocked")) return "blocked";
+  if (state.phases.some((phase) => ["failed", "missing"].includes(phase.status))) return "blocked";
+  if (state.workers.some((worker) => ["failed", "missing"].includes(worker.status))) return "blocked";
   if (
     state.phases.every((phase) => phase.status === "completed") &&
     state.workers.every((worker) => worker.status === "completed")
@@ -217,8 +256,8 @@ export function deriveRunStatus(state) {
     return "completed";
   }
   if (
-    state.phases.some((phase) => phase.status === "running" || phase.status === "completed") ||
-    state.workers.some((worker) => worker.status === "running" || worker.status === "completed")
+    state.phases.some((phase) => ["running", "partial", "completed", "skipped"].includes(phase.status)) ||
+    state.workers.some((worker) => ["running", "partial", "completed", "skipped"].includes(worker.status))
   ) {
     return "running";
   }
@@ -281,11 +320,16 @@ function renderFinal(state) {
   ].filter(Boolean);
 
   return [
+    `结论：${humanConclusion(state)}`,
+    "",
     `# CWF Run ${state.run_id}`,
     "",
     `Status: ${state.status}`,
     `Workflow: ${state.workflow_name}`,
     `Cancelled: ${state.cancel?.reason ?? "no"}`,
+    `Return mode: ${buildReturnEnvelope(state).return_mode}`,
+    `Verifier: ${buildReturnEnvelope(state).verifier_status}`,
+    `Next action: ${nextAction(state)}`,
     "",
     "## Confirmed Evidence",
     ...(completedEvidence.length > 0 ? completedEvidence.map((item) => `- ${item}`) : ["- none"]),
@@ -294,6 +338,38 @@ function renderFinal(state) {
     ...state.phases.filter((phase) => phase.status !== "completed").map((phase) => `- ${phase.id}: ${phase.status}`),
     "",
   ].join("\n");
+}
+
+function lastContiguousCompleted(state) {
+  let completed = null;
+  for (const phase of state.phases) {
+    if (phase.status !== "completed") break;
+    completed = phase;
+  }
+  return completed;
+}
+
+function humanConclusion(state) {
+  const workflow = state.workflow_name ?? "workflow";
+  if (state.status === "completed") {
+    return `这次 CWF 已完成 ${workflow}，最终结果通过 coordinator synthesis 返回当前对话，证据在 .cwf/runs/${state.run_id}/。`;
+  }
+  if (state.status === "blocked") {
+    return `这次 CWF 在 ${workflow} 中被阻塞，不能声明 PASS；需要先处理 blocker 或补 waiver/evidence。`;
+  }
+  if (state.status === "cancelled") {
+    return `这次 CWF 已取消，保留已有证据供后续恢复或重跑。`;
+  }
+  return `这次 CWF 正在 ${workflow} 中推进，当前状态是 ${state.status}，下一步是 ${nextAction(state)}。`;
+}
+
+function nextAction(state) {
+  const blocked = currentBlocker(state);
+  if (blocked) return `resolve blocker: ${blocked}`;
+  const phase = currentPhase(state);
+  if (phase) return `continue phase ${phase.id}`;
+  if (state.status === "completed") return "review final evidence";
+  return "initialize or refresh run state";
 }
 
 function assertStatus(status) {

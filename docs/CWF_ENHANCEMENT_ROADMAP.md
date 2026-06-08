@@ -6,11 +6,11 @@ scope_name: cwf-post-mvp-enhancements
 coverage: Complete post-MVP enhancement roadmap for making CWF a stronger Codex-native dynamic workflow experience after the current MVP evidence state.
 not_complete_for: Hosted scheduler, marketplace operation, non-Codex model routing, unrestricted JavaScript execution, production deployment, paid-user release, or full Claude platform parity that Codex does not expose.
 verification_level: local
-real_smoke_status: mvp_desktop_thread_passed_e2_execution_preflight_pending_auto_callback_deferred_safe_write_real_smoke_required
+real_smoke_status: enhancement_local_helpers_fixture_pass_safe_write_disposable_real_smoke_pass_desktop_deferred_with_fixture_only_auto_callback_deferred
 review_status: reviewed_with_findings_applied
 reviewer: reasonix-v4pro
-review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-enhancement-compact-review.jsonl
-review_notes: Reasonix final compact review returned GO; earlier findings on real_smoke_status ambiguity, unsafe-token scanner detail, Desktop-thread approval deferral, non-git apply-check ambiguity, and E5 scope breadth were already applied.
+review_command: reasonix run -m deepseek-v4-pro:cloud --effort high --transcript /tmp/cwf-full-implementation-review-2.jsonl
+review_notes: Reasonix full implementation second pass returned GO after E8 expensive-run warning and unbounded-workflow refusal fixtures were implemented, and after E2 was labeled deferred_with_fixture_only.
 review_owner: Ender
 review_due: 2026-06-09
 ---
@@ -20,6 +20,13 @@ review_due: 2026-06-09
 ## Alignment Snapshot
 
 This planning pass helps Ender and future Codex goal sessions turn CWF from a proven MVP into a smoother Codex-native dynamic workflow product by producing a roadmap, PRD, SPEC, acceptance matrix, phase plan, and staged goal prompts, using the current `codex-workflows` repo, MVP evidence, and native Codex worker/thread constraints as source of truth, while avoiding a return to the removed external runtime, unbounded agent swarm, or platform features Codex does not expose yet.
+
+Implementation update:
+
+- E1/E3/E5/E6/E7/E8/E9 now have local helper and fixture coverage in `scripts/` plus `npm run check`.
+- E4 has an approval-gated safe-write evaluator, positive/negative fixtures, and one disposable `/tmp` git-repo real-smoke with `git apply --check`, apply, verification, changed-file, and rollback evidence.
+- E2 enhanced execution preflight is `deferred_with_fixture_only` until Ender approves a new visible Desktop-thread smoke. The existing MVP Desktop-thread smoke proves one visible thread and manual coordinator synthesis, not platform automatic callback.
+- E10 has local release-readiness evidence in `docs/CWF_RELEASE_READINESS.md`; publish/tag/deploy remain out of scope.
 
 Building:
 

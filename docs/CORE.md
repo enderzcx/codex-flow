@@ -18,7 +18,7 @@ then returns the result to the same conversation.
 3. Bounded first: every serious workflow has scope, budget, verifier, quarantine, and stop rules.
 4. JS as harness: JavaScript describes orchestration; Node does not execute the workflow.
 5. Same conversation: the main Codex session synthesizes the final answer.
-6. Write by inheritance: write workers inherit current Codex sandbox and approval policy.
+6. Write by gated patch: write workers use explicit approval, bounded paths, apply checks, verification, and rollback evidence before real writes.
 7. Selective visibility: only important workers become Desktop sidebar threads.
 8. Budgeted execution: reusable workflows state a token budget and stop rule.
 9. Quarantine untrusted input: readers of raw external content stay read-only.
@@ -84,11 +84,16 @@ Run experience is part of the core contract:
 - show phase, worker, elapsed-time, budget, and blocker status;
 - cancel without claiming completion;
 - resume from the last safe checkpoint when state is available;
-- always return final synthesis to the originating conversation.
+- always return final synthesis to the originating conversation;
+- mirror return status in `.cwf/runs/RUN_ID/return-envelope.json`.
+
+The proven return path is coordinator synthesis in the originating conversation. Platform automatic callback is not claimed until a future Codex platform API and real smoke prove it.
 
 ## Budget
 
 Every saved workflow should include a visible `budget` with a token cap and stop rule. Dynamic workflows can cost far more than a normal Codex turn; budget is part of the contract, not an afterthought.
+
+If exact token accounting is unavailable in the current host, evidence must say `estimated` or `not measurable` instead of pretending exact enforcement.
 
 ## Quarantine
 

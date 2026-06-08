@@ -19,6 +19,8 @@ review_due: 2026-06-09
 
 Use these goals one phase at a time. They are staged so Codex can finish, verify, and stop cleanly instead of turning the roadmap into an open-ended backlog.
 
+If you want one all-in goal that implements every phase, use [CWF_FULL_IMPLEMENTATION_GOAL.md](CWF_FULL_IMPLEMENTATION_GOAL.md). That file explicitly forbids docs-only completion.
+
 ## Goal E1: Return Envelope And Same-Conversation Result Contract
 
 ```text

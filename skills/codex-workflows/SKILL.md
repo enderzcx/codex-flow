@@ -144,6 +144,8 @@ Cancel means stop spawning new workers and summarize partial evidence. Resume me
 
 Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, `.cwf/runs/RUN_ID/run-plan.md`, and `.cwf/runs/RUN_ID/final.md`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
 
+Each initialized run also writes `.cwf/runs/RUN_ID/return-envelope.json`. The envelope records final destination, return mode, final summary path, evidence path, verifier status, deferred items, and completion status. Treat `coordinator_synthesis` as the proven default return mode. Do not claim platform automatic callback unless a future real smoke proves it.
+
 ## Budget
 
 For non-trivial saved workflows, define a budget before spawning agents:
@@ -172,10 +174,16 @@ When a workflow works repeatedly, save it as a skill template. Treat saved workf
 
 ## Write Work
 
-Writable workflows are allowed in native mode because Codex subagents inherit the current session permission model.
+Writable workflows use approval-gated bounded patch flow. Desktop-thread workers may diagnose or propose patches, but they must not write directly outside the coordinator's approved path.
 
 For write workers:
 
+- preview write scope before any real write;
+- require explicit `approve-write` or equivalent user approval;
+- check changed paths against allowed and forbidden paths;
+- run `git apply --check` in a temporary git repo, or `patch --dry-run` plus `diff --check` for a non-git equivalent;
+- run declared verification after apply;
+- report changed files and rollback command;
 - assign exact file/module ownership;
 - prefer `visibility: "desktop-thread"` when the write task is long or needs user inspection;
 - require a final changed-file list;

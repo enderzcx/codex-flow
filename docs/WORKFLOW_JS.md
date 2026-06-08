@@ -51,7 +51,10 @@ The helper scripts parse workflow specs as plain data. They reject executable to
 ```bash
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js --format json
+node scripts/cwf-generate-workflow.mjs "audit this repo for release risk"
 ```
+
+The generated workflow helper currently supports only two fixture families: repo-audit style read-only workflows and safe-fix-loop style bounded write workflows. Broader general-purpose generation is future scope. Generated content is scanned for unsafe execution tokens such as imports, `require`, `process`, `child_process`, `fs`, `fetch`, `eval`, `Function`, and hidden execution patterns.
 
 ## Visibility
 
@@ -124,10 +127,18 @@ The native runner adapter uses local state only:
 ```text
 .cwf/runs/RUN_ID/state.json
 .cwf/runs/RUN_ID/preview.md
+.cwf/runs/RUN_ID/run-plan.md
+.cwf/runs/RUN_ID/return-envelope.json
 .cwf/runs/RUN_ID/final.md
 ```
 
 `.cwf/` is ignored and must not be packaged. State is enough for compact status, cancel summaries, and resume checkpoint selection; it is not a product database.
+
+## Catalog And User Workflows
+
+`scripts/cwf-catalog.mjs` exposes a small built-in catalog covering every shipped workflow template with purpose, when to use, inputs, visibility default, write policy, verifier policy, and evidence level.
+
+Project-local custom workflows may live under `.cwf/workflows/*.workflow.js` in the target project. Discovery validates them as data-only workflow specs and fails closed when required fields, budget, or stop rules are missing. This is project-local reuse, not a YAML registry or hosted marketplace.
 
 ## Save As Skill
 
