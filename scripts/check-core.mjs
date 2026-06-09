@@ -32,6 +32,10 @@ const requiredFiles = [
   "docs/RUN_EXPERIENCE.md",
   "docs/WORKFLOW_JS.md",
   "skills/codex-workflows/SKILL.md",
+  "skills/codex-workflows/evals/trigger_cases.json",
+  "skills/codex-workflows/references/routing.md",
+  "skills/codex-workflows/scripts/check_skill_install.py",
+  "skills/codex-workflows/templates/run-plan.md",
   "scripts/cwf-run-preview.mjs",
   "scripts/cwf-run-plan.mjs",
   "scripts/cwf-run-state.mjs",
@@ -73,6 +77,9 @@ const fullNativeRuntimeGoal = await readText("docs/goals/CWF_FULL_NATIVE_RUNTIME
 const realDynamicEvidence = await readText("docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md");
 const fullNativeFixtureEvidence = await readText("docs/evidence/CWF_FULL_NATIVE_RUNTIME_FIXTURES_20260608.md");
 const fullNativeRealEvidence = await readText("docs/evidence/CWF_FULL_NATIVE_RUNTIME_REAL_SMOKE_20260609.md");
+const skillRouting = await readText("skills/codex-workflows/references/routing.md");
+const skillRunPlanTemplate = await readText("skills/codex-workflows/templates/run-plan.md");
+const skillTriggerCases = JSON.parse(await readText("skills/codex-workflows/evals/trigger_cases.json"));
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
@@ -86,6 +93,9 @@ mustContain(readme, "SDK background workers");
 mustContain(readme, "cwf-start.mjs");
 mustContain(readme, "cwf-worker-sdk.mjs");
 mustContain(readme, "cwf-worker-desktop-thread.mjs");
+mustContain(readme, "Sunny-style library skill package");
+mustContain(readme, "check_skill_install.py --check-install");
+mustContain(readme, "evals/trigger_cases.json");
 mustContain(zh, "Codex 原生、有边界的动态工作流");
 mustContain(zh, "有边界的动态工作流");
 mustContain(zh, "左侧线程");
@@ -93,6 +103,8 @@ mustContain(zh, "background+heartbeat");
 mustContain(zh, "SDK 后台 worker");
 mustContain(zh, "cwf-start.mjs");
 mustContain(zh, "cwf-worker-sdk.mjs");
+mustContain(zh, "Sunny-style `library` skill");
+mustContain(zh, "check_skill_install.py --check-install");
 mustContain(skill, "bounded dynamic workflow");
 mustContain(skill, "bounded run plan");
 mustContain(skill, "cwf-run-plan.mjs");
@@ -108,6 +120,20 @@ mustContain(skill, "heartbeat_synthesis");
 mustContain(skill, "cwf-start.mjs");
 mustContain(skill, "cwf-worker-sdk.mjs");
 mustContain(skill, "cwf-worker-desktop-thread.mjs");
+mustContain(skill, "sunny_skill_type: library");
+mustContain(skill, "Output Contract");
+mustContain(skill, "references/routing.md");
+mustContain(skillRouting, "goal-writer");
+mustContain(skillRouting, "delivery-planner");
+mustContain(skillRouting, "project-status-audit");
+mustContain(skillRouting, "codex-thread-orchestrator");
+mustContain(skillRunPlanTemplate, "## Objective");
+mustContain(skillRunPlanTemplate, "## Resume Checkpoint");
+for (const key of ["should_trigger", "should_not_trigger", "near_neighbors"]) {
+  if (!Array.isArray(skillTriggerCases[key]) || skillTriggerCases[key].length === 0) {
+    throw new Error(`skills/codex-workflows/evals/trigger_cases.json missing ${key}`);
+  }
+}
 mustContain(asyncRuntime, "CWF Async Runtime Contract");
 mustContain(asyncRuntime, "background+heartbeat");
 mustContain(asyncRuntime, "Desktop-thread workers are the visibility path");

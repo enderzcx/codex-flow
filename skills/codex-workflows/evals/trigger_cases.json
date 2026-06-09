@@ -1,0 +1,67 @@
+{
+  "should_trigger": [
+    {
+      "text": "用 CWF 跑一次 repo audit，多个 worker 分别看安全、正确性和 release 风险。",
+      "family": "repo_audit_workflow"
+    },
+    {
+      "text": "Create a workflow.js harness for an adversarial verification loop.",
+      "family": "workflow_harness"
+    },
+    {
+      "text": "这个迁移任务路径太多了，帮我用 Codex 原生 subagents 拆开跑，最后回到当前会话总结。",
+      "family": "native_subagent_orchestration_cn"
+    },
+    {
+      "text": "Run a safe-fix-loop workflow with preview, approval, verifier, and evidence.",
+      "family": "safe_fix_loop"
+    },
+    {
+      "text": "让一个重要 worker 出现在 Codex Desktop 左侧线程，其他 worker inline，最后 CWF 收口。",
+      "family": "desktop_thread_worker"
+    }
+  ],
+  "should_not_trigger": [
+    {
+      "text": "直接修这个 typo。",
+      "family": "trivial_edit"
+    },
+    {
+      "text": "给我写一个目标模式提示词。",
+      "family": "goal_prompt"
+    },
+    {
+      "text": "把 1.8 之后的 PRD、SPEC 和验收标准写好。",
+      "family": "delivery_docs"
+    },
+    {
+      "text": "现在项目进度怎么样，哪些完成了哪些没完成？",
+      "family": "project_status"
+    },
+    {
+      "text": "帮我写一篇介绍动态工作流的 X 文章。",
+      "family": "prose_writing"
+    },
+    {
+      "text": "提醒我明天再检查这个 workflow。",
+      "family": "automation"
+    }
+  ],
+  "near_neighbors": [
+    {
+      "text": "写一个完整 plan 和 goal，等会我要让 Codex 目标模式跑。",
+      "expected_route": "delivery-planner then goal-writer",
+      "reason": "This asks for planning artifacts, not a CWF run or workflow.js harness."
+    },
+    {
+      "text": "把这个任务拆成几个 Codex Desktop 左侧线程分别做。",
+      "expected_route": "codex-thread-orchestrator unless a CWF run plan is requested",
+      "reason": "General thread coordination is separate from bounded dynamic workflow execution."
+    },
+    {
+      "text": "审一下这个 diff 有什么 bug。",
+      "expected_route": "code review skill unless the user asks for adversarial workflow fan-out",
+      "reason": "Single diff review should stay lightweight."
+    }
+  ]
+}

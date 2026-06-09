@@ -107,6 +107,16 @@ CWF 跑复杂任务前应该先展示 harness preview：会用什么模式、分
 
 取消时要停止继续派工，并汇总已知结果。恢复时从上次阶段和已有 worker 输出继续；如果状态不完整，必须说明并从最小安全 checkpoint 重启。
 
+安装到本机 Codex skill root：
+
+```bash
+mkdir -p ~/.codex/skills
+ln -sfn "$(pwd)/skills/codex-workflows" ~/.codex/skills/codex-workflows
+python3 skills/codex-workflows/scripts/check_skill_install.py --check-install
+```
+
+安装后，新开的 Codex 会话应该能看到 `$codex-workflows`。当前已运行的会话不会自动热刷新 skill 列表。
+
 生成本地 preview：
 
 ```bash
@@ -144,6 +154,20 @@ run state、run plan、final summary 和 return envelope 放在已忽略的 `.cw
 - `scripts/cwf-return-heartbeat.mjs` 记录 heartbeat fixture、scheduled、scheduled-not-returned、real-smoke 或 unavailable 状态。只有真实看到原会话 marker 回帖时，才记录 `heartbeat_synthesis`。
 
 这些 helper 不会在未批准时创建可见 Desktop thread，也不会声称 SDK 自动 callback 或 platform automatic callback。
+
+## Skill 包结构
+
+CWF 现在按 Sunny-style `library` skill 规范整理：
+
+| 文件 | 作用 |
+|---|---|
+| `skills/codex-workflows/SKILL.md` | Codex 运行 CWF 时读取的主指令 |
+| `skills/codex-workflows/references/routing.md` | 和 `goal-writer`、`delivery-planner`、`project-status-audit`、`codex-thread-orchestrator` 的路由边界 |
+| `skills/codex-workflows/templates/run-plan.md` | 可落盘的 bounded run plan 模板 |
+| `skills/codex-workflows/evals/trigger_cases.json` | 应触发 / 不应触发 / 近邻技能的路由样例 |
+| `skills/codex-workflows/scripts/check_skill_install.py` | skill 包结构与本机安装检查 |
+
+这部分用来防止 CWF 和普通计划、目标提示词、项目状态审计、线程编排混路由：该跑 workflow 时触发，不该触发时交给更窄的 skill。
 
 和 Claude Dynamic Workflows 的当前对比见 [docs/CWF_CLAUDE_COMPARISON.md](docs/CWF_CLAUDE_COMPARISON.md)。
 
@@ -223,6 +247,7 @@ release-readiness 证据在 [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_REA
 
 ```bash
 npm run check
+python3 skills/codex-workflows/scripts/check_skill_install.py --check-install
 ```
 
 这个检查只验证 native skill 和 workflow 模板，不再构建外部 runtime。

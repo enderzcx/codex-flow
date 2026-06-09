@@ -1,11 +1,17 @@
 ---
 name: codex-workflows
-description: Use when the user asks Codex to run a dynamic workflow, orchestrate native subagents, audit or fix a repo with multiple agents, run an adversarial verification loop, run tournament-style evaluations, or create/save a workflow.js harness. Do not use for trivial edits or ordinary single-agent coding.
+description: Use when the user asks Codex to run a dynamic workflow, CWF, workflow.js harness, native subagent orchestration, repo audit/fix with multiple agents, adversarial verification, tournament evaluation, safe fix loop, or reusable workflow template. Not for trivial edits, ordinary single-agent coding, project status audits, PRD/SPEC planning, /goal prompt writing, generic thread orchestration, background reminders, or external model routing.
+metadata:
+  short-description: Codex-native bounded dynamic workflow skill
+  sunny_skill_type: library
+sunny_skill_type: library
 ---
 
 # Codex Workflows
 
 Codex Workflows is a native Codex bounded dynamic workflow skill.
+
+Sunny skill class: `library`. This skill is public/reusable, ships workflow templates and helper checks, and has route-confusion risk with planning, goal-writing, project-status, and thread-orchestration skills.
 
 The main session is the coordinator. Workflow JavaScript files are harness specs for Codex to read, adapt, and execute with native subagents. Do not execute these files with Node.
 
@@ -44,10 +50,16 @@ Do not use this skill for:
 - small direct edits;
 - single test/lint commands;
 - normal implementation work that one Codex turn can finish;
+- writing PRD/SPEC/acceptance docs without running a workflow;
+- creating a `/goal` prompt without workflow execution;
+- reading project status or progress;
+- coordinating arbitrary Desktop threads without a CWF run plan;
 - background scheduling;
 - external model routing;
 - CI-only automation.
 - tasks where the workflow overhead is larger than the work.
+
+When routing is ambiguous, read `references/routing.md` and prefer the narrower neighboring skill.
 
 ## Native Execution Rules
 
@@ -91,6 +103,8 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 When a template is useful, read it and adapt it in the main session before spawning agents. If no template fits, draft a small workflow inline and optionally save it when the user asks.
 
 For non-trivial workflows, draft a bounded run plan before spawning workers. It should include scope, exclusions, phases, workers, verifier/challenger role, write scopes, quarantine path, budget, stop rule, evidence, and resume checkpoint. If a run id exists, the future persisted path is `.cwf/runs/RUN_ID/run-plan.md`.
+
+Use `templates/run-plan.md` as the skeleton when the run plan needs a durable artifact.
 
 ## Recommended Patterns
 
@@ -223,3 +237,26 @@ Every workflow closeout must include:
 - a short human-readable summary.
 
 Do not dump raw worker logs unless the user asks.
+
+## Output Contract
+
+Every CWF response should include the smallest useful subset of this contract:
+
+- `mode`: direct skip, preview, foreground workflow, background workflow, or background+heartbeat;
+- `workflow`: chosen template or drafted `workflow.js` harness;
+- `why CWF`: why this task needs workflow orchestration instead of one normal Codex turn;
+- `run plan`: scope, exclusions, phases, workers, visibility, budget, stop rule, quarantine, verifier, evidence, and resume checkpoint;
+- `execution summary`: worker count, which workers ran, which were skipped, and why;
+- `return path`: coordinator_synthesis or heartbeat_synthesis status;
+- `write boundary`: no writes, proposed patch only, or approved safe write gate;
+- `verification`: commands, artifacts, thread ids, screenshots, logs, or explicit not-verified reason;
+- `human summary`: what happened in plain language, without raw worker log dumps.
+
+If CWF is not appropriate, say so briefly and do the direct task or route to the narrower skill.
+
+## References
+
+- `references/routing.md`: trigger/exclusion boundaries against nearby skills.
+- `templates/run-plan.md`: durable bounded run-plan skeleton.
+- `evals/trigger_cases.json`: route examples for install/routing audits.
+- `scripts/check_skill_install.py`: local install and package-shape smoke.
