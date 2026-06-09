@@ -43,7 +43,7 @@ Source of truth:
 
 - Current repo docs: `README.md`, `README.zh-CN.md`, `docs/CORE.md`, `docs/RUN_EXPERIENCE.md`, `docs/CWF_ASYNC_RUNTIME.md`, `docs/CWF_CLAUDE_COMPARISON.md`, `docs/CWF_MVP_EVIDENCE.md`, `docs/CWF_RELEASE_READINESS.md`, `skills/codex-workflows/SKILL.md`.
 - Current helpers: `scripts/cwf-run-preview.mjs`, `scripts/cwf-run-plan.mjs`, `scripts/cwf-run-state.mjs`, `scripts/cwf-return-envelope.mjs`, `scripts/cwf-safe-write.mjs`, `scripts/cwf-generate-workflow.mjs`, `scripts/cwf-catalog.mjs`.
-- Current workflow templates: `workflows/repo-audit.workflow.js`, `workflows/safe-fix-loop.workflow.js`, `workflows/adversarial-verify.workflow.js`, `workflows/classify-and-act.workflow.js`, `workflows/pipeline.workflow.js`, `workflows/tournament.workflow.js`, `workflows/ui-copy-review.workflow.js`.
+- Current workflow templates: `workflows/repo-audit.workflow.js`, `workflows/code-review.workflow.js`, `workflows/safe-fix-loop.workflow.js`, `workflows/adversarial-verify.workflow.js`, `workflows/classify-and-act.workflow.js`, `workflows/pipeline.workflow.js`, `workflows/tournament.workflow.js`, `workflows/ui-copy-review.workflow.js`.
 - Official docs verified on 2026-06-08: `https://developers.openai.com/codex/sdk`, `https://developers.openai.com/codex/subagents`, `https://developers.openai.com/codex/workflows`, `https://developers.openai.com/codex/app-server`, `https://developers.openai.com/codex/automations`.
 
 Deliverables:

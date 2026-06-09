@@ -51,6 +51,7 @@ const requiredFiles = [
   "scripts/cwf-catalog.mjs",
   "scripts/lib/cli.mjs",
   "workflows/classify-and-act.workflow.js",
+  "workflows/code-review.workflow.js",
   "workflows/adversarial-verify.workflow.js",
   "workflows/pipeline.workflow.js",
   "workflows/repo-audit.workflow.js",
@@ -203,8 +204,8 @@ if (!Array.isArray(packageJson.files) || packageJson.files.includes(".cwf/")) {
 
 const workflowDir = join(root.pathname, "workflows");
 const workflows = (await readdir(workflowDir)).filter((file) => file.endsWith(".workflow.js"));
-if (workflows.length !== 7) {
-  throw new Error(`Expected exactly seven workflow templates, found ${workflows.length}`);
+if (workflows.length !== 8) {
+  throw new Error(`Expected exactly eight workflow templates, found ${workflows.length}`);
 }
 
 for (const file of workflows) {
@@ -281,6 +282,16 @@ function checkWorkflowShape(file, text) {
     mustContain(text, "safety-challenger");
     mustContain(text, "evidence-checker");
     mustContain(text, "waived with reason");
+    return;
+  }
+
+  if (file === "code-review.workflow.js") {
+    mustContain(text, 'pattern: "fan-out-and-synthesize"');
+    mustContain(text, "correctness-reviewer");
+    mustContain(text, "integration-reviewer");
+    mustContain(text, "test-gap-reviewer");
+    mustContain(text, "findings first");
+    mustContain(text, "If no high-confidence finding exists");
     return;
   }
 
@@ -540,6 +551,18 @@ async function checkRunPlanRules() {
   mustContain(adversarialPlan, "safety-challenger");
   mustContain(adversarialPlan, "evidence-checker");
   mustContain(adversarialPlan, "Required verifier findings must be applied or explicitly waived with reason.");
+
+  const codeReviewPlan = renderRunPlanMarkdown(
+    await buildRunPlanFromWorkflow("workflows/code-review.workflow.js", {
+      runId: "check-code-review",
+      objective: "review this diff before merge",
+    }),
+  );
+  mustContain(codeReviewPlan, "correctness-reviewer");
+  mustContain(codeReviewPlan, "integration-reviewer");
+  mustContain(codeReviewPlan, "test-gap-reviewer");
+  mustContain(codeReviewPlan, "maintainability-reviewer");
+  mustContain(codeReviewPlan, "If no high-confidence finding exists");
 
   const safeFixPlan = await buildRunPlanFromWorkflow("workflows/safe-fix-loop.workflow.js", {
     runId: "check-safe-fix",

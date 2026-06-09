@@ -54,6 +54,8 @@ Source of truth:
 
 Workflow templates in scope:
 
+- `workflows/adversarial-verify.workflow.js`
+- `workflows/code-review.workflow.js`
 - `workflows/classify-and-act.workflow.js`
 - `workflows/pipeline.workflow.js`
 - `workflows/repo-audit.workflow.js`
@@ -89,7 +91,7 @@ Review requirement:
 Ratified decisions:
 
 - Local run state uses `.cwf/runs/RUN_ID/`, and `.cwf/` is ignored.
-- First implementation supports all six templates mechanically.
+- First implementation supports all eight templates mechanically.
 - First real smoke validates `repo-audit` as the read-only path and one selected Desktop-thread workflow only after Ender GO.
 - Existing left-sidebar thread evidence is sufficient for plan-level proof; implementation still needs a fresh smoke before claiming adapter-level Desktop proof.
 
@@ -475,7 +477,7 @@ Source of truth:
 Ratified decisions:
 - Local run state is .cwf/runs/RUN_ID/.
 - .cwf/ must be gitignored and excluded from npm package output.
-- Implement all six existing workflow templates mechanically: classify-and-act, pipeline, repo-audit, safe-fix-loop, tournament, and ui-copy-review.
+- Implement all eight existing workflow templates mechanically: adversarial-verify, code-review, classify-and-act, pipeline, repo-audit, safe-fix-loop, tournament, and ui-copy-review.
 - First read-only proof uses repo-audit.
 - Write-shaped proof uses safe-fix-loop dry-run or fixture smoke.
 - Desktop-thread real smoke requires explicit Ender GO; existing left-sidebar evidence is plan-level proof only.

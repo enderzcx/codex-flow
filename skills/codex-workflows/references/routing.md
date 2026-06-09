@@ -13,6 +13,7 @@ CWF owns prompts that ask Codex to run or prepare a bounded dynamic workflow:
 - "run an adversarial verification workflow";
 - "run a tournament / pipeline / safe fix loop";
 - "audit or fix this repo with multiple agents";
+- "review this diff with CWF / multiple reviewers";
 - "make a reusable workflow template for this repeated task".
 
 The task should benefit from at least one of these:
@@ -36,7 +37,8 @@ Prefer these skills when the user asks for their narrower job:
 | "what is the project status?" | `project-status-audit` | Status audit is read-only and should not spawn workflow workers by default. |
 | "coordinate many Desktop threads" | `codex-thread-orchestrator` | General thread management is separate from CWF run planning. |
 | "debug why this failed" | `hunt` | Root-cause debugging starts direct unless the user asks for workflow fan-out. |
-| "review this diff" | review skill or code-review mode | Single diff review usually does not need dynamic workflow overhead. |
+| "review this diff" | review skill | Single diff review usually does not need dynamic workflow overhead. |
+| "run CWF review on this diff" | `code-review.workflow.js` | Use CWF when the review needs multiple independent reviewer contexts and findings-first synthesis. |
 | "write copy / UI wording" | Kimi / writing skill | CWF does not route external creative models. |
 
 ## Skip Cases

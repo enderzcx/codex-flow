@@ -48,11 +48,12 @@ Already complete:
 - Project-local `.cwf/runs/RUN_ID/` state convention.
 - Bounded dynamic workflow contract.
 - `workflows/adversarial-verify.workflow.js`.
-- Local package/check proof for 7 templates.
+- Local package/check proof for 8 templates.
 
 Template inventory:
 
 - `workflows/adversarial-verify.workflow.js`: challenge/verify plans, claims, diffs, or artifacts.
+- `workflows/code-review.workflow.js`: focused code, PR, and diff review.
 - `workflows/classify-and-act.workflow.js`: classify heterogeneous items and route actions.
 - `workflows/pipeline.workflow.js`: move items through ordered stages.
 - `workflows/repo-audit.workflow.js`: read-only repo audit fan-out.
@@ -365,7 +366,7 @@ Stop condition:
 Deliverables:
 
 - Evidence pack for read-only, adversarial, and write-shaped dry-run paths.
-- Explicit template inventory covering all 7 current workflow templates.
+- Explicit template inventory covering all 8 current workflow templates.
 - Docs synced with actual behavior.
 - Public package dry-run.
 - Final status table.
@@ -595,7 +596,7 @@ Stop/Pause conditions:
 ```text
 /goal
 Outcome:
-Assemble final CWF MVP evidence for /Users/sunny/Work/CODEX/codex-workflows: read-only repo-audit path, adversarial verification path, write-shaped safe-fix-loop dry-run/fixture path, docs synchronized with actual behavior, package dry-run clean, 7-template inventory, and final status table that states what is real, fixture, dry-run, approval-gated, or deferred.
+Assemble final CWF MVP evidence for /Users/sunny/Work/CODEX/codex-workflows: read-only repo-audit path, adversarial verification path, write-shaped safe-fix-loop dry-run/fixture path, docs synchronized with actual behavior, package dry-run clean, 8-template inventory, and final status table that states what is real, fixture, dry-run, approval-gated, or deferred.
 
 Source of truth:
 - docs/CWF_COMPLETION_ROADMAP.md
@@ -629,7 +630,7 @@ Verification:
 - npm pack --dry-run --json
 - negative temp-copy removal of run_experience must fail check-core
 - old-runtime absence check: src, package-lock.json, tsconfig.json absent
-- evidence table for all 7 workflow templates
+- evidence table for all 8 workflow templates
 - repo-audit evidence labeled real-smoke or blocked
 - adversarial-verify evidence labeled fixture or real-smoke
 - safe-fix-loop evidence labeled dry-run/fixture unless separate write approval exists

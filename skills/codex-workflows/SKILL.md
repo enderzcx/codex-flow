@@ -1,6 +1,6 @@
 ---
 name: codex-workflows
-description: Use when the user asks Codex to run a dynamic workflow, CWF, workflow.js harness, native subagent orchestration, repo audit/fix with multiple agents, adversarial verification, tournament evaluation, safe fix loop, or reusable workflow template. Not for trivial edits, ordinary single-agent coding, project status audits, PRD/SPEC planning, /goal prompt writing, generic thread orchestration, background reminders, or external model routing.
+description: Use when the user asks Codex to run a dynamic workflow, CWF, workflow.js harness, native subagent orchestration, repo audit/fix/review with multiple agents, adversarial verification, tournament evaluation, safe fix loop, or reusable workflow template. Not for trivial edits, ordinary single-agent coding, ordinary single-pass diff review, project status audits, PRD/SPEC planning, /goal prompt writing, generic thread orchestration, background reminders, or external model routing.
 metadata:
   short-description: Codex-native bounded dynamic workflow skill
   sunny_skill_type: library
@@ -37,6 +37,7 @@ Use this skill when at least one is true:
 
 - The task benefits from separate clean contexts.
 - The task is a migration, repo audit, bug hunt, source-backed research, adversarial review, or safe fix loop.
+- The user asks for CWF-backed code review, PR review, or diff review with multiple independent reviewer perspectives.
 - Multiple independent perspectives should run in parallel.
 - The task needs adversarial verification.
 - A long task has an unknown amount of work and needs a stop condition.
@@ -50,6 +51,7 @@ Do not use this skill for:
 - small direct edits;
 - single test/lint commands;
 - normal implementation work that one Codex turn can finish;
+- ordinary single-pass diff review that does not need multiple independent reviewer perspectives;
 - writing PRD/SPEC/acceptance docs without running a workflow;
 - creating a `/goal` prompt without workflow execution;
 - reading project status or progress;

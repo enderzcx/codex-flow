@@ -145,6 +145,7 @@ npm run check
 ## Built-In Workflow Templates
 
 - `workflows/repo-audit.workflow.js`: repo audit and release-risk review
+- `workflows/code-review.workflow.js`: code, PR, and diff review
 - `workflows/adversarial-verify.workflow.js`: adversarial verification and counterevidence
 - `workflows/safe-fix-loop.workflow.js`: approval-gated fix loop
 - `workflows/classify-and-act.workflow.js`: classify first, then choose an action
@@ -180,7 +181,7 @@ Included today:
 - Desktop-thread evidence helper: `scripts/cwf-worker-desktop-thread.mjs`
 - heartbeat return evidence helper: `scripts/cwf-return-heartbeat.mjs`
 - safe write gate helper: `scripts/cwf-safe-write.mjs`
-- seven built-in workflow templates
+- eight built-in workflow templates
 
 Honest boundaries:
 

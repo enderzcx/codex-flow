@@ -7,6 +7,7 @@ import { parseArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
 export const BUILT_IN_CATALOG = [
   entry("adversarial-verify.workflow.js", "Challenge important plans, claims, diffs, or artifacts.", "High-confidence review before acceptance.", "inline", "read-only", "blocked/waiver/advisory verifier", "local"),
+  entry("code-review.workflow.js", "Review a focused diff, pull request, or code change.", "Findings-first code or PR review before merge.", "inline", "read-only", "evidence-backed findings and test gaps", "local"),
   entry("classify-and-act.workflow.js", "Classify mixed work and route actions.", "Mixed item queues with different action needs.", "auto", "approved routed writes only", "route and evidence checks", "local"),
   entry("pipeline.workflow.js", "Move items through ordered stages.", "Sequential processing with resumable item status.", "auto", "read-only by default", "stage evidence verifier", "local"),
   entry("repo-audit.workflow.js", "Audit a repo from independent perspectives.", "Read-only repo audit or release review.", "inline", "read-only", "evidence-backed findings", "local"),
