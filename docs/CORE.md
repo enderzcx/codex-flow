@@ -8,7 +8,7 @@ Codex Workflows is a native bounded dynamic workflow skill for Codex.
 Codex main session dynamically writes or selects workflow.js,
 then creates a bounded run plan,
 then executes it with native Codex subagents,
-then returns the result to the same conversation.
+then returns the result to the same conversation by foreground, background, or heartbeat synthesis.
 ```
 
 ## Core Principles
@@ -24,6 +24,9 @@ then returns the result to the same conversation.
 9. Quarantine untrusted input: readers of raw external content stay read-only.
 10. Preview and status: non-trivial workflows expose run shape before and during execution.
 11. Small templates: reusable workflows should be templates, not rigid scripts.
+12. Async without drift: long workflows may use SDK/background/heartbeat adapters, but the coordinator contract and safety gates stay the same.
+13. Controller-first state: `cwf-start.mjs` creates preview, run-plan, state, return-envelope, final, worker-packets, and worker-results slots before any worker dispatch.
+14. Adapter honesty: native subagent, SDK, Desktop-thread, and heartbeat helpers must write `fixture`, `real-smoke`, `requires_approval`, `unavailable`, or `deferred` evidence labels instead of upgrading claims silently.
 
 ## Failure Modes
 
@@ -62,6 +65,8 @@ Worker visibility is a product decision, not an implementation accident.
 
 Do not create a left-sidebar thread for every worker. That makes dynamic workflows noisy. The main session remains the coordinator and final synthesis point.
 
+SDK/background workers are quiet execution contexts and are not a product guarantee of left-sidebar visibility. `desktop-thread` is the explicit visibility path for selected workers that should appear in Codex Desktop's sidebar. Visible Desktop-thread smoke requires explicit approval for the exact run.
+
 ## Core Patterns
 
 - `classify-and-act`: classify heterogeneous items, then route each class to the right behavior.
@@ -82,12 +87,13 @@ Run experience is part of the core contract:
 - keep inline worker output compact;
 - promote only selected workers to Desktop threads;
 - show phase, worker, elapsed-time, budget, and blocker status;
+- support foreground, background, and background+heartbeat modes;
 - cancel without claiming completion;
 - resume from the last safe checkpoint when state is available;
 - always return final synthesis to the originating conversation;
 - mirror return status in `.cwf/runs/RUN_ID/return-envelope.json`.
 
-The proven return path is coordinator synthesis in the originating conversation. Platform automatic callback is not claimed until a future Codex platform API and real smoke prove it.
+The proven return path is coordinator synthesis in the originating conversation. Heartbeat synthesis is allowed only after a real heartbeat reply with the expected marker is observed in the originating thread; `heartbeat-scheduled` and `heartbeat-scheduled-not-returned` are not delivery proof. Platform automatic callback is not claimed until a future Codex platform API and real smoke prove it.
 
 ## Budget
 
@@ -118,5 +124,7 @@ The following are not part of the core product:
 - detached CI smoke matrix;
 - non-Codex model routing;
 - hosted scheduler.
+
+Optional SDK/background/heartbeat adapters are allowed only when they preserve the bounded native contract. They must not execute `workflow.js` as unrestricted Node code or become the main product surface. Desktop-thread and SDK workers may propose patches, but real apply must return through the coordinator safe-write gate.
 
 They may return later as optional adapters, but not as the main experience.

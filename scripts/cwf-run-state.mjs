@@ -352,7 +352,11 @@ function lastContiguousCompleted(state) {
 function humanConclusion(state) {
   const workflow = state.workflow_name ?? "workflow";
   if (state.status === "completed") {
-    return `这次 CWF 已完成 ${workflow}，最终结果通过 coordinator synthesis 返回当前对话，证据在 .cwf/runs/${state.run_id}/。`;
+    const returnText =
+      state.return_mode === "heartbeat_synthesis"
+        ? "通过 heartbeat synthesis 回到原会话"
+        : "通过 coordinator synthesis 返回当前对话";
+    return `这次 CWF 已完成 ${workflow}，最终结果${returnText}，证据在 .cwf/runs/${state.run_id}/。`;
   }
   if (state.status === "blocked") {
     return `这次 CWF 在 ${workflow} 中被阻塞，不能声明 PASS；需要先处理 blocker 或补 waiver/evidence。`;

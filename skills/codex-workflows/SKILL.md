@@ -19,7 +19,7 @@ Goal
   -> scope and draft bounded run plan
   -> spawn native Codex subagents
   -> optionally promote important workers to Desktop threads
-  -> wait and synthesize
+  -> wait or run in background
   -> adapt if needed
   -> verify
   -> answer in this same conversation
@@ -64,6 +64,7 @@ Do not use this skill for:
 11. Report compact status for long-running workflows.
 12. Wait for worker results only when needed for the next critical-path step.
 13. Summarize results back in the current conversation.
+14. For long runs, prefer background + heartbeat instead of making the main conversation wait.
 
 If native subagent tools are unavailable, stop and say the workflow cannot run natively in this host. Do not silently fall back to an external runner.
 
@@ -113,6 +114,8 @@ Do not create a Desktop sidebar thread for every worker. The main conversation r
 
 Resolve `auto` to `desktop-thread` only when `budget.max_tokens > 50000`, any planned worker has a non-empty `write_scope`, deploy/release/migrate/publish appears in phase or worker text, or the user explicitly asks to inspect/continue a worker separately. Otherwise resolve `auto` to `inline`.
 
+SDK/background workers are quiet execution contexts; do not promise that they appear in Codex Desktop's left sidebar. If the user asks to see a worker in the left sidebar, or the worker should be inspectable/continuable, use `desktop-thread` and record the Desktop thread id.
+
 ## Run Experience
 
 Before a non-trivial workflow runs, show a concise preview:
@@ -138,13 +141,30 @@ Persist a bounded run plan:
 node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
 ```
 
+Initialize a controller run directory with preview, run-plan, state, return envelope, final placeholder, worker packets, and worker result slots:
+
+```bash
+node scripts/cwf-start.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+```
+
 During long workflows, report compact status: current phase, worker counts, elapsed time, budget pressure, and blockers. Do not dump raw worker logs.
+
+Use `foreground` mode only when the workflow can finish inside the current interactive turn. Use `background` when the work may take longer; return the run id, state path, expected next check, and stop rule. Use `background+heartbeat` when the final result should come back to the originating conversation without the user polling manually, but treat it as scheduled until a real marker reply is observed in the originating thread.
 
 Cancel means stop spawning new workers and summarize partial evidence. Resume means continue from the last known phase and worker outputs; if exact state is unavailable, restart from the smallest safe checkpoint and say so.
 
-Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, `.cwf/runs/RUN_ID/run-plan.md`, and `.cwf/runs/RUN_ID/final.md`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
+Local run state uses `.cwf/runs/RUN_ID/state.json`, `.cwf/runs/RUN_ID/preview.md`, `.cwf/runs/RUN_ID/run-plan.md`, `.cwf/runs/RUN_ID/return-envelope.json`, `.cwf/runs/RUN_ID/final.md`, `.cwf/runs/RUN_ID/worker-packets/*.md`, and `.cwf/runs/RUN_ID/worker-results/*.json`. The smallest safe resume checkpoint is the phase after the last completed phase boundary; if no phase completed cleanly, restart from Phase 1.
 
 Each initialized run also writes `.cwf/runs/RUN_ID/return-envelope.json`. The envelope records final destination, return mode, final summary path, evidence path, verifier status, deferred items, and completion status. Treat `coordinator_synthesis` as the proven default return mode. Do not claim platform automatic callback unless a future real smoke proves it.
+
+For async runs, record `runtime_mode`, adapter status, `sdk_thread_ids`, and `desktop_thread_ids` when known. `heartbeat_synthesis` means a follow-up in the originating conversation read local CWF state and posted the final summary, and the coordinator observed the expected marker reply before recording delivery; it is not platform automatic callback. `heartbeat-scheduled` and `heartbeat-scheduled-not-returned` are not success states.
+
+Use the adapter helpers only as evidence recorders unless the host capability is genuinely available:
+
+- `scripts/cwf-native-subagent.mjs` records host-native subagent output or `native-subagent-unavailable`.
+- `scripts/cwf-worker-sdk.mjs` records SDK fixture status or real read-only fixed-marker SDK status through `@openai/codex-sdk`.
+- `scripts/cwf-worker-desktop-thread.mjs` records failure fixture, approval-gated visible-thread smoke, or approved result.
+- `scripts/cwf-return-heartbeat.mjs` records heartbeat fixture, scheduled, scheduled-not-returned, real-smoke, or unavailable state. Only real-smoke may record `heartbeat_synthesis`.
 
 ## Budget
 
@@ -174,7 +194,7 @@ When a workflow works repeatedly, save it as a skill template. Treat saved workf
 
 ## Write Work
 
-Writable workflows use approval-gated bounded patch flow. Desktop-thread workers may diagnose or propose patches, but they must not write directly outside the coordinator's approved path.
+Writable workflows use approval-gated bounded patch flow. Desktop-thread and SDK workers may diagnose or propose patches, but they must not write directly outside the coordinator's approved path.
 
 For write workers:
 

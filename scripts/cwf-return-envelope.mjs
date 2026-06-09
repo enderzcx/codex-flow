@@ -22,7 +22,9 @@ export function buildReturnEnvelope(state, options = {}) {
       template_path: state.template_path ?? "",
     },
     final_destination: options.finalDestination ?? "originating-codex-conversation",
-    return_mode: options.returnMode ?? "coordinator_synthesis",
+    runtime_mode: options.runtimeMode ?? state.runtime_mode ?? "foreground",
+    return_mode: options.returnMode ?? state.return_mode ?? "coordinator_synthesis",
+    heartbeat_status: state.adapter_status?.heartbeat_return ?? "not_requested",
     coordinator_synthesis: {
       status: "required",
       final_summary_path: join(runDir, "final.md"),
@@ -33,6 +35,8 @@ export function buildReturnEnvelope(state, options = {}) {
     },
     final_summary_path: join(runDir, "final.md"),
     evidence_path: join(runDir, "state.json"),
+    sdk_thread_ids: collectWorkerIds(state, "sdk_thread_id"),
+    desktop_thread_ids: collectWorkerIds(state, "desktop_thread_id"),
     verifier_status: verifier.status,
     verifier: verifier,
     deferred_items: deferredItems,
@@ -40,6 +44,10 @@ export function buildReturnEnvelope(state, options = {}) {
     run_status: state.status ?? "planned",
     updated_at: state.updated_at ?? new Date().toISOString(),
   };
+}
+
+function collectWorkerIds(state, key) {
+  return [...new Set((state.workers ?? []).map((worker) => worker[key]).filter(Boolean))];
 }
 
 export async function writeReturnEnvelope(runDir, state, options = {}) {

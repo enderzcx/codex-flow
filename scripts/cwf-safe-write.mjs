@@ -45,9 +45,13 @@ export function evaluateVerifierGate(evaluations = []) {
 export function evaluateSafeWriteRequest(request) {
   const changedFiles = extractChangedFiles(request.patch ?? "");
   const reasons = [];
+  const proposerRuntime = request.proposer_runtime ?? "coordinator";
 
   if (request.prior_gate !== "previewed") reasons.push("no prior preview gate");
   if (request.approval !== "approve-write") reasons.push("missing approve-write approval");
+  if (proposerRuntime !== "coordinator" && request.coordinator_approval !== "accepted") {
+    reasons.push(`${proposerRuntime} patch proposal must return to coordinator safe-write gate`);
+  }
   if (changedFiles.length === 0) reasons.push("patch has no changed files");
   if ((request.patch ?? "").includes("<<<<<<<") || (request.patch ?? "").includes(">>>>>>>")) {
     reasons.push("patch contains conflict markers");
@@ -69,6 +73,8 @@ export function evaluateSafeWriteRequest(request) {
     changed_files: changedFiles,
     apply_check: request.apply_check ?? "not_run",
     verification: request.verification ?? { status: "not_run" },
+    proposer_runtime: proposerRuntime,
+    coordinator_approval: request.coordinator_approval ?? "",
     rollback_command: changedFiles.length > 0
       ? `git checkout -- ${changedFiles.map((file) => quoteShell(file)).join(" ")}`
       : "",
@@ -131,6 +137,7 @@ export function sampleSafeWriteRequest() {
     forbidden_paths: [".env"],
     apply_check: "passed",
     verification: { status: "pass" },
+    proposer_runtime: "coordinator",
     patch: "diff --git a/src/a.js b/src/a.js\n--- a/src/a.js\n+++ b/src/a.js\n@@\n-old\n+new\n",
   };
 }

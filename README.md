@@ -16,7 +16,7 @@ User goal
   -> Codex spawns native subagents
   -> subagents inherit the current Codex sandbox and approval policy
   -> important workers may be promoted to visible Desktop threads
-  -> Codex waits, adapts, verifies, and summarizes back in the same conversation
+  -> Codex waits or runs in background, adapts, verifies, and summarizes back in the same conversation
 ```
 
 ## What Stays
@@ -27,6 +27,7 @@ User goal
 - Scope-first run plans for non-trivial workflows
 - Same-conversation result synthesis
 - Optional Desktop-thread visibility for long, writable, or follow-up-worthy workers
+- Optional background + heartbeat return for long workflows that should not block the main turn
 - Human-readable stop conditions, gates, and verification rules
 
 ## What Was Removed
@@ -69,6 +70,8 @@ Use `auto` when the workflow wants Codex to decide from task length, risk, write
 
 The invariant: final synthesis always returns to the conversation that launched the workflow.
 
+Long-running workflows do not have to make the main conversation wait. CWF can run as `background+heartbeat`: the runtime writes state and final output under `.cwf/runs/RUN_ID/`, then schedules a heartbeat follow-up for the originating conversation. That follow-up counts as `heartbeat_synthesis` only after the coordinator observes a real marker reply in the originating thread; otherwise it stays `heartbeat-scheduled` or `heartbeat-scheduled-not-returned`. SDK workers are useful for quiet background execution, but they are not a left-sidebar visibility guarantee. `desktop-thread` remains the path for selected workers the user should see in Codex Desktop's sidebar.
+
 ## Failure Modes
 
 Use a workflow when a single long Codex context is likely to fail structurally:
@@ -81,7 +84,7 @@ CWF solves these with isolated worker contexts, separate verifiers, explicit sto
 
 ## Bounded Dynamic Workflows
 
-CWF is inspired by Claude Dynamic Workflows, but it intentionally keeps a smaller native Codex shape: no unbounded agent swarm, no hidden scheduler, no standalone runtime. For CWF, "dynamic" means Codex can draft or adapt a run plan for the current task. "Bounded" means the plan has scope, budget, quarantine, verifier, and stop rules before serious work starts.
+CWF is inspired by Claude Dynamic Workflows, but it intentionally keeps a smaller native Codex shape: no unbounded agent swarm and no hidden unrestricted scheduler. For CWF, "dynamic" means Codex can draft or adapt a run plan for the current task. "Bounded" means the plan has scope, budget, quarantine, verifier, and stop rules before serious work starts. Optional SDK/heartbeat adapters may run long work in the background, but `workflow.js` remains a harness spec, not arbitrary Node code.
 
 Use this shape for large migrations, repo audits, bug hunts, source-backed research, adversarial review, and safe fix loops. Do not use it for daily small edits where one Codex turn is cheaper and clearer.
 
@@ -112,7 +115,28 @@ node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audi
 node scripts/cwf-run-state.mjs status --run-id demo
 ```
 
+Initialize a full controller artifact set with worker packets and result slots:
+
+```bash
+node scripts/cwf-start.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+```
+
 Run state, run plans, final summaries, and return envelopes live under ignored `.cwf/runs/RUN_ID/` and are not part of the npm package. The return envelope records the final destination, return mode, evidence path, verifier status, deferred items, and completion status. The default return mode is coordinator synthesis; platform automatic callback remains deferred unless a future real smoke proves it.
+
+Async return behavior is specified in [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md). The short version: `foreground` waits in the current turn; `background` writes local state for polling/resume; `background+heartbeat` schedules a wake-up for the originating conversation and must keep polling/resume evidence until a real marker reply is observed. Selected `desktop-thread` workers can still appear in the Codex Desktop left sidebar, but SDK background workers should be treated as quiet workers unless promoted through the Desktop-thread path.
+
+Native runtime adapter helpers are local evidence surfaces. `cwf-worker-sdk.mjs --mode real` uses `@openai/codex-sdk` to run a read-only fixed-marker SDK worker and record the real SDK thread id, final response, usage, timeout, and errors.
+
+- `scripts/cwf-native-subagent.mjs` records host-native subagent results or `native-subagent-unavailable`.
+- `scripts/cwf-worker-sdk.mjs` records SDK worker fixture results or real SDK marker-smoke results.
+- `scripts/cwf-worker-desktop-thread.mjs` records Desktop-thread failure fixtures, approval-gated pending smoke, or an approved real-smoke result.
+- `scripts/cwf-return-heartbeat.mjs` records heartbeat fixture, scheduled, scheduled-not-returned, real-smoke, or unavailable states. It only records `heartbeat_synthesis` after a real originating-thread marker was observed.
+
+These helpers do not create visible Desktop threads unless the exact smoke has been approved, and they do not claim SDK automatic callback or platform automatic callback.
+
+The current Claude Dynamic Workflows comparison is tracked in [docs/CWF_CLAUDE_COMPARISON.md](docs/CWF_CLAUDE_COMPARISON.md).
+
+The full plan for eating the available Codex-native subagent/thread/SDK/heartbeat surfaces is tracked in [docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md](docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md), with a copy-ready goal prompt in [docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md](docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md).
 
 Generate bounded workflow drafts for the first supported families:
 
@@ -127,7 +151,7 @@ Inspect built-in workflow catalog data:
 node scripts/cwf-catalog.mjs
 ```
 
-Safe write workers are modeled as approval-gated bounded patch flow, not direct Desktop-thread filesystem writes. `scripts/cwf-safe-write.mjs` validates preview gate, `approve-write`, path policy, apply-check result, declared verification, changed files, and rollback evidence for fixtures and approved disposable smoke targets.
+Safe write workers are modeled as approval-gated bounded patch flow, not direct Desktop-thread or SDK filesystem writes. `scripts/cwf-safe-write.mjs` validates preview gate, `approve-write`, path policy, coordinator approval for non-coordinator patch proposals, apply-check result, declared verification, changed files, and rollback evidence for fixtures and approved disposable smoke targets.
 
 Evaluate a real patch file after the preview and approval gates:
 

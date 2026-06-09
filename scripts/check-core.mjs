@@ -9,6 +9,11 @@ import { buildReturnEnvelope } from "./cwf-return-envelope.mjs";
 import { evaluateSafeWriteRequest, evaluateVerifierGate } from "./cwf-safe-write.mjs";
 import { generateWorkflowFromObjective, renderGeneratedWorkflow, scanUnsafeWorkflowText } from "./cwf-generate-workflow.mjs";
 import { BUILT_IN_CATALOG, discoverProjectWorkflows, validateCatalogCoverage } from "./cwf-catalog.mjs";
+import { startRun } from "./cwf-start.mjs";
+import { recordSdkWorker } from "./cwf-worker-sdk.mjs";
+import { recordDesktopThreadWorker } from "./cwf-worker-desktop-thread.mjs";
+import { recordHeartbeatReturn } from "./cwf-return-heartbeat.mjs";
+import { recordNativeSubagent } from "./cwf-native-subagent.mjs";
 
 const root = new URL("..", import.meta.url);
 
@@ -17,13 +22,24 @@ const requiredFiles = [
   "README.zh-CN.md",
   "docs/CORE.md",
   "docs/CWF_MVP_EVIDENCE.md",
+  "docs/CWF_ASYNC_RUNTIME.md",
+  "docs/CWF_CLAUDE_COMPARISON.md",
+  "docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md",
+  "docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md",
   "docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md",
+  "docs/evidence/CWF_FULL_NATIVE_RUNTIME_FIXTURES_20260608.md",
+  "docs/evidence/CWF_FULL_NATIVE_RUNTIME_REAL_SMOKE_20260609.md",
   "docs/RUN_EXPERIENCE.md",
   "docs/WORKFLOW_JS.md",
   "skills/codex-workflows/SKILL.md",
   "scripts/cwf-run-preview.mjs",
   "scripts/cwf-run-plan.mjs",
   "scripts/cwf-run-state.mjs",
+  "scripts/cwf-start.mjs",
+  "scripts/cwf-worker-sdk.mjs",
+  "scripts/cwf-worker-desktop-thread.mjs",
+  "scripts/cwf-return-heartbeat.mjs",
+  "scripts/cwf-native-subagent.mjs",
   "scripts/cwf-return-envelope.mjs",
   "scripts/cwf-safe-write.mjs",
   "scripts/cwf-generate-workflow.mjs",
@@ -50,7 +66,13 @@ const readme = await readText("README.md");
 const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
 const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
+const asyncRuntime = await readText("docs/CWF_ASYNC_RUNTIME.md");
+const comparison = await readText("docs/CWF_CLAUDE_COMPARISON.md");
+const fullNativeRuntimePlan = await readText("docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md");
+const fullNativeRuntimeGoal = await readText("docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md");
 const realDynamicEvidence = await readText("docs/evidence/CWF_REAL_DYNAMIC_SMOKE_20260608.md");
+const fullNativeFixtureEvidence = await readText("docs/evidence/CWF_FULL_NATIVE_RUNTIME_FIXTURES_20260608.md");
+const fullNativeRealEvidence = await readText("docs/evidence/CWF_FULL_NATIVE_RUNTIME_REAL_SMOKE_20260609.md");
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
@@ -59,9 +81,18 @@ mustContain(readme, "bounded dynamic workflow");
 mustContain(readme, "run plan");
 mustContain(readme, "cwf-run-plan.mjs");
 mustContain(readme, "desktop-thread");
+mustContain(readme, "background+heartbeat");
+mustContain(readme, "SDK background workers");
+mustContain(readme, "cwf-start.mjs");
+mustContain(readme, "cwf-worker-sdk.mjs");
+mustContain(readme, "cwf-worker-desktop-thread.mjs");
 mustContain(zh, "Codex 原生、有边界的动态工作流");
 mustContain(zh, "有边界的动态工作流");
 mustContain(zh, "左侧线程");
+mustContain(zh, "background+heartbeat");
+mustContain(zh, "SDK 后台 worker");
+mustContain(zh, "cwf-start.mjs");
+mustContain(zh, "cwf-worker-sdk.mjs");
 mustContain(skill, "bounded dynamic workflow");
 mustContain(skill, "bounded run plan");
 mustContain(skill, "cwf-run-plan.mjs");
@@ -72,6 +103,30 @@ mustContain(skill, "Budget");
 mustContain(skill, "Quarantine");
 mustContain(skill, "Save As Skill");
 mustContain(skill, "Run Experience");
+mustContain(skill, "background+heartbeat");
+mustContain(skill, "heartbeat_synthesis");
+mustContain(skill, "cwf-start.mjs");
+mustContain(skill, "cwf-worker-sdk.mjs");
+mustContain(skill, "cwf-worker-desktop-thread.mjs");
+mustContain(asyncRuntime, "CWF Async Runtime Contract");
+mustContain(asyncRuntime, "background+heartbeat");
+mustContain(asyncRuntime, "Desktop-thread workers are the visibility path");
+mustContain(asyncRuntime, "Do not claim platform automatic callback");
+mustContain(asyncRuntime, "must not execute arbitrary workflow JavaScript as unrestricted Node code");
+mustContain(comparison, "CWF vs Claude Dynamic Workflows");
+mustContain(comparison, "background+heartbeat");
+mustContain(comparison, "SDK background worker");
+mustContain(comparison, "不声称 SDK 自动 callback");
+mustContain(fullNativeRuntimePlan, "CWF Full Native Runtime Plan");
+mustContain(fullNativeRuntimePlan, "host-native subagent");
+mustContain(fullNativeRuntimePlan, "SDK background worker");
+mustContain(fullNativeRuntimePlan, "Desktop-thread adapter");
+mustContain(fullNativeRuntimePlan, "heartbeat return");
+mustContain(fullNativeRuntimeGoal, "CWF Full Native Runtime Goal");
+mustContain(fullNativeRuntimeGoal, "Host-native subagent execution");
+mustContain(fullNativeRuntimeGoal, "SDK background worker adapter");
+mustContain(fullNativeRuntimeGoal, "Heartbeat return");
+mustContain(fullNativeRuntimeGoal, "Do not claim SDK automatic callback");
 mustContain(evidence, "real-smoke pass");
 mustContain(evidence, "fixture pass");
 mustContain(evidence, "dry-run pass");
@@ -82,9 +137,22 @@ mustContain(evidence, "CWF_REAL_DYNAMIC_SMOKE_20260608.md");
 mustContain(realDynamicEvidence, "CWF_DESKTOP_CORRECTNESS_WORKER_OK_20260608");
 mustContain(realDynamicEvidence, "blocked_then_fixed_locally");
 mustContain(realDynamicEvidence, "Platform-level automatic callback");
+mustContain(fullNativeFixtureEvidence, "CWF Full Native Runtime Fixtures 2026-06-08");
+mustContain(fullNativeFixtureEvidence, "CWF_SDK_FIXTURE_OK");
+mustContain(fullNativeFixtureEvidence, "desktop-thread-execution-unavailable");
+mustContain(fullNativeFixtureEvidence, "heartbeat-unavailable");
+mustContain(fullNativeRealEvidence, "CWF_SDK_REAL_SMOKE_20260609");
+mustContain(fullNativeRealEvidence, "CWF_NATIVE_SUBAGENT_A_20260609");
+mustContain(fullNativeRealEvidence, "cwf-heartbeat-real-smoke");
+mustContain(fullNativeRealEvidence, "CWF_HEARTBEAT_NO_COUNT_PROBE_20260609");
+mustContain(fullNativeRealEvidence, "FREQ=MINUTELY;INTERVAL=1;COUNT=1");
+mustContain(fullNativeRealEvidence, "FREQ=MINUTELY;INTERVAL=1");
 mustContain(gitignore, ".cwf/");
 if (packageJson.bin) {
   throw new Error("package.json must not expose a standalone CLI bin");
+}
+if (packageJson.dependencies?.["@openai/codex-sdk"] == null) {
+  throw new Error("package.json must include @openai/codex-sdk for real SDK background worker support");
 }
 if (!Array.isArray(packageJson.files) || packageJson.files.includes(".cwf/")) {
   throw new Error("package files must exclude .cwf/");
@@ -134,6 +202,7 @@ checkReturnEnvelopeRules();
 checkDynamicGenerationRules();
 await checkCatalogRules(workflows);
 checkSafeWriteAndVerifierRules();
+await checkNativeRuntimeRules();
 checkHelperHelpCommands();
 
 console.log(`core check passed: ${workflows.length} workflow templates`);
@@ -510,6 +579,8 @@ function checkReturnEnvelopeRules() {
     run_id: "check-envelope",
     workflow_name: "repo-audit",
     template_path: "workflows/repo-audit.workflow.js",
+    runtime_mode: "background+heartbeat",
+    adapter_status: { heartbeat_return: "heartbeat_synthesis" },
     status: "completed",
     updated_at: "2026-06-08T00:00:00.000Z",
     verifier_evaluations: [{ status: "advisory", summary: "follow-up optional" }],
@@ -520,11 +591,15 @@ function checkReturnEnvelopeRules() {
     "run_id",
     "workflow",
     "final_destination",
+    "runtime_mode",
     "return_mode",
+    "heartbeat_status",
     "coordinator_synthesis",
     "platform_callback",
     "final_summary_path",
     "evidence_path",
+    "sdk_thread_ids",
+    "desktop_thread_ids",
     "verifier_status",
     "deferred_items",
     "completion_status",
@@ -534,11 +609,30 @@ function checkReturnEnvelopeRules() {
   if (envelope.return_mode !== "coordinator_synthesis") {
     throw new Error("return envelope must default to coordinator synthesis");
   }
+  if (envelope.runtime_mode !== "background+heartbeat" || envelope.heartbeat_status !== "heartbeat_synthesis") {
+    throw new Error("return envelope must expose runtime mode and heartbeat status");
+  }
   if (envelope.platform_callback.status !== "deferred") {
     throw new Error("return envelope must defer platform callback unless proven");
   }
   if (!envelope.deferred_items.some((item) => item.status === "requires_approval")) {
     throw new Error("return envelope must preserve deferred approval items");
+  }
+
+  const idsEnvelope = buildReturnEnvelope({
+    ...state,
+    workers: [
+      { id: "sdk", sdk_thread_id: "sdk-1" },
+      { id: "desktop", desktop_thread_id: "thread-1" },
+    ],
+  });
+  if (idsEnvelope.sdk_thread_ids[0] !== "sdk-1" || idsEnvelope.desktop_thread_ids[0] !== "thread-1") {
+    throw new Error("return envelope must expose SDK and Desktop thread ids when known");
+  }
+
+  const heartbeatEnvelope = buildReturnEnvelope({ ...state, return_mode: "heartbeat_synthesis" });
+  if (heartbeatEnvelope.return_mode !== "heartbeat_synthesis") {
+    throw new Error("return envelope must preserve state return_mode when no override is provided");
   }
 }
 
@@ -639,10 +733,26 @@ function checkSafeWriteAndVerifierRules() {
     ["out-of-scope path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["scripts"], apply_check: "passed", verification: { status: "pass" }, patch }],
     ["conflict patch", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch: `${patch}<<<<<<< HEAD\n` }],
     ["verification failure", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "fail" }, patch }],
+    ["sdk bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, proposer_runtime: "sdk-background", patch }],
+    ["desktop-thread bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, proposer_runtime: "desktop-thread", patch }],
   ];
   for (const [label, request] of negativeCases) {
     const result = evaluateSafeWriteRequest(request);
     if (result.status !== "refused") throw new Error(`negative safe-write fixture passed unexpectedly: ${label}`);
+  }
+
+  const coordinatorAcceptedSdkProposal = evaluateSafeWriteRequest({
+    prior_gate: "previewed",
+    approval: "approve-write",
+    allowed_paths: ["docs"],
+    apply_check: "passed",
+    verification: { status: "pass" },
+    proposer_runtime: "sdk-background",
+    coordinator_approval: "accepted",
+    patch,
+  });
+  if (coordinatorAcceptedSdkProposal.status !== "pass") {
+    throw new Error("coordinator-approved SDK patch proposal should pass safe-write gate");
   }
 
   const blocked = evaluateVerifierGate([{ status: "blocked", summary: "missing evidence" }]);
@@ -659,11 +769,175 @@ function checkSafeWriteAndVerifierRules() {
   }
 }
 
+async function checkNativeRuntimeRules() {
+  const runRoot = await mkdtemp(join(tmpdir(), "cwf-runs-"));
+  try {
+    const started = await startRun({
+      workflow: "workflows/repo-audit.workflow.js",
+      runId: "controller-smoke",
+      runRoot,
+      objective: "audit this repo with native runtime fixtures",
+    });
+    for (const key of ["state", "preview", "run_plan", "return_envelope", "worker_packets", "worker_results", "final"]) {
+      const info = await stat(started[key]);
+      if (!info.isFile() && !info.isDirectory()) throw new Error(`controller smoke missing ${key}`);
+    }
+
+    const state = JSON.parse(await readFile(started.state, "utf8"));
+    if (state.runtime_mode !== "controller_only" || state.return_mode !== "coordinator_synthesis") {
+      throw new Error("controller smoke must initialize runtime and return modes honestly");
+    }
+    if (!state.workers.every((worker) => worker.worker_packet_path && worker.worker_result_path)) {
+      throw new Error("controller smoke must assign packet/result paths to every worker");
+    }
+    const packetFiles = await readdir(started.worker_packets);
+    if (packetFiles.length !== state.workers.length) {
+      throw new Error("controller smoke must write one packet per worker");
+    }
+    const finalText = await readFile(started.final, "utf8");
+    mustContain(finalText, "结论：");
+
+    const sdk = await recordSdkWorker({
+      runId: "controller-smoke",
+      workerId: "correctness",
+      runRoot,
+      mode: "fixture",
+      marker: "CWF_SDK_FIXTURE_OK",
+    });
+    if (sdk.result.status !== "completed" || sdk.result.evidence_level !== "fixture" || !sdk.result.sdk_thread_id) {
+      throw new Error("SDK fixture must write completed result with fixture thread id");
+    }
+
+    const nativeUnavailable = await recordNativeSubagent({
+      runId: "controller-smoke",
+      workerId: "tests",
+      runRoot,
+      mode: "unavailable",
+    });
+    if (nativeUnavailable.result.status !== "native-subagent-unavailable") {
+      throw new Error("native subagent unavailable fixture must be honest");
+    }
+
+    const desktop = await recordDesktopThreadWorker({
+      runId: "controller-smoke",
+      workerId: "visible-fixture",
+      runRoot,
+      mode: "failure-fixture",
+    });
+    if (
+      desktop.result.status !== "desktop-thread-execution-unavailable" ||
+      desktop.result.created_visible_thread !== false ||
+      desktop.result.desktop_thread_id
+    ) {
+      throw new Error("Desktop-thread failure fixture must create no visible thread");
+    }
+
+    const heartbeat = await recordHeartbeatReturn({
+      runId: "controller-smoke",
+      runRoot,
+      mode: "unavailable",
+    });
+    if (
+      heartbeat.heartbeat.status !== "heartbeat-unavailable" ||
+      !heartbeat.heartbeat.resume_prompt.includes(".cwf/runs/controller-smoke/final.md")
+    ) {
+      throw new Error("heartbeat unavailable fixture must include a copy-ready resume prompt");
+    }
+
+    const fixtureHeartbeat = await recordHeartbeatReturn({
+      runId: "controller-smoke",
+      runRoot,
+      mode: "fixture",
+    });
+    if (fixtureHeartbeat.heartbeat.status !== "heartbeat-fixture") {
+      throw new Error("heartbeat fixture must not claim heartbeat_synthesis");
+    }
+
+    const scheduledHeartbeat = await recordHeartbeatReturn({
+      runId: "controller-smoke",
+      runRoot,
+      mode: "scheduled",
+      automationId: "fixture-heartbeat",
+      marker: "CWF_HEARTBEAT_FIXTURE_PENDING",
+    });
+    if (
+      scheduledHeartbeat.heartbeat.status !== "heartbeat-scheduled" ||
+      scheduledHeartbeat.heartbeat.automation_id !== "fixture-heartbeat"
+    ) {
+      throw new Error("heartbeat scheduled fixture must record automation id and scheduled status");
+    }
+    const scheduledEnvelope = JSON.parse(await readFile(started.return_envelope, "utf8"));
+    if (scheduledEnvelope.return_mode !== "coordinator_synthesis") {
+      throw new Error("scheduled heartbeat must not upgrade return_mode to heartbeat_synthesis");
+    }
+
+    const notReturnedHeartbeat = await recordHeartbeatReturn({
+      runId: "controller-smoke",
+      runRoot,
+      mode: "scheduled-not-returned",
+      automationId: "fixture-heartbeat",
+      marker: "CWF_HEARTBEAT_FIXTURE_PENDING",
+    });
+    if (notReturnedHeartbeat.heartbeat.status !== "heartbeat-scheduled-not-returned") {
+      throw new Error("heartbeat scheduled-not-returned must record blocked status");
+    }
+    const notReturnedState = JSON.parse(await readFile(join(runRoot, "controller-smoke", "state.json"), "utf8"));
+    if (notReturnedState.status !== "blocked") {
+      throw new Error("heartbeat scheduled-not-returned must block the run");
+    }
+    if (notReturnedState.runtime_mode !== "background+heartbeat") {
+      throw new Error("heartbeat scheduled-not-returned must mark background+heartbeat runtime mode");
+    }
+
+    const deliveredHeartbeat = await recordHeartbeatReturn({
+      runId: "controller-smoke",
+      runRoot,
+      mode: "record-real-smoke",
+      automationId: "fixture-heartbeat",
+      marker: "CWF_HEARTBEAT_FIXTURE_DELIVERED",
+      originatingThreadId: "fixture-originating-thread",
+    });
+    if (
+      deliveredHeartbeat.heartbeat.status !== "heartbeat_synthesis" ||
+      deliveredHeartbeat.heartbeat.evidence_level !== "real-smoke" ||
+      deliveredHeartbeat.heartbeat.originating_thread_id !== "fixture-originating-thread"
+    ) {
+      throw new Error("heartbeat real-smoke must require observed marker evidence");
+    }
+    const deliveredEnvelope = JSON.parse(await readFile(started.return_envelope, "utf8"));
+    if (deliveredEnvelope.return_mode !== "heartbeat_synthesis") {
+      throw new Error("delivered heartbeat must upgrade return_mode to heartbeat_synthesis");
+    }
+    if (deliveredEnvelope.heartbeat_status !== "heartbeat_synthesis") {
+      throw new Error("delivered heartbeat must expose heartbeat_synthesis status in envelope");
+    }
+    const postDeliveryState = JSON.parse(await readFile(join(runRoot, "controller-smoke", "state.json"), "utf8"));
+    if (postDeliveryState.status !== "running" || postDeliveryState.verifier_evaluations.some((item) => item.evidence === "heartbeat-return.json" && item.status === "blocked")) {
+      throw new Error("heartbeat real-smoke must clear heartbeat blocker state");
+    }
+    if (postDeliveryState.runtime_mode !== "background+heartbeat") {
+      throw new Error("heartbeat real-smoke must preserve background+heartbeat runtime mode");
+    }
+
+    const envelope = JSON.parse(await readFile(started.return_envelope, "utf8"));
+    if (envelope.platform_callback.status !== "deferred") {
+      throw new Error("runtime fixture must not claim platform automatic callback");
+    }
+  } finally {
+    await rm(runRoot, { recursive: true, force: true });
+  }
+}
+
 function checkHelperHelpCommands() {
   const helpers = [
     ["scripts/cwf-run-preview.mjs", "Usage:"],
     ["scripts/cwf-run-plan.mjs", "cwf-run-plan.mjs"],
     ["scripts/cwf-run-state.mjs", "Usage:"],
+    ["scripts/cwf-start.mjs", "Usage:"],
+    ["scripts/cwf-worker-sdk.mjs", "Usage:"],
+    ["scripts/cwf-worker-desktop-thread.mjs", "Usage:"],
+    ["scripts/cwf-return-heartbeat.mjs", "Usage:"],
+    ["scripts/cwf-native-subagent.mjs", "Usage:"],
     ["scripts/cwf-return-envelope.mjs", "Usage:"],
     ["scripts/cwf-safe-write.mjs", "Usage:"],
     ["scripts/cwf-generate-workflow.mjs", "Usage:"],
