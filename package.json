@@ -5,6 +5,7 @@
   "type": "module",
   "files": [
     "README.md",
+    "README.en.md",
     "README.zh-CN.md",
     "docs/",
     "skills/",

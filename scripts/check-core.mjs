@@ -19,6 +19,7 @@ const root = new URL("..", import.meta.url);
 
 const requiredFiles = [
   "README.md",
+  "README.en.md",
   "README.zh-CN.md",
   "docs/CORE.md",
   "docs/CWF_MVP_EVIDENCE.md",
@@ -67,6 +68,7 @@ for (const file of requiredFiles) {
 }
 
 const readme = await readText("README.md");
+const readmeEn = await readText("README.en.md");
 const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
 const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
@@ -83,19 +85,34 @@ const skillTriggerCases = JSON.parse(await readText("skills/codex-workflows/eval
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
-mustContain(readme, "not a standalone agent platform");
-mustContain(readme, "bounded dynamic workflow");
+mustContain(readme, "英文版：[README.en.md]");
+mustContain(readme, "Codex 原生、有边界的动态工作流");
+mustContain(readme, "不是独立 agent 平台");
 mustContain(readme, "run plan");
 mustContain(readme, "cwf-run-plan.mjs");
 mustContain(readme, "desktop-thread");
 mustContain(readme, "background+heartbeat");
-mustContain(readme, "SDK background workers");
+mustContain(readme, "SDK 后台 worker");
 mustContain(readme, "cwf-start.mjs");
 mustContain(readme, "cwf-worker-sdk.mjs");
 mustContain(readme, "cwf-worker-desktop-thread.mjs");
-mustContain(readme, "Sunny-style library skill package");
+mustContain(readme, "Sunny-style `library` skill");
 mustContain(readme, "check_skill_install.py --check-install");
 mustContain(readme, "evals/trigger_cases.json");
+mustContain(readmeEn, "Chinese: [README.md]");
+mustContain(readmeEn, "not a standalone agent platform");
+mustContain(readmeEn, "bounded dynamic workflow");
+mustContain(readmeEn, "run plan");
+mustContain(readmeEn, "cwf-run-plan.mjs");
+mustContain(readmeEn, "desktop-thread");
+mustContain(readmeEn, "background+heartbeat");
+mustContain(readmeEn, "SDK background workers");
+mustContain(readmeEn, "cwf-start.mjs");
+mustContain(readmeEn, "cwf-worker-sdk.mjs");
+mustContain(readmeEn, "cwf-worker-desktop-thread.mjs");
+mustContain(readmeEn, "Sunny-style library skill package");
+mustContain(readmeEn, "check_skill_install.py --check-install");
+mustContain(readmeEn, "evals/trigger_cases.json");
 mustContain(zh, "Codex 原生、有边界的动态工作流");
 mustContain(zh, "有边界的动态工作流");
 mustContain(zh, "左侧线程");

@@ -1,111 +1,77 @@
-# Codex Workflows
+# Codex Workflows (CWF)
 
-Codex Workflows 是一个 **Codex 原生、有边界的动态工作流 skill**。
+> 英文版：[README.en.md](README.en.md)
+>
+> 一句话：CWF 是 Codex 原生、有边界的动态工作流 skill。小任务直接做；复杂任务用它拆、跑、验、收口。
 
-它的核心不是 CLI、不是外部 Node runtime、也不是自己再造一个 agent 平台。
+Codex Workflows 面向 OpenAI Codex 和 Codex Desktop。它把复杂任务从容易漂移的长对话里抽出来，变成一份可检查、有边界、可恢复的运行计划，也就是 `run plan`。
 
-它也不是“多开几个 subagent 就完事”。核心是把复杂任务的编排从容易漂移的聊天上下文里抽出来，变成一个很小、可检查的 run plan：先定范围，再按需并行，重要结论交给 verifier 反证，最后回到当前会话收口。
+CWF 的边界很明确：不是独立 agent 平台，不提供托管式工作流服务，也不把 `workflow.js` 当成可以随便执行的 Node 脚本。Codex 主会话仍然是协调者；`workflow.js` 是给 Codex 读取的工作流说明；真正执行尽量复用 Codex 原生能力：原生子 agent、Codex SDK、Codex Desktop 左侧线程、`background+heartbeat`。
 
-核心只有一句话：
+## 什么时候用
 
-```text
-Codex 主会话动态生成/读取 workflow.js harness，
-然后用 Codex 原生 subagents 执行，
-最后在当前会话中收口。
-```
+适合：
+
+- 大 repo 审计、发布前风险检查
+- 复杂 PR 审查、对抗性验证、证据核查
+- 根因调查、bug hunt、迁移和重构规划
+- 需要多个独立上下文并行看的任务
+- 需要写入边界的安全修复循环
+- 长任务不想占着主会话，但希望结果回来
+
+不适合：
+
+- typo、import、按钮样式这种小改
+- 一个 Codex turn 能直接做完的普通任务
+- 没有明确目标和验收条件的探索聊天
+- 需要无边界自动派工的平台级托管任务
 
 ## 核心链路
 
 ```text
 用户目标
-  -> Codex 主会话写出或选择 workflow.js
-  -> Codex 主会话生成有边界的 run plan
-  -> Codex 主会话解释 workflow
-  -> Codex spawn 原生 explorer / worker subagents
-  -> subagents 继承当前 Codex sandbox / approval
-  -> 重要 worker 可升级成左侧 Desktop thread
-  -> Codex 等待或后台运行 / 汇总 / 按需补派 / 验证
-  -> 当前会话用人话收口
+  -> Codex 主会话选择或生成 workflow.js
+  -> 生成有边界的 run plan: 范围、阶段、worker、预算、停止规则
+  -> Codex 调度原生子 agent / SDK 后台 worker / desktop-thread
+  -> verifier 或 challenger 检查关键结论
+  -> 写文件必须走安全写入门禁
+  -> 结果通过 coordinator_synthesis 或 heartbeat_synthesis 回到发起会话
 ```
 
-## 保留什么
+`workflow.js` 是工作流说明，不是任意可执行脚本。CWF 不把未知 JS 直接当脚本执行。
 
-- `skills/codex-workflows/SKILL.md`: 原生 Codex skill。
-- `workflows/*.workflow.js`: workflow harness 模板。
-- Codex 原生 subagents: 真正执行者。
-- scope-first run plan: 非 trivial 任务先定范围、预算、验证和停止条件。
-- 当前会话回流: 结果由主 Codex 汇总回来。
-- 可选左侧线程: 只有长任务、写文件、需要后续单独追问的 worker 才进左侧。
-- 可选后台 + heartbeat: 长任务不用让主会话一直等，跑完后请求唤醒原会话；只有真实 marker 回帖才算送达。
-- stop condition / gate / verification: 防止跑偏和早停。
+## Worker 可见性
 
-## 删除了什么
+| 模式 | 含义 | 适合 |
+|---|---|---|
+| `inline` | worker 静默跑，结果回主会话 | 普通审计、检查、分析 |
+| `desktop-thread` | 创建 Codex Desktop 左侧线程 | 长任务、写文件 worker、需要后续追问 |
+| SDK 后台 worker | 通过 `@openai/codex-sdk` 安静执行 | 不需要左侧可见的后台任务 |
+| `background+heartbeat` | 后台跑完后唤醒原会话 | 不想让主会话一直等的长任务 |
 
-旧的外部 runtime 主线已经砍掉：
+最终合成必须回到发起 CWF 的原会话。`heartbeat_synthesis` 只有在原会话真实出现 marker reply 后才算送达；创建 automation 本身不算完成。
 
-- TypeScript CLI runner
-- YAML workflow registry
-- app-server 线程模拟主路径
-- safePatch 作为默认体验
-- 大量 v1.x 计划文档和 smoke 矩阵
+## 安全边界
 
-这些不是完全没价值，但它们不再是核心。以后如果要回来，只能作为 native skill 稳定后的可选 adapter。
+CWF 每次运行都应该先说明：
 
-## 当前模板
+- 范围：哪些路径、问题、产物在范围内
+- 排除项：哪些事明确不做
+- 预算：token、worker、时间上限
+- 停止规则：什么时候停，什么时候阻塞
+- 隔离方式：外部或不可信内容如何隔离
+- 验证者：谁负责挑战结论
+- 写入范围：哪些写入需要审批
 
-- `workflows/classify-and-act.workflow.js`
-- `workflows/adversarial-verify.workflow.js`
-- `workflows/pipeline.workflow.js`
-- `workflows/repo-audit.workflow.js`
-- `workflows/safe-fix-loop.workflow.js`
-- `workflows/tournament.workflow.js`
-- `workflows/ui-copy-review.workflow.js`
+写文件不允许 worker 直接自由应用。`scripts/cwf-safe-write.mjs` 用的是审批门控补丁流：
 
-这些 JS 不是给 Node 直接执行的。它们是给 Codex 读的 harness/spec：描述怎么拆任务、派哪些 subagent、哪些 worker 可写、怎么验证、何时停止。
+```text
+preview -> approve-write -> path policy -> git apply --check -> verification -> rollback evidence
+```
 
-## 左侧线程怎么用
+SDK worker 或 `desktop-thread` worker 可以提出 patch，但真正应用必须回到主会话的安全写入门禁。
 
-默认不要每个 worker 都建左侧线程。大多数短 explorer 只需要把结果回到主会话，别污染侧边栏。
-
-三种可见性：
-
-- `visibility: "inline"`: 默认。worker 在后台跑，结果回主会话。
-- `visibility: "desktop-thread"`: 明确进入左侧线程，适合长任务、写文件 worker、需要单独追问的 worker。
-- `visibility: "auto"`: 由 Codex 按任务长度、风险、是否写文件、是否需要后续继续聊来决定。
-
-不管 worker 是否进左侧，最终结果都必须回到发起 CWF 的当前会话。
-
-长任务不需要让主会话一直卡着等。CWF 可以走 `background+heartbeat`：后台把状态和最终结果写到 `.cwf/runs/RUN_ID/`，再为原会话调度 heartbeat。只有 coordinator 在原会话里真实看到 marker 回帖后，才允许记录 `heartbeat_synthesis`；否则只能保持 `heartbeat-scheduled` 或 `heartbeat-scheduled-not-returned`。SDK worker 适合安静后台执行，但不保证出现在左侧；真正要出现在 Codex Desktop 左侧的 worker，仍然走 `desktop-thread`。
-
-## 它解决什么问题
-
-CWF 不是为了“显得高级”才多 agent。它主要解决单个长上下文容易出现的三类失败：
-
-- `agentic laziness`: 长任务只做了一部分就说完成。
-- `self-preferential bias`: 同一个 agent 写答案，又自己给自己当裁判。
-- `goal drift`: 多轮执行或压缩后，原始目标和限制慢慢丢失。
-
-CWF 的结构性解法是：隔离 worker 上下文、让独立 verifier 审查、写清楚 stop condition，并由主会话最终收口。
-
-## 有边界的动态工作流
-
-CWF 会吸收 Claude Dynamic Workflows 里真正有价值的东西：动态生成编排、并行拆任务、反证验证、保存进度、最后统一汇总。但我们不追“几百个 agent”的炫技，也不搞隐藏的无限 scheduler。
-
-对 CWF 来说，`dynamic` 是 Codex 会根据当前任务生成或调整 run plan；`bounded` 是每次正式开跑前必须有范围、预算、隔离、verifier 和停止条件。
-
-可选 SDK / heartbeat adapter 可以让长任务后台跑，但 `workflow.js` 仍然只是 harness/spec，不是给 Node 随便执行的脚本。
-
-适合大规模 migration、repo audit、bug hunt、source-backed research、adversarial review、safe fix loop。不适合日常小改，因为那会浪费 token，也会让流程变重。
-
-## 运行体验
-
-CWF 跑复杂任务前应该先展示 harness preview：会用什么模式、分几个阶段、派哪些 worker、哪些进左侧线程、预算多少、怎么隔离不可信输入、什么时候停。
-
-非 trivial 任务还应该展示 run plan：范围、阶段、worker、verifier/challenger、写入边界、不可信输入路径、预算和停止条件。
-
-运行中只给紧凑状态：当前阶段、worker 完成/阻塞、耗时、预算压力。inline worker 不刷屏；只有值得继续看的 worker 才进左侧线程。
-
-取消时要停止继续派工，并汇总已知结果。恢复时从上次阶段和已有 worker 输出继续；如果状态不完整，必须说明并从最小安全 checkpoint 重启。
+## 快速开始
 
 安装到本机 Codex skill root：
 
@@ -117,78 +83,47 @@ python3 skills/codex-workflows/scripts/check_skill_install.py --check-install
 
 安装后，新开的 Codex 会话应该能看到 `$codex-workflows`。当前已运行的会话不会自动热刷新 skill 列表。
 
-生成本地 preview：
+生成预览：
 
 ```bash
 node scripts/cwf-run-preview.mjs workflows/repo-audit.workflow.js
 ```
 
-生成并保存有边界的 run plan：
+生成并保存 run plan：
 
 ```bash
-node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+node scripts/cwf-run-plan.mjs workflows/repo-audit.workflow.js \
+  --objective "audit this repo" \
+  --run-id demo
 ```
 
-记录 cancel / resume fixture 状态：
+初始化完整控制器证据：
 
 ```bash
-node scripts/cwf-run-state.mjs init --run-id demo --workflow workflows/repo-audit.workflow.js
+node scripts/cwf-start.mjs workflows/repo-audit.workflow.js \
+  --objective "audit this repo" \
+  --run-id demo
+```
+
+查看状态：
+
+```bash
 node scripts/cwf-run-state.mjs status --run-id demo
 ```
 
-初始化完整 controller 证据目录、worker packets 和 worker result slots：
+记录 SDK worker 证据：
 
 ```bash
-node scripts/cwf-start.mjs workflows/repo-audit.workflow.js --objective "audit this repo" --run-id demo
+node scripts/cwf-worker-sdk.mjs --mode real --run-id demo
 ```
 
-run state、run plan、final summary 和 return envelope 放在已忽略的 `.cwf/runs/RUN_ID/`，不会进入 npm package。return envelope 会记录最终去向、回流模式、证据路径、verifier 状态、deferred items 和 completion status。默认回流模式是 coordinator synthesis；platform automatic callback 仍然是 deferred，除非未来有真实 smoke 证明。
-
-异步回流契约见 [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md)。简单说：`foreground` 是当前 turn 等完；`background` 是后台写本地状态，用户或主会话可轮询/恢复；`background+heartbeat` 是后台跑完后请求唤醒发起 CWF 的原会话，但必须看到真实 marker 回帖才算送达。选中的 `desktop-thread` worker 仍然可以出现在 Codex Desktop 左侧，但 SDK 后台 worker 默认是安静 worker，不要把它当左侧线程能力。
-
-原生 runtime adapter helper 是本地证据面。`cwf-worker-sdk.mjs --mode real` 会用 `@openai/codex-sdk` 真跑只读固定 marker worker，并记录真实 SDK thread id、final response、usage、timeout 和错误。
-
-- `scripts/cwf-native-subagent.mjs` 记录 host-native subagent 结果，或诚实标记 `native-subagent-unavailable`。
-- `scripts/cwf-worker-sdk.mjs` 记录 SDK worker fixture 结果或真实 SDK marker-smoke 结果。
-- `scripts/cwf-worker-desktop-thread.mjs` 记录 Desktop-thread failure fixture、待审批 smoke，或审批后的真实 smoke 结果。
-- `scripts/cwf-return-heartbeat.mjs` 记录 heartbeat fixture、scheduled、scheduled-not-returned、real-smoke 或 unavailable 状态。只有真实看到原会话 marker 回帖时，才记录 `heartbeat_synthesis`。
-
-这些 helper 不会在未批准时创建可见 Desktop thread，也不会声称 SDK 自动 callback 或 platform automatic callback。
-
-## Skill 包结构
-
-CWF 现在按 Sunny-style `library` skill 规范整理：
-
-| 文件 | 作用 |
-|---|---|
-| `skills/codex-workflows/SKILL.md` | Codex 运行 CWF 时读取的主指令 |
-| `skills/codex-workflows/references/routing.md` | 和 `goal-writer`、`delivery-planner`、`project-status-audit`、`codex-thread-orchestrator` 的路由边界 |
-| `skills/codex-workflows/templates/run-plan.md` | 可落盘的 bounded run plan 模板 |
-| `skills/codex-workflows/evals/trigger_cases.json` | 应触发 / 不应触发 / 近邻技能的路由样例 |
-| `skills/codex-workflows/scripts/check_skill_install.py` | skill 包结构与本机安装检查 |
-
-这部分用来防止 CWF 和普通计划、目标提示词、项目状态审计、线程编排混路由：该跑 workflow 时触发，不该触发时交给更窄的 skill。
-
-和 Claude Dynamic Workflows 的当前对比见 [docs/CWF_CLAUDE_COMPARISON.md](docs/CWF_CLAUDE_COMPARISON.md)。
-
-完整吃满 Codex 原生 subagent / thread / SDK / heartbeat 能力的计划见 [docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md](docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md)，可直接开目标模式的提示词见 [docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md](docs/goals/CWF_FULL_NATIVE_RUNTIME_GOAL.md)。
-
-为第一批支持的 workflow family 生成有边界草稿：
+记录 Desktop-thread worker 证据：
 
 ```bash
-node scripts/cwf-generate-workflow.mjs "audit this repo for release risk"
-node scripts/cwf-generate-workflow.mjs "fix a bounded bug"
+node scripts/cwf-worker-desktop-thread.mjs --run-id demo
 ```
 
-查看内置 workflow catalog：
-
-```bash
-node scripts/cwf-catalog.mjs
-```
-
-safe write worker 走 approval-gated bounded patch flow，不允许 Desktop-thread 或 SDK worker 直接写文件。`scripts/cwf-safe-write.mjs` 会检查 preview gate、`approve-write`、路径策略、非 coordinator patch proposal 的 coordinator approval、apply-check、声明的 verification、changed files 和 rollback evidence，用于 fixture 和明确批准的 disposable smoke target。
-
-拿真实 patch 文件做 gate 评估：
+评估一个已审批 patch：
 
 ```bash
 node scripts/cwf-safe-write.mjs \
@@ -201,53 +136,89 @@ node scripts/cwf-safe-write.mjs \
   --verification-status pass
 ```
 
-所有 helper 脚本都支持 `--help`。它们是给 Codex 原生 skill 留证据和本地验证用的 helper，不是新的独立 runtime。
+验证仓库：
 
-当前 MVP 证据汇总在 [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md)，里面明确区分 real-smoke、fixture、dry-run、approval-gated 和 deferred。
+```bash
+npm run check
+```
 
-后续增强计划在 [docs/CWF_ENHANCEMENT_ROADMAP.md](docs/CWF_ENHANCEMENT_ROADMAP.md)，分阶段目标提示词在 [docs/goals/CWF_ENHANCEMENT_GOALS.md](docs/goals/CWF_ENHANCEMENT_GOALS.md)，一次性实现全部增强的总目标提示词在 [docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md](docs/goals/CWF_FULL_IMPLEMENTATION_GOAL.md)。
+## 内置 workflow 模板
 
-release-readiness 证据在 [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md)。它只代表本地 package readiness，不代表 npm publish、git tag、deploy、marketplace 或 hosted scheduler。
+- `workflows/repo-audit.workflow.js`: 仓库审计和发布风险检查
+- `workflows/adversarial-verify.workflow.js`: 对抗性验证和反证
+- `workflows/safe-fix-loop.workflow.js`: 有审批门的修复循环
+- `workflows/classify-and-act.workflow.js`: 先分类，再选择动作
+- `workflows/pipeline.workflow.js`: 阶段式处理
+- `workflows/tournament.workflow.js`: 多候选对比和裁决
+- `workflows/ui-copy-review.workflow.js`: UI、文案、信息层级审查
 
-## Budget 和隔离
+这些文件不是给 Node 直接执行的脚本，而是 Codex 解释和调度的工作流说明。
 
-每个可复用 workflow 都应该写清楚预算和停止规则。动态工作流很容易比普通单轮多消耗 5-10 倍 token，预算必须显式可见。
+## 运行产物
 
-任何读取用户反馈、网页、issue、support ticket、X 内容等不可信输入的 workflow，都要用 quarantine：
+`.cwf/runs/RUN_ID/` 存放本地运行状态、run plan、worker 输入、worker 输出、回流信封和最终摘要。它是本地证据边界，不进入 npm package。
 
-- 读原始不可信内容的 agent 只能只读；
-- 真正写文件或执行动作的 worker 只能拿到清洗后的摘要；
-- 涉及 deploy、数据库、支付、权限、凭据、不可逆外部写入时必须先要明确批准。
+默认回流是 `coordinator_synthesis`。长任务可以用 `background+heartbeat`，但只有真实 marker 回到原会话后才标记 `heartbeat_synthesis`。平台自动回调仍是 deferred，不会被 README 说成已经完成。
 
-## 保存成 Skill
+## 和 Claude Dynamic Workflows 的关系
 
-跑得好的 workflow 应该保存成模板，并随 Codex skill 分发。保存后的 workflow 仍然是可调整的 harness/spec，不是逐字执行的脚本。
+CWF 受 Claude Dynamic Workflows 启发，但不声称完整复刻。
 
-## 什么时候用
+Claude 更像平台内置的动态编排运行时，可以在对话外运行编排脚本并协调大量子 agent。CWF 更轻：Codex 主会话仍是主脑，`workflow.js` 是工作流说明，worker 只在值得时拆出去，重要结果要被验证者挑战，最后回到发起会话。
 
-适合：
+更完整的对比见 [docs/CWF_CLAUDE_COMPARISON.md](docs/CWF_CLAUDE_COMPARISON.md)。
 
-- repo audit / release review
-- root-cause investigation
-- adversarial verification
-- safe fix loop
-- UI / copy / design review
-- migration / refactor plan
-- claim checking
-- tournament / sorting / 多方案评估
+## 当前状态
 
-不适合：
+已具备：
 
-- 单文件小改
-- 普通 lint/test
-- 一句话能做完的常规编码
-- 为了看起来高级而硬开多 agent
+- Codex skill: `skills/codex-workflows/SKILL.md`
+- Sunny-style `library` skill 包：`references/routing.md`、`templates/run-plan.md`、`evals/trigger_cases.json`、`scripts/check_skill_install.py`
+- 有边界运行计划 helper: `scripts/cwf-run-plan.mjs`
+- 控制器证据初始化 helper: `scripts/cwf-start.mjs`
+- SDK worker 证据 helper: `scripts/cwf-worker-sdk.mjs`
+- Desktop-thread 证据 helper: `scripts/cwf-worker-desktop-thread.mjs`
+- heartbeat 回流证据 helper: `scripts/cwf-return-heartbeat.mjs`
+- 安全写入门禁 helper: `scripts/cwf-safe-write.mjs`
+- 7 个内置 workflow 模板
 
-## 检查
+需要诚实保留的边界：
+
+- 这不是托管式工作流服务。
+- 不声称 SDK 自动回调。
+- 不声称平台自动回调。
+- Desktop-thread 只给值得继续看的 worker 用，不是每个 worker 都进左侧。
+- 写文件仍走审批门控补丁流，不因为“动态”就变成无限权限。
+
+## Skill 包结构
+
+CWF 按 Sunny-style `library` skill 规范整理：
+
+| 文件 | 作用 |
+|---|---|
+| `skills/codex-workflows/SKILL.md` | Codex 运行 CWF 时读取的主指令 |
+| `skills/codex-workflows/references/routing.md` | 和 `goal-writer`、`delivery-planner`、`project-status-audit`、`codex-thread-orchestrator` 的路由边界 |
+| `skills/codex-workflows/templates/run-plan.md` | 可落盘的有边界运行计划模板 |
+| `skills/codex-workflows/evals/trigger_cases.json` | 应触发 / 不应触发 / 近邻技能的路由样例 |
+| `skills/codex-workflows/scripts/check_skill_install.py` | skill 包结构与本机安装检查 |
+
+这部分的目标是让 CWF 在本机和公开仓库里都能稳定路由：该跑 workflow 时触发，不该触发时让更窄的 skill 接手。
+
+## 文档入口
+
+- [README.en.md](README.en.md): 英文 README
+- [README.zh-CN.md](README.zh-CN.md): 中文镜像
+- [docs/CORE.md](docs/CORE.md): 核心原则
+- [docs/RUN_EXPERIENCE.md](docs/RUN_EXPERIENCE.md): 运行体验
+- [docs/WORKFLOW_JS.md](docs/WORKFLOW_JS.md): `workflow.js` contract
+- [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md): foreground / background / heartbeat 契约
+- [docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md](docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md): 吃满 Codex 原生能力的完整计划
+- [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md): MVP 证据
+- [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md): release readiness 证据
+
+## Check
 
 ```bash
 npm run check
 python3 skills/codex-workflows/scripts/check_skill_install.py --check-install
 ```
-
-这个检查只验证 native skill 和 workflow 模板，不再构建外部 runtime。
