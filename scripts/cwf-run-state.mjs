@@ -12,9 +12,9 @@ const STATUSES = new Set(["planned", "running", "partial", "completed", "blocked
 async function initRun(args) {
   const options = parseOptions(args, {
     required: ["run-id", "workflow"],
-    optional: ["objective"],
+    optional: ["objective", "run-root"],
   });
-  const stateDir = resolve(DEFAULT_STATE_DIR);
+  const stateDir = resolve(options["run-root"] ?? DEFAULT_STATE_DIR);
   const runDir = safeRunDir(stateDir, options["run-id"]);
   const loaded = await loadWorkflow(options.workflow);
   const runPlan = await buildRunPlanFromWorkflow(options.workflow, {
@@ -25,6 +25,7 @@ async function initRun(args) {
   const now = new Date().toISOString();
   const state = {
     run_id: options["run-id"],
+    run_dir: runDir,
     workflow_name: loaded.workflow.name,
     template_path: options.workflow,
     user_objective: options.objective ?? "",
@@ -80,7 +81,7 @@ async function initRun(args) {
 async function updatePhase(args) {
   const options = parseOptions(args, {
     required: ["run-id", "phase", "status"],
-    optional: ["evidence"],
+    optional: ["evidence", "run-root"],
   });
   assertStatus(options.status);
   const { state, path } = await readState(options);
@@ -96,7 +97,7 @@ async function updatePhase(args) {
 async function updateWorker(args) {
   const options = parseOptions(args, {
     required: ["run-id", "worker", "status"],
-    optional: ["summary", "evidence", "desktop-thread-id"],
+    optional: ["summary", "evidence", "desktop-thread-id", "run-root"],
   });
   assertStatus(options.status);
   const { state, path } = await readState(options);
@@ -113,7 +114,7 @@ async function updateWorker(args) {
 async function cancelRun(args) {
   const options = parseOptions(args, {
     required: ["run-id"],
-    optional: ["reason"],
+    optional: ["reason", "run-root"],
   });
   const { state, path, runDir } = await readState(options);
   state.status = "cancelled";
@@ -128,12 +129,12 @@ async function cancelRun(args) {
 async function statusRun(args) {
   const options = parseOptions(args, {
     required: ["run-id"],
-    optional: [],
+    optional: ["run-root"],
   });
-  const { state } = await readState(options);
+  const { state, runDir } = await readState(options);
   refreshResume(state);
   const counts = countStatuses(state.workers);
-  const envelope = buildReturnEnvelope(state);
+  const envelope = buildReturnEnvelope(state, { runDir });
   console.log(
     JSON.stringify(
       {
@@ -163,7 +164,7 @@ async function statusRun(args) {
 async function resumePlan(args) {
   const options = parseOptions(args, {
     required: ["run-id"],
-    optional: [],
+    optional: ["run-root"],
   });
   const { state } = await readState(options);
   refreshResume(state);
@@ -171,7 +172,7 @@ async function resumePlan(args) {
 }
 
 async function readState(options) {
-  const stateDir = resolve(DEFAULT_STATE_DIR);
+  const stateDir = resolve(options["run-root"] ?? DEFAULT_STATE_DIR);
   const runDir = safeRunDir(stateDir, options["run-id"]);
   const path = join(runDir, "state.json");
   const state = JSON.parse(await readFile(path, "utf8"));
@@ -351,12 +352,13 @@ function lastContiguousCompleted(state) {
 
 function humanConclusion(state) {
   const workflow = state.workflow_name ?? "workflow";
+  const runDir = state.run_dir ?? `.cwf/runs/${state.run_id}`;
   if (state.status === "completed") {
     const returnText =
       state.return_mode === "heartbeat_synthesis"
         ? "通过 heartbeat synthesis 回到原会话"
         : "通过 coordinator synthesis 返回当前对话";
-    return `这次 CWF 已完成 ${workflow}，最终结果${returnText}，证据在 .cwf/runs/${state.run_id}/。`;
+    return `这次 CWF 已完成 ${workflow}，最终结果${returnText}，证据在 ${runDir}/。`;
   }
   if (state.status === "blocked") {
     return `这次 CWF 在 ${workflow} 中被阻塞，不能声明 PASS；需要先处理 blocker 或补 waiver/evidence。`;
@@ -388,7 +390,9 @@ function parseOptions(args, schema) {
     const arg = args[index];
     if (!arg.startsWith("--")) throw new Error(`Unexpected argument: ${arg}`);
     const key = arg.slice(2);
-    options[key] = args[++index] ?? "";
+    const value = args[++index];
+    if (value == null || value.startsWith("--")) throw new Error(`--${key} requires a value`);
+    options[key] = value;
   }
 
   const allowed = new Set([...schema.required, ...schema.optional]);
@@ -404,7 +408,7 @@ function parseOptions(args, schema) {
 async function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || command === "--help" || command === "-h") {
-    console.log("Usage: node scripts/cwf-run-state.mjs <init|phase|worker|cancel|status|resume-plan> --run-id <id> ...");
+    console.log("Usage: node scripts/cwf-run-state.mjs <init|phase|worker|cancel|status|resume-plan> --run-id <id> [--run-root <path>] ...");
     return;
   }
   if (command === "init") return initRun(args);

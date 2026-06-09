@@ -63,7 +63,7 @@ Every CWF run should declare:
 - Verifier: who challenges the critical conclusion
 - Write scope: which writes need approval
 
-Workers cannot freely apply file changes. `scripts/cwf-safe-write.mjs` uses an approval-gated patch flow:
+Workers cannot freely apply file changes. `scripts/cwf-safe-write.mjs` evaluates an approval-gated patch flow and apply-check evidence:
 
 ```text
 preview -> approve-write -> path policy -> git apply --check -> verification -> rollback evidence
@@ -114,13 +114,13 @@ node scripts/cwf-run-state.mjs status --run-id demo
 Record SDK worker evidence:
 
 ```bash
-node scripts/cwf-worker-sdk.mjs --mode real --run-id demo
+node scripts/cwf-worker-sdk.mjs --mode real --run-id demo --worker correctness
 ```
 
 Record Desktop-thread worker evidence:
 
 ```bash
-node scripts/cwf-worker-desktop-thread.mjs --run-id demo
+node scripts/cwf-worker-desktop-thread.mjs --run-id demo --worker visible-fixture
 ```
 
 Evaluate an approved patch:
@@ -133,6 +133,8 @@ node scripts/cwf-safe-write.mjs \
   --approval approve-write \
   --prior-gate previewed \
   --apply-check passed \
+  --apply-check-command "git apply --check change.patch" \
+  --apply-check-evidence "git apply --check passed" \
   --verification-status pass
 ```
 
@@ -213,9 +215,8 @@ This keeps CWF routeable in both the public repo and local Codex skill root: tri
 - [docs/RUN_EXPERIENCE.md](docs/RUN_EXPERIENCE.md): run experience
 - [docs/WORKFLOW_JS.md](docs/WORKFLOW_JS.md): `workflow.js` contract
 - [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md): foreground / background / heartbeat contract
-- [docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md](docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md): plan to use Codex-native capabilities fully
-- [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md): MVP evidence
-- [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md): release readiness evidence
+
+The repository also contains roadmap, goal, and evidence documents for maintainers. The npm package includes only the public core docs above so local paths, thread ids, and internal acceptance records do not leak into the public package.
 
 ## Check
 

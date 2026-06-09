@@ -201,6 +201,7 @@ if (packageJson.dependencies?.["@openai/codex-sdk"] == null) {
 if (!Array.isArray(packageJson.files) || packageJson.files.includes(".cwf/")) {
   throw new Error("package files must exclude .cwf/");
 }
+checkPackageRules();
 
 const workflowDir = join(root.pathname, "workflows");
 const workflows = (await readdir(workflowDir)).filter((file) => file.endsWith(".workflow.js"));
@@ -264,6 +265,43 @@ function mustContain(text, needle) {
 function reject(text, needle) {
   if (text.includes(needle)) {
     throw new Error(`Forbidden workflow text: ${needle}`);
+  }
+}
+
+function checkPackageRules() {
+  const files = new Set(packageJson.files ?? []);
+  for (const required of [
+    "README.md",
+    "README.en.md",
+    "README.zh-CN.md",
+    "docs/CORE.md",
+    "docs/RUN_EXPERIENCE.md",
+    "docs/WORKFLOW_JS.md",
+    "docs/CWF_ASYNC_RUNTIME.md",
+    "docs/CWF_CLAUDE_COMPARISON.md",
+    "skills/",
+    "workflows/",
+    "scripts/",
+  ]) {
+    if (!files.has(required)) throw new Error(`package files missing ${required}`);
+  }
+  for (const forbidden of ["docs/", "docs/goals/", "docs/evidence/", ".cwf/"]) {
+    if (files.has(forbidden)) throw new Error(`package files must not include ${forbidden}`);
+  }
+
+  const packOutput = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+    cwd: root.pathname,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const packed = JSON.parse(packOutput)[0]?.files?.map((item) => item.path) ?? [];
+  for (const required of ["docs/CORE.md", "docs/RUN_EXPERIENCE.md", "docs/WORKFLOW_JS.md"]) {
+    if (!packed.includes(required)) throw new Error(`npm pack missing public doc ${required}`);
+  }
+  for (const path of packed) {
+    if (path.startsWith("docs/goals/") || path.startsWith("docs/evidence/")) {
+      throw new Error(`npm pack leaked internal doc ${path}`);
+    }
   }
 }
 
@@ -445,6 +483,18 @@ function checkPreviewAndVisibilityRules() {
     "desktop-thread",
   );
   assertVisibility("inspection request", smallWorkflow, phase, autoAgent, { userRequest: "continue this worker separately" }, "desktop-thread");
+  const workflowScopedWrite = buildPreview(
+    {
+      ...smallWorkflow,
+      write_scopes: ["src"],
+      phases: [{ id: "write", agents: [{ id: "writer", type: "worker", visibility: "auto", prompt: "Write files." }] }],
+    },
+    { runImmediately: true },
+  );
+  assertPreviewRequired("top-level write scope", workflowScopedWrite, "worker write scope is present");
+  if (workflowScopedWrite.agents[0].resolved_visibility !== "desktop-thread") {
+    throw new Error("top-level write_scopes must force auto workers to desktop-thread visibility");
+  }
   assertVisibility(
     "default inline",
     { ...smallWorkflow, budget: { max_tokens: 50000, stop_when: "Done or blocked." } },
@@ -572,12 +622,16 @@ async function checkRunPlanRules() {
   if (!safeFixPlan.preview.agents.some((agent) => agent.write_scope)) {
     throw new Error("safe-fix-loop must expose write scopes for dry-run proof");
   }
+  if (safeFixPlan.preview.verification.length === 0) {
+    throw new Error("safe-fix-loop must expose verification evidence requirements");
+  }
   if (!safeFixPlan.preview.agents.some((agent) => agent.resolved_visibility === "desktop-thread")) {
     throw new Error("safe-fix-loop write worker must remain approval-gated through desktop-thread visibility");
   }
   mustContain(safeFixMarkdown, "write_scope=Only the files needed for the approved bounded fix.");
   mustContain(safeFixMarkdown, "Preview required because");
   mustContain(safeFixMarkdown, "worker write scope is present");
+  mustContain(safeFixMarkdown, "Run git apply --check");
 }
 
 function checkRunStateRules() {
@@ -771,6 +825,11 @@ async function checkCatalogRules(workflows) {
 }
 
 function checkSafeWriteAndVerifierRules() {
+  const passedApplyCheck = {
+    status: "passed",
+    command: "git apply --check change.patch",
+    evidence: "git apply --check passed",
+  };
   const patch = [
     "diff --git a/docs/example.md b/docs/example.md",
     "--- a/docs/example.md",
@@ -785,7 +844,7 @@ function checkSafeWriteAndVerifierRules() {
     approval: "approve-write",
     allowed_paths: ["docs"],
     forbidden_paths: [".env", "package.json"],
-    apply_check: "passed",
+    apply_check: passedApplyCheck,
     verification: { status: "pass", command: "npm run check" },
     patch,
   });
@@ -794,13 +853,26 @@ function checkSafeWriteAndVerifierRules() {
   }
 
   const negativeCases = [
-    ["no prior gate", { prior_gate: "", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch }],
-    ["forbidden path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], forbidden_paths: ["docs/example.md"], apply_check: "passed", verification: { status: "pass" }, patch }],
-    ["out-of-scope path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["scripts"], apply_check: "passed", verification: { status: "pass" }, patch }],
-    ["conflict patch", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch: `${patch}<<<<<<< HEAD\n` }],
-    ["verification failure", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "fail" }, patch }],
-    ["sdk bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, proposer_runtime: "sdk-background", patch }],
-    ["desktop-thread bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, proposer_runtime: "desktop-thread", patch }],
+    ["no prior gate", { prior_gate: "", approval: "approve-write", allowed_paths: ["docs"], apply_check: passedApplyCheck, verification: { status: "pass" }, patch }],
+    ["forbidden path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], forbidden_paths: ["docs/example.md"], apply_check: passedApplyCheck, verification: { status: "pass" }, patch }],
+    ["out-of-scope path", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["scripts"], apply_check: passedApplyCheck, verification: { status: "pass" }, patch }],
+    ["conflict patch", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: passedApplyCheck, verification: { status: "pass" }, patch: `${patch}<<<<<<< HEAD\n` }],
+    ["verification failure", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: passedApplyCheck, verification: { status: "fail" }, patch }],
+    ["missing apply evidence", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: "passed", verification: { status: "pass" }, patch }],
+    ["sdk bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: passedApplyCheck, verification: { status: "pass" }, proposer_runtime: "sdk-background", patch }],
+    ["desktop-thread bypass", { prior_gate: "previewed", approval: "approve-write", allowed_paths: ["docs"], apply_check: passedApplyCheck, verification: { status: "pass" }, proposer_runtime: "desktop-thread", patch }],
+    [
+      "dot-segment path escape",
+      {
+        prior_gate: "previewed",
+        approval: "approve-write",
+        allowed_paths: ["src"],
+        forbidden_paths: [".env"],
+        apply_check: passedApplyCheck,
+        verification: { status: "pass" },
+        patch: "diff --git a/src/../.env b/src/../.env\n--- a/src/../.env\n+++ b/src/../.env\n@@\n-old\n+new\n",
+      },
+    ],
   ];
   for (const [label, request] of negativeCases) {
     const result = evaluateSafeWriteRequest(request);
@@ -811,7 +883,7 @@ function checkSafeWriteAndVerifierRules() {
     prior_gate: "previewed",
     approval: "approve-write",
     allowed_paths: ["docs"],
-    apply_check: "passed",
+    apply_check: passedApplyCheck,
     verification: { status: "pass" },
     proposer_runtime: "sdk-background",
     coordinator_approval: "accepted",
@@ -821,6 +893,10 @@ function checkSafeWriteAndVerifierRules() {
     throw new Error("coordinator-approved SDK patch proposal should pass safe-write gate");
   }
 
+  const pending = evaluateVerifierGate([]);
+  if (pending.status !== "pending" || pending.final_pass) {
+    throw new Error("empty verifier evaluations must remain pending, not pass");
+  }
   const blocked = evaluateVerifierGate([{ status: "blocked", summary: "missing evidence" }]);
   if (blocked.final_pass) throw new Error("blocked verifier must prevent final pass");
   const needsWaiver = evaluateVerifierGate([{ status: "needs-waiver", summary: "risk accepted?" }]);
@@ -874,6 +950,16 @@ async function checkNativeRuntimeRules() {
       throw new Error("SDK fixture must write completed result with fixture thread id");
     }
 
+    await assertRejectsAsync(
+      () => recordNativeSubagent({
+        runId: "controller-smoke",
+        workerId: "maintainability",
+        runRoot,
+        mode: "record-result",
+      }),
+      "native subagent real-smoke must require agent id and evidence",
+    );
+
     const nativeUnavailable = await recordNativeSubagent({
       runId: "controller-smoke",
       workerId: "tests",
@@ -905,7 +991,7 @@ async function checkNativeRuntimeRules() {
     });
     if (
       heartbeat.heartbeat.status !== "heartbeat-unavailable" ||
-      !heartbeat.heartbeat.resume_prompt.includes(".cwf/runs/controller-smoke/final.md")
+      !heartbeat.heartbeat.resume_prompt.includes(`${runRoot}/controller-smoke/final.md`)
     ) {
       throw new Error("heartbeat unavailable fixture must include a copy-ready resume prompt");
     }
@@ -955,6 +1041,17 @@ async function checkNativeRuntimeRules() {
       throw new Error("heartbeat scheduled-not-returned must mark background+heartbeat runtime mode");
     }
 
+    await assertRejectsAsync(
+      () => recordHeartbeatReturn({
+        runId: "controller-smoke",
+        runRoot,
+        mode: "record-real-smoke",
+        automationId: "fixture-heartbeat",
+        marker: "CWF_HEARTBEAT_WITHOUT_ORIGIN",
+      }),
+      "heartbeat real-smoke must require originating thread id",
+    );
+
     const deliveredHeartbeat = await recordHeartbeatReturn({
       runId: "controller-smoke",
       runRoot,
@@ -978,8 +1075,8 @@ async function checkNativeRuntimeRules() {
       throw new Error("delivered heartbeat must expose heartbeat_synthesis status in envelope");
     }
     const postDeliveryState = JSON.parse(await readFile(join(runRoot, "controller-smoke", "state.json"), "utf8"));
-    if (postDeliveryState.status !== "running" || postDeliveryState.verifier_evaluations.some((item) => item.evidence === "heartbeat-return.json" && item.status === "blocked")) {
-      throw new Error("heartbeat real-smoke must clear heartbeat blocker state");
+    if (postDeliveryState.status !== "blocked" || postDeliveryState.verifier_evaluations.some((item) => item.evidence === "heartbeat-return.json" && item.status === "blocked")) {
+      throw new Error("heartbeat real-smoke must clear heartbeat blocker without hiding other blockers");
     }
     if (postDeliveryState.runtime_mode !== "background+heartbeat") {
       throw new Error("heartbeat real-smoke must preserve background+heartbeat runtime mode");
@@ -988,6 +1085,30 @@ async function checkNativeRuntimeRules() {
     const envelope = JSON.parse(await readFile(started.return_envelope, "utf8"));
     if (envelope.platform_callback.status !== "deferred") {
       throw new Error("runtime fixture must not claim platform automatic callback");
+    }
+
+    const overwriteRun = await startRun({
+      workflow: "workflows/repo-audit.workflow.js",
+      runId: "status-overwrite",
+      runRoot,
+      objective: "status overwrite regression",
+    });
+    const overwriteState = JSON.parse(await readFile(overwriteRun.state, "utf8"));
+    overwriteState.workers[0].status = "blocked";
+    overwriteState.workers[0].output_summary = "preexisting blocker";
+    overwriteState.status = "blocked";
+    await writeFile(overwriteRun.state, `${JSON.stringify(overwriteState, null, 2)}\n`, "utf8");
+    await recordNativeSubagent({
+      runId: "status-overwrite",
+      workerId: overwriteState.workers[1].id,
+      runRoot,
+      mode: "record-result",
+      agentId: "fixture-native-agent",
+      evidence: "fixture native result returned to coordinator",
+    });
+    const afterOverwrite = JSON.parse(await readFile(overwriteRun.state, "utf8"));
+    if (afterOverwrite.status !== "blocked" || afterOverwrite.workers[0].status !== "blocked") {
+      throw new Error("late worker completion must not overwrite existing blocked run status");
     }
   } finally {
     await rm(runRoot, { recursive: true, force: true });

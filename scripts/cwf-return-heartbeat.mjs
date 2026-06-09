@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { writeReturnEnvelope } from "./cwf-return-envelope.mjs";
+import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
 import { safeRunDir } from "./cwf-start.mjs";
 import { parseArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
@@ -22,7 +23,7 @@ export async function recordHeartbeatReturn(options = {}) {
       automation_id: "",
       marker: "",
       summary: options.summary ?? "Fixture heartbeat validates artifact shape only; it does not prove a real originating-thread reply.",
-      resume_prompt: buildResumePrompt(runId),
+      resume_prompt: buildResumePrompt(runId, runDir),
     };
   } else if (mode === "scheduled") {
     heartbeat = {
@@ -31,7 +32,7 @@ export async function recordHeartbeatReturn(options = {}) {
       automation_id: options.automationId ?? "",
       marker: options.marker ?? "",
       summary: options.summary ?? "Heartbeat automation has been scheduled but has not yet returned to the originating conversation.",
-      resume_prompt: buildResumePrompt(runId),
+      resume_prompt: buildResumePrompt(runId, runDir),
     };
   } else if (mode === "scheduled-not-returned") {
     heartbeat = {
@@ -40,16 +41,17 @@ export async function recordHeartbeatReturn(options = {}) {
       automation_id: options.automationId ?? "",
       marker: options.marker ?? "",
       summary: options.summary ?? "Heartbeat automation was scheduled, but the marker was not observed in the originating conversation after the expected window.",
-      resume_prompt: buildResumePrompt(runId),
+      resume_prompt: buildResumePrompt(runId, runDir),
     };
   } else if (mode === "record-real-smoke") {
     const marker = requireOption(options.marker, "marker");
+    const originatingThreadId = requireOption(options.originatingThreadId, "originatingThreadId");
     heartbeat = {
       status: "heartbeat_synthesis",
       evidence_level: "real-smoke",
       automation_id: options.automationId ?? "",
       marker,
-      originating_thread_id: options.originatingThreadId ?? "",
+      originating_thread_id: originatingThreadId,
       confirmed_at: options.confirmedAt ?? new Date().toISOString(),
       summary: options.summary ?? "Heartbeat automation returned to the originating conversation and posted the run summary; coordinator observed the marker before recording this real smoke.",
       resume_prompt: "",
@@ -61,7 +63,7 @@ export async function recordHeartbeatReturn(options = {}) {
       automation_id: "",
       marker: "",
       summary: options.summary ?? "Heartbeat automation is unavailable in this environment.",
-      resume_prompt: buildResumePrompt(runId),
+      resume_prompt: buildResumePrompt(runId, runDir),
     };
   } else {
     throw new Error(`Unsupported heartbeat mode: ${mode}`);
@@ -78,12 +80,8 @@ export async function recordHeartbeatReturn(options = {}) {
   state.verification_evidence = [...(state.verification_evidence ?? []), "heartbeat-return.json"];
   if (heartbeat.status === "heartbeat_synthesis") {
     state.verifier_evaluations = clearHeartbeatBlockers(state.verifier_evaluations ?? []);
-    if (state.status === "blocked" && !hasBlockingVerifier(state.verifier_evaluations)) {
-      state.status = "running";
-    }
   }
   if (heartbeat.status === "heartbeat-scheduled-not-returned") {
-    state.status = "blocked";
     state.verifier_evaluations = [
       ...(state.verifier_evaluations ?? []),
       {
@@ -93,14 +91,12 @@ export async function recordHeartbeatReturn(options = {}) {
       },
     ];
   }
+  state.status = deriveRunStatus(state);
+  refreshResume(state);
   state.updated_at = new Date().toISOString();
   await writeJson(statePath, state);
   await writeReturnEnvelope(runDir, state, { returnMode: state.return_mode });
   return { heartbeat_return: heartbeatPath, heartbeat };
-}
-
-function hasBlockingVerifier(items) {
-  return items.some((item) => item.status === "blocked" || (item.status === "needs-waiver" && !item.waiver));
 }
 
 function clearHeartbeatBlockers(items) {
@@ -111,8 +107,8 @@ function clearHeartbeatBlockers(items) {
   });
 }
 
-function buildResumePrompt(runId) {
-  return `/goal resume CWF run ${runId}: read .cwf/runs/${runId}/final.md and .cwf/runs/${runId}/return-envelope.json, then summarize status, evidence, blockers, next action, and verifier status in the originating conversation.`;
+function buildResumePrompt(runId, runDir = `.cwf/runs/${runId}`) {
+  return `/goal resume CWF run ${runId}: read ${runDir}/final.md and ${runDir}/return-envelope.json, then summarize status, evidence, blockers, next action, and verifier status in the originating conversation.`;
 }
 
 function upsertDeferred(items, heartbeat) {

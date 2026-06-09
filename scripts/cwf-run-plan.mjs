@@ -40,6 +40,7 @@ export function renderRunPlanMarkdown(plan) {
   const { workflow, preview, runId, objective, workflowPath } = plan;
   const verifierAgents = preview.agents.filter((agent) => /challenger|verifier|evidence/i.test(agent.id));
   const writeAgents = preview.agents.filter((agent) => agent.write_scope);
+  const workflowWriteScopes = preview.write_scopes ?? [];
   const quarantinePath = runId ? `.cwf/runs/${runId}/` : ".cwf/runs/RUN_ID/";
   const resumeCheckpoint = preview.phases[0]?.id
     ? `Start at phase ${preview.phases[0].id}; after each completed phase, resume from the next phase boundary.`
@@ -84,11 +85,17 @@ export function renderRunPlanMarkdown(plan) {
   }
 
   lines.push("", "## Write Scopes");
+  if (workflowWriteScopes.length > 0) {
+    for (const scope of workflowWriteScopes) {
+      lines.push(`- workflow: ${scope}`);
+    }
+  }
   if (writeAgents.length > 0) {
     for (const agent of writeAgents) {
       lines.push(`- ${agent.id}: ${agent.write_scope}`);
     }
-  } else {
+  }
+  if (workflowWriteScopes.length === 0 && writeAgents.length === 0) {
     lines.push("- read-only");
   }
 

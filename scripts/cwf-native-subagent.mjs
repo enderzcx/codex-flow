@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { writeReturnEnvelope } from "./cwf-return-envelope.mjs";
+import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
 import { safeRunDir } from "./cwf-start.mjs";
 import { parseArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
@@ -16,6 +17,8 @@ export async function recordNativeSubagent(options = {}) {
   const worker = state.workers.find((item) => item.id === workerId) ?? addSyntheticWorker(state, workerId);
   const mode = options.mode ?? "unavailable";
   const status = mode === "record-result" ? "completed" : "native-subagent-unavailable";
+  const agentId = status === "completed" ? requireOption(options.agentId, "agentId") : (options.agentId ?? "");
+  const evidence = status === "completed" ? requireOption(options.evidence, "evidence") : options.evidence;
   const result = {
     schema_version: 1,
     run_id: runId,
@@ -23,9 +26,11 @@ export async function recordNativeSubagent(options = {}) {
     runtime: "native-subagent",
     status,
     evidence_level: status === "completed" ? "real-smoke" : "unavailable",
-    agent_id: options.agentId ?? "",
-    summary: options.summary ?? "Native subagent tools are unavailable in this host/session.",
-    evidence: options.evidence ? [options.evidence] : [],
+    agent_id: agentId,
+    summary: options.summary ?? (status === "completed"
+      ? "Native subagent returned evidence to the coordinator."
+      : "Native subagent tools are unavailable in this host/session."),
+    evidence: evidence ? [evidence] : [],
     created_at: new Date().toISOString(),
   };
 
@@ -36,7 +41,8 @@ export async function recordNativeSubagent(options = {}) {
   worker.output_summary = result.summary;
   worker.evidence = [...(worker.evidence ?? []), `worker-results/${workerId}.json`];
   state.adapter_status = { ...(state.adapter_status ?? {}), native_subagent: status };
-  state.status = status === "completed" ? "running" : "blocked";
+  state.status = deriveRunStatus(state);
+  refreshResume(state);
   state.updated_at = new Date().toISOString();
   await writeJson(statePath, state);
   await writeReturnEnvelope(runDir, state, { returnMode: state.return_mode ?? "coordinator_synthesis" });

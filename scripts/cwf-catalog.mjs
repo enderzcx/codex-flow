@@ -88,16 +88,22 @@ Options:
 `);
     return;
   }
+  const projectRoot = optionValue(options["project-root"], "project-root");
   const result = {
     built_ins: BUILT_IN_CATALOG,
-    project_workflows: options["project-root"] ? await discoverProjectWorkflows(options["project-root"]) : [],
+    project_workflows: projectRoot ? await discoverProjectWorkflows(projectRoot) : [],
   };
   if (options.format === "markdown") {
     process.stdout.write(renderCatalogMarkdown(result));
     return;
   }
-  const jsonOutput = options["project-root"] ? result : BUILT_IN_CATALOG;
+  const jsonOutput = projectRoot ? result : BUILT_IN_CATALOG;
   process.stdout.write(`${JSON.stringify(jsonOutput, null, 2)}\n`);
+}
+
+function optionValue(value, name) {
+  if (value === true) throw new Error(`--${name} requires a value`);
+  return value;
 }
 
 function renderCatalogMarkdown(result) {

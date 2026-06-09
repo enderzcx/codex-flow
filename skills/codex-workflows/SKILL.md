@@ -96,7 +96,7 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 - `visibility`
 - `budget`
 - `run_experience`
-- `write_scopes`
+- `write_scopes` for workflow-level write boundaries, or per-agent `write_scope` for worker ownership
 - `verification`
 - `stop_conditions`
 - `quarantine_rules`
@@ -180,7 +180,7 @@ Use the adapter helpers only as evidence recorders unless the host capability is
 - `scripts/cwf-native-subagent.mjs` records host-native subagent output or `native-subagent-unavailable`.
 - `scripts/cwf-worker-sdk.mjs` records SDK fixture status or real read-only fixed-marker SDK status through `@openai/codex-sdk`.
 - `scripts/cwf-worker-desktop-thread.mjs` records failure fixture, approval-gated visible-thread smoke, or approved result.
-- `scripts/cwf-return-heartbeat.mjs` records heartbeat fixture, scheduled, scheduled-not-returned, real-smoke, or unavailable state. Only real-smoke may record `heartbeat_synthesis`.
+- `scripts/cwf-return-heartbeat.mjs` records heartbeat fixture, scheduled, scheduled-not-returned, real-smoke, or unavailable state. Only real-smoke with an observed originating-thread id may record `heartbeat_synthesis`.
 
 ## Budget
 
@@ -217,7 +217,7 @@ For write workers:
 - preview write scope before any real write;
 - require explicit `approve-write` or equivalent user approval;
 - check changed paths against allowed and forbidden paths;
-- run `git apply --check` in a temporary git repo, or `patch --dry-run` plus `diff --check` for a non-git equivalent;
+- run `git apply --check` in a temporary git repo, or `patch --dry-run` plus `diff --check` for a non-git equivalent, and pass command/evidence into the safe-write gate;
 - run declared verification after apply;
 - report changed files and rollback command;
 - assign exact file/module ownership;

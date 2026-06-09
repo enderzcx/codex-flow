@@ -63,7 +63,7 @@ CWF 每次运行都应该先说明：
 - 验证者：谁负责挑战结论
 - 写入范围：哪些写入需要审批
 
-写文件不允许 worker 直接自由应用。`scripts/cwf-safe-write.mjs` 用的是审批门控补丁流：
+写文件不允许 worker 直接自由应用。`scripts/cwf-safe-write.mjs` 评估审批门控补丁流和 apply-check 证据：
 
 ```text
 preview -> approve-write -> path policy -> git apply --check -> verification -> rollback evidence
@@ -114,13 +114,13 @@ node scripts/cwf-run-state.mjs status --run-id demo
 记录 SDK worker 证据：
 
 ```bash
-node scripts/cwf-worker-sdk.mjs --mode real --run-id demo
+node scripts/cwf-worker-sdk.mjs --mode real --run-id demo --worker correctness
 ```
 
 记录 Desktop-thread worker 证据：
 
 ```bash
-node scripts/cwf-worker-desktop-thread.mjs --run-id demo
+node scripts/cwf-worker-desktop-thread.mjs --run-id demo --worker visible-fixture
 ```
 
 评估一个已审批 patch：
@@ -133,6 +133,8 @@ node scripts/cwf-safe-write.mjs \
   --approval approve-write \
   --prior-gate previewed \
   --apply-check passed \
+  --apply-check-command "git apply --check change.patch" \
+  --apply-check-evidence "git apply --check passed" \
   --verification-status pass
 ```
 
@@ -213,9 +215,8 @@ CWF 按 Sunny-style `library` skill 规范整理：
 - [docs/RUN_EXPERIENCE.md](docs/RUN_EXPERIENCE.md): 运行体验
 - [docs/WORKFLOW_JS.md](docs/WORKFLOW_JS.md): `workflow.js` contract
 - [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md): foreground / background / heartbeat 契约
-- [docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md](docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md): 吃满 Codex 原生能力的完整计划
-- [docs/CWF_MVP_EVIDENCE.md](docs/CWF_MVP_EVIDENCE.md): MVP 证据
-- [docs/CWF_RELEASE_READINESS.md](docs/CWF_RELEASE_READINESS.md): release readiness 证据
+
+仓库内还有 roadmap、goal、evidence 文档供维护者使用；npm package 只打包上面的公开核心文档，避免把本机路径、线程 id、内部验收记录带到公开包里。
 
 ## Check
 

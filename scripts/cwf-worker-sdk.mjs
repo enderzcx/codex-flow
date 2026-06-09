@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { writeReturnEnvelope } from "./cwf-return-envelope.mjs";
+import { deriveRunStatus, refreshResume } from "./cwf-run-state.mjs";
 import { safeRunDir } from "./cwf-start.mjs";
 import { parseArgs, printHelp, wantsHelp } from "./lib/cli.mjs";
 
@@ -58,7 +59,8 @@ export async function recordSdkWorker(options = {}) {
   worker.output_summary = result.summary;
   worker.evidence = [...(worker.evidence ?? []), `worker-results/${workerId}.json`];
   state.adapter_status = { ...(state.adapter_status ?? {}), sdk_background_worker: result.status };
-  state.status = result.status === "completed" ? "running" : "blocked";
+  state.status = deriveRunStatus(state);
+  refreshResume(state);
   state.updated_at = new Date().toISOString();
   await writeJson(statePath, state);
   await writeReturnEnvelope(runDir, state, { returnMode: state.return_mode ?? "coordinator_synthesis" });

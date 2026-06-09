@@ -60,6 +60,7 @@ export async function writeReturnEnvelope(runDir, state, options = {}) {
 
 function deriveCompletionStatus(state, verifier) {
   if (state.status === "completed" && verifier.final_pass) return "completed";
+  if (state.status === "completed" && verifier.status === "pending") return "pending-verification";
   if (verifier.status === "blocked") return "blocked";
   if (verifier.status === "needs-waiver") return "needs-waiver";
   if (state.status === "cancelled") return "cancelled";

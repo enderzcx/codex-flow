@@ -7,7 +7,11 @@
     "README.md",
     "README.en.md",
     "README.zh-CN.md",
-    "docs/",
+    "docs/CORE.md",
+    "docs/RUN_EXPERIENCE.md",
+    "docs/WORKFLOW_JS.md",
+    "docs/CWF_ASYNC_RUNTIME.md",
+    "docs/CWF_CLAUDE_COMPARISON.md",
     "skills/",
     "workflows/",
     "scripts/"

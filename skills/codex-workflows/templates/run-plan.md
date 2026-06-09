@@ -61,7 +61,8 @@
 
 ## Return Path
 
-- Return mode: coordinator_synthesis / background+heartbeat
+- Runtime mode: foreground / background / background+heartbeat
+- Return mode: coordinator_synthesis / heartbeat_synthesis
 - Originating conversation:
 - Marker, if heartbeat is used:
 

@@ -53,8 +53,9 @@ export function buildPreview(workflow, options = {}) {
   const budgetPolicy = evaluateBudgetPolicy(workflow, options.label ?? workflow.name ?? "workflow");
   const phases = Array.isArray(workflow.phases) ? workflow.phases : [];
   const agents = collectAgents(phases);
+  const workflowWriteScopes = normalizeWriteScopes(workflow.write_scopes);
   const resolvedAgents = agents.map((agent) => {
-    const resolved = resolveVisibility(workflow, phases, agent, { ...options, allAgents: agents });
+    const resolved = resolveVisibility(workflow, phases, agent, { ...options, allAgents: agents, workflowWriteScopes });
     return {
       ...agent,
       resolved_visibility: resolved.visibility,
@@ -76,6 +77,7 @@ export function buildPreview(workflow, options = {}) {
       coordinator: phase.coordinator,
     })),
     agents: resolvedAgents,
+    write_scopes: workflowWriteScopes,
     quarantine_rules: workflow.quarantine_rules ?? [],
     stop_conditions: workflow.stop_conditions ?? [],
     verification: workflow.verification ?? [],
@@ -116,6 +118,10 @@ export function renderPreviewMarkdown(preview, sourcePath) {
       `- ${agent.id} (${agent.type}, phase=${agent.phase_id}): ${agent.visibility} -> ${agent.resolved_visibility} (${agent.visibility_reason}${scope})`,
     );
   }
+  if (preview.write_scopes.length > 0) {
+    lines.push("", "## Write Scopes");
+    appendList(lines, preview.write_scopes);
+  }
 
   lines.push("", "## Quarantine");
   appendList(lines, preview.quarantine_rules);
@@ -136,7 +142,7 @@ export function evaluatePreviewSkip(workflow, phases, agents, options = {}) {
   const workerCount = agents.length;
   const phaseCount = phases.length;
   const maxTokens = Number(workflow.budget?.max_tokens ?? Number.POSITIVE_INFINITY);
-  const hasAnyWriteScope = agents.some((agent) => hasWriteScope(agent));
+  const hasAnyWriteScope = agents.some((agent) => hasWriteScope(agent)) || normalizeWriteScopes(workflow.write_scopes).length > 0;
   const hasDesktopThread = agents.some(
     (agent) => agent.visibility === "desktop-thread" || agent.resolved_visibility === "desktop-thread",
   );
@@ -209,7 +215,7 @@ export function resolveVisibility(workflow, phases, agent, options = {}) {
     return { visibility: "desktop-thread", reason: "auto: budget.max_tokens > 50000" };
   }
 
-  if ((options.allAgents ?? [agent]).some((item) => hasWriteScope(item))) {
+  if ((options.allAgents ?? [agent]).some((item) => hasWriteScope(item)) || (options.workflowWriteScopes ?? []).length > 0) {
     return { visibility: "desktop-thread", reason: "auto: planned worker has non-empty write_scope" };
   }
 
@@ -260,6 +266,11 @@ function phaseById(phases, id) {
 
 function hasWriteScope(agent) {
   return typeof agent.write_scope === "string" && agent.write_scope.trim().length > 0;
+}
+
+function normalizeWriteScopes(value) {
+  const scopes = Array.isArray(value) ? value : value == null ? [] : [value];
+  return scopes.map((item) => String(item).trim()).filter(Boolean);
 }
 
 function rejectExecutableTokens(body, label) {

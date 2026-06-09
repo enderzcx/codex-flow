@@ -28,6 +28,7 @@ export async function startRun(options = {}) {
   const state = {
     schema_version: 1,
     run_id: runId,
+    run_dir: runDir,
     workflow_name: loaded.workflow.name,
     template_path: workflowPath,
     user_objective: options.objective ?? "",
@@ -156,8 +157,9 @@ async function writeWorkerPackets(runDir, state, preview) {
 }
 
 function renderInitialFinal(state) {
+  const runDir = state.run_dir ?? `.cwf/runs/${state.run_id}`;
   return [
-    `结论：这次 CWF run 已初始化，尚未完成；证据目录在 .cwf/runs/${state.run_id}/。`,
+    `结论：这次 CWF run 已初始化，尚未完成；证据目录在 ${runDir}/。`,
     "",
     `# CWF Run ${state.run_id}`,
     "",
@@ -184,14 +186,19 @@ function normalizeOptions(options) {
   if (!workflow) throw new Error("Missing workflow. Run with --help for usage.");
   return {
     workflow,
-    runId: options["run-id"] === true ? "" : options["run-id"],
-    runRoot: options["run-root"] === true ? "" : options["run-root"],
-    objective: options.objective === true ? "" : options.objective,
-    returnMode: options["return-mode"] === true ? "" : options["return-mode"],
-    runtimeMode: options["runtime-mode"] === true ? "" : options["runtime-mode"],
+    runId: optionValue(options["run-id"], "run-id"),
+    runRoot: optionValue(options["run-root"], "run-root"),
+    objective: optionValue(options.objective, "objective") ?? "",
+    returnMode: optionValue(options["return-mode"], "return-mode"),
+    runtimeMode: optionValue(options["runtime-mode"], "runtime-mode"),
     inspectWorker: Boolean(options["inspect-worker"]),
     rawPrivilegedPath: Boolean(options["raw-privileged-path"]),
   };
+}
+
+function optionValue(value, name) {
+  if (value === true) throw new Error(`--${name} requires a value`);
+  return value;
 }
 
 async function main() {

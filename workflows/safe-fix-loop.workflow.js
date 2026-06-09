@@ -57,6 +57,11 @@ export default {
     "Do not touch credentials, payments, databases, deploys, permissions, or irreversible external systems without explicit approval.",
     "Desktop-thread workers may propose patches, but the coordinator owns the final apply gate.",
   ],
+  verification: [
+    "Run git apply --check or an equivalent dry-run before applying any patch.",
+    "Run the declared targeted verification command after applying the patch.",
+    "Record changed files, rollback command, and remaining risks before final synthesis.",
+  ],
   stop_conditions: [
     "Verification passes.",
     "The same blocker repeats and cannot be resolved without user input.",
