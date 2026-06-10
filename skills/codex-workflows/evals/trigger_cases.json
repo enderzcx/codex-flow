@@ -45,6 +45,10 @@
     {
       "text": "提醒我明天再检查这个 workflow。",
       "family": "automation"
+    },
+    {
+      "text": "这事一个 Codex turn 能改完，但我想顺手用 CWF。",
+      "family": "cwfoverhead_no_self_check"
     }
   ],
   "near_neighbors": [
@@ -62,6 +66,11 @@
       "text": "审一下这个 diff 有什么 bug。",
       "expected_route": "code review skill unless the user asks for adversarial workflow fan-out",
       "reason": "Single diff review should stay lightweight."
+    },
+    {
+      "text": "用 CWF 做这个普通实现，但没有说明为什么 direct / skill-only 不够。",
+      "expected_route": "direct or narrower skill until the EWC CWF Self-Check names a valid trigger boundary",
+      "reason": "CWF is an execution backend and requires an auditable self-check before spawning workers."
     }
   ]
 }

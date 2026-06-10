@@ -8,6 +8,16 @@
 
 <Why this needs workflow orchestration instead of one normal Codex turn.>
 
+## CWF Self-Check
+
+- EWC CWF Trigger Boundary met:
+- Why direct is insufficient:
+- Why skill-only is insufficient:
+- Why triad/thread is insufficient or not enough:
+- Reviewer can audit this self-check: yes / no
+
+If no trigger boundary is met, stop and use the smaller route instead of CWF.
+
 ## Scope
 
 - Included paths / topics:

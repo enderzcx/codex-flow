@@ -2,6 +2,23 @@
 
 Use this reference when a prompt could belong to CWF or a nearby skill.
 
+## Parent Runtime Router
+
+For Ender's local workflow, Ender Work Contract (EWC) is the parent runtime router:
+
+- `/Users/sunny/Work/CC/OPC/ENDER_WORK_CONTRACT.md`
+- `/Users/sunny/Work/CC/OPC/work-contract/ROUTING_MATRIX.md`
+- `/Users/sunny/Work/CC/OPC/work-contract/templates/work-contract.md`
+
+CWF is an execution backend, not a default task entry point. Before selecting CWF, the coordinator must fill a CWF Self-Check:
+
+- which EWC CWF Trigger Boundary is met;
+- why direct, skill-only, or triad/thread is insufficient.
+
+If the self-check cannot name a trigger, CWF must not be used. If CWF is selected without a valid self-check, reviewers should flag a contract violation.
+
+Durable CWF run plans must include the `CWF Self-Check` section from `templates/run-plan.md` before any workers are spawned.
+
 ## CWF Owns
 
 CWF owns prompts that ask Codex to run or prepare a bounded dynamic workflow:
