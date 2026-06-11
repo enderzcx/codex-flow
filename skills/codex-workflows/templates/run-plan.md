@@ -8,6 +8,23 @@
 
 <Why this needs workflow orchestration instead of one normal Codex turn.>
 
+## Goal Anchor
+
+Required when this CWF run is part of `/goal` / Goal Mode, `目标模式`, "完整跑完", or any objective likely to need more than one bounded CWF episode. Use `N/A` only for one-shot CWF runs whose acceptance can be completed in this episode.
+
+- Goal id / file:
+- Outcome:
+- Acceptance:
+- Current slice:
+- Progress Compass:
+- Continue condition:
+- Stop condition:
+- Pause condition:
+- Budget:
+- Allowed writes:
+- CWF episode policy:
+- Prior CWF runs:
+
 ## CWF Self-Check
 
 - EWC CWF Trigger Boundary met:
@@ -82,11 +99,28 @@ If no trigger boundary is met, stop and use the smaller route instead of CWF.
 - State path:
 - Restart rule if state is incomplete:
 
+## Goal Delta
+
+Required after this CWF episode when a Goal Anchor exists.
+
+```yaml
+goal_delta:
+  run_id:
+  completed:
+  evidence_added:
+  blockers:
+  next_slice:
+  next_cwf_run:
+  continue_or_stop:
+  progress_artifact_update:
+```
+
 ## Human Summary Shape
 
 ```text
 这次 CWF 做了什么：
 证据在哪：
+目标推进了什么：
 还没做什么：
 下一步：
 ```

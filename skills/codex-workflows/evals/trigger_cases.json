@@ -17,6 +17,14 @@
       "family": "safe_fix_loop"
     },
     {
+      "text": "这个任务要用目标模式挂住，CWF 一轮一轮跑，每轮回写 goal_delta，直到验收完成。",
+      "family": "goal_anchored_cwf"
+    },
+    {
+      "text": "用目标模式挂住这个 CWF 任务，就算一轮能完成，也要产出 final goal_delta 再关闭目标。",
+      "family": "goal_anchored_single_episode_cwf"
+    },
+    {
       "text": "让一个重要 worker 出现在 Codex Desktop 左侧线程，其他 worker inline，最后 CWF 收口。",
       "family": "desktop_thread_worker"
     }
@@ -56,6 +64,11 @@
       "text": "写一个完整 plan 和 goal，等会我要让 Codex 目标模式跑。",
       "expected_route": "delivery-planner then goal-writer",
       "reason": "This asks for planning artifacts, not a CWF run or workflow.js harness."
+    },
+    {
+      "text": "先给这个长期任务写 /goal，但还不要跑 CWF。",
+      "expected_route": "goal-writer only",
+      "reason": "Goal Anchor creation alone is not a CWF execution episode."
     },
     {
       "text": "把这个任务拆成几个 Codex Desktop 左侧线程分别做。",

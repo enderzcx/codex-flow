@@ -38,6 +38,10 @@ def check_skill_dir(skill_dir: Path) -> int:
         "cwf-run-plan.mjs",
         "cwf-worker-sdk.mjs",
         "cwf-worker-desktop-thread.mjs",
+        "Agent-readable Skill Registry",
+        "cwf-skills.mjs",
+        "Goal Anchor",
+        "goal_delta",
     ]
     for needle in required_text:
         if needle not in skill_text:
@@ -47,6 +51,10 @@ def check_skill_dir(skill_dir: Path) -> int:
     for key in ("should_trigger", "should_not_trigger", "near_neighbors"):
         if not isinstance(cases.get(key), list) or not cases[key]:
             return fail(f"trigger_cases.json missing non-empty {key}")
+
+    repo_root = skill_dir.parents[1] if len(skill_dir.parents) >= 2 else None
+    if repo_root and not (repo_root / "scripts" / "cwf-skills.mjs").is_file():
+        return fail("missing repo-root scripts/cwf-skills.mjs")
 
     return 0
 

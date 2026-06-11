@@ -19,6 +19,8 @@ If the self-check cannot name a trigger, CWF must not be used. If CWF is selecte
 
 Durable CWF run plans must include the `CWF Self-Check` section from `templates/run-plan.md` before any workers are spawned.
 
+When Goal Mode and CWF are both requested, Goal Mode is the outer contract and CWF is the bounded execution episode. Use `goal-writer` to create or attach the Goal Anchor, then use CWF for each episode. Each episode must return `goal_delta` with `run_id`, `completed`, `evidence_added`, `blockers`, `next_slice`, `next_cwf_run`, `continue_or_stop`, and `progress_artifact_update`.
+
 ## CWF Owns
 
 CWF owns prompts that ask Codex to run or prepare a bounded dynamic workflow:
@@ -29,6 +31,7 @@ CWF owns prompts that ask Codex to run or prepare a bounded dynamic workflow:
 - "split this across native subagents";
 - "run an adversarial verification workflow";
 - "run a tournament / pipeline / safe fix loop";
+- "use Goal Mode and CWF together until acceptance is met";
 - "audit or fix this repo with multiple agents";
 - "review this diff with CWF / multiple reviewers";
 - "make a reusable workflow template for this repeated task".
@@ -50,6 +53,7 @@ Prefer these skills when the user asks for their narrower job:
 | User intent | Prefer | Why |
 |---|---|---|
 | "write a /goal prompt" | `goal-writer` | Goal contracts are not workflow execution by themselves. |
+| "run this goal with CWF" | `goal-writer` then CWF | Goal Anchor owns continuation; CWF owns each bounded execution episode. |
 | "write PRD/SPEC/acceptance/phase plan" | `delivery-planner` | Delivery docs need planning structure before workflow execution. |
 | "what is the project status?" | `project-status-audit` | Status audit is read-only and should not spawn workflow workers by default. |
 | "coordinate many Desktop threads" | `codex-thread-orchestrator` | General thread management is separate from CWF run planning. |
@@ -77,6 +81,7 @@ When the user says "plan this workflow", inspect wording:
 - If they mean a delivery plan, use `delivery-planner`.
 - If they mean a reusable `workflow.js` harness or a CWF run, use CWF.
 - If they want a `/goal`, use `goal-writer` unless they also ask to run CWF.
+- If they want `/goal` plus CWF, create or attach the Goal Anchor first, then run a bounded CWF episode and emit `goal_delta`.
 
 When unsure, ask one concise question:
 

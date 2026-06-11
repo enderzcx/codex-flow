@@ -55,6 +55,17 @@ export function renderRunPlanMarkdown(plan) {
     `- Source: ${workflowPath}`,
     `- Pattern: ${workflow.pattern}`,
     "",
+    "## Goal Anchor",
+    "- Goal id / file: N/A unless this run is attached to `/goal` / Goal Mode.",
+    "- Outcome: use Objective above unless a stricter Goal Anchor exists.",
+    "- Acceptance: not specified.",
+    "- Current slice: this CWF episode.",
+    "- Continue condition: run another CWF episode only if acceptance is unmet and the next slice is clear.",
+    "- Stop condition: stop when acceptance is met, budget is exhausted, or a pause condition is reached.",
+    "- Pause condition: credentials, production write, risky external action, repeated failure, or no measurable progress.",
+    "- Budget: use Budget section below.",
+    "- CWF episode policy: emit Goal Delta after this run when goal-anchored.",
+    "",
     "## Exclusions",
     "- No external runtime, scheduler, marketplace, model routing, deploy, credential, database, payment, permission, or irreversible external write.",
     "- Do not execute workflow files as unrestricted JavaScript.",
@@ -121,6 +132,19 @@ export function renderRunPlanMarkdown(plan) {
 
   lines.push("", "## Resume Checkpoint");
   lines.push(`- ${resumeCheckpoint}`);
+
+  lines.push("", "## Goal Delta");
+  lines.push("```yaml");
+  lines.push("goal_delta:");
+  lines.push(`  run_id: ${runId || ""}`);
+  lines.push("  completed:");
+  lines.push("  evidence_added:");
+  lines.push("  blockers:");
+  lines.push("  next_slice:");
+  lines.push("  next_cwf_run:");
+  lines.push("  continue_or_stop:");
+  lines.push("  progress_artifact_update:");
+  lines.push("```");
 
   return `${lines.join("\n")}\n`;
 }

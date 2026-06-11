@@ -83,6 +83,17 @@ python3 skills/codex-workflows/scripts/check_skill_install.py --check-install
 
 After install, new Codex sessions should see `$codex-workflows`. Already-running sessions do not hot-refresh the skill list.
 
+Inspect the current version's agent-readable skill registry:
+
+```bash
+node scripts/cwf-skills.mjs list --format markdown
+node scripts/cwf-skills.mjs list codex-workflows --format markdown
+node scripts/cwf-skills.mjs read codex-workflows/references/routing.md
+node scripts/cwf-skills.mjs validate codex-workflows --format markdown
+```
+
+`cwf-skills.mjs` only exposes SOP content such as `SKILL.md`, `references/`, `templates/`, and `evals/`; it refuses `scripts/`, assets, absolute paths, and `..` escapes.
+
 Preview a workflow:
 
 ```bash
@@ -177,6 +188,7 @@ Included today:
 
 - Codex skill: `skills/codex-workflows/SKILL.md`
 - Sunny-style library skill package: `references/routing.md`, `templates/run-plan.md`, `evals/trigger_cases.json`, `scripts/check_skill_install.py`
+- agent-readable skill registry helper: `scripts/cwf-skills.mjs`
 - bounded run plan helper: `scripts/cwf-run-plan.mjs`
 - controller artifact initializer: `scripts/cwf-start.mjs`
 - SDK worker evidence helper: `scripts/cwf-worker-sdk.mjs`
@@ -204,6 +216,7 @@ CWF is packaged as a Sunny-style library skill package:
 | `skills/codex-workflows/templates/run-plan.md` | bounded run plan template |
 | `skills/codex-workflows/evals/trigger_cases.json` | examples for trigger, non-trigger, and neighboring skills |
 | `skills/codex-workflows/scripts/check_skill_install.py` | skill package and local install checker |
+| `scripts/cwf-skills.mjs` | repo-level `skills list/read/validate` entrypoint for current-version agent SOP |
 
 This keeps CWF routeable in both the public repo and local Codex skill root: trigger it for real workflows, and hand smaller tasks to narrower skills.
 

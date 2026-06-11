@@ -14,6 +14,7 @@ import { recordSdkWorker } from "./cwf-worker-sdk.mjs";
 import { recordDesktopThreadWorker } from "./cwf-worker-desktop-thread.mjs";
 import { recordHeartbeatReturn } from "./cwf-return-heartbeat.mjs";
 import { recordNativeSubagent } from "./cwf-native-subagent.mjs";
+import { listReadableEntries, listSkills, readSkillContent, validateSkillRegistry } from "./cwf-skills.mjs";
 
 const root = new URL("..", import.meta.url);
 
@@ -49,6 +50,7 @@ const requiredFiles = [
   "scripts/cwf-safe-write.mjs",
   "scripts/cwf-generate-workflow.mjs",
   "scripts/cwf-catalog.mjs",
+  "scripts/cwf-skills.mjs",
   "scripts/lib/cli.mjs",
   "workflows/classify-and-act.workflow.js",
   "workflows/code-review.workflow.js",
@@ -98,6 +100,7 @@ mustContain(readme, "cwf-start.mjs");
 mustContain(readme, "cwf-worker-sdk.mjs");
 mustContain(readme, "cwf-worker-desktop-thread.mjs");
 mustContain(readme, "Sunny-style `library` skill");
+mustContain(readme, "cwf-skills.mjs");
 mustContain(readme, "check_skill_install.py --check-install");
 mustContain(readme, "evals/trigger_cases.json");
 mustContain(readmeEn, "Chinese: [README.md]");
@@ -112,6 +115,7 @@ mustContain(readmeEn, "cwf-start.mjs");
 mustContain(readmeEn, "cwf-worker-sdk.mjs");
 mustContain(readmeEn, "cwf-worker-desktop-thread.mjs");
 mustContain(readmeEn, "Sunny-style library skill package");
+mustContain(readmeEn, "cwf-skills.mjs");
 mustContain(readmeEn, "check_skill_install.py --check-install");
 mustContain(readmeEn, "evals/trigger_cases.json");
 mustContain(zh, "Codex 原生、有边界的动态工作流");
@@ -122,6 +126,7 @@ mustContain(zh, "SDK 后台 worker");
 mustContain(zh, "cwf-start.mjs");
 mustContain(zh, "cwf-worker-sdk.mjs");
 mustContain(zh, "Sunny-style `library` skill");
+mustContain(zh, "cwf-skills.mjs");
 mustContain(zh, "check_skill_install.py --check-install");
 mustContain(skill, "bounded dynamic workflow");
 mustContain(skill, "bounded run plan");
@@ -139,6 +144,9 @@ mustContain(skill, "cwf-start.mjs");
 mustContain(skill, "cwf-worker-sdk.mjs");
 mustContain(skill, "cwf-worker-desktop-thread.mjs");
 mustContain(skill, "sunny_skill_type: library");
+mustContain(skill, "Agent-readable Skill Registry");
+mustContain(skill, "Goal Anchor");
+mustContain(skill, "goal_delta");
 mustContain(skill, "Output Contract");
 mustContain(skill, "references/routing.md");
 mustContain(skillRouting, "goal-writer");
@@ -146,6 +154,8 @@ mustContain(skillRouting, "delivery-planner");
 mustContain(skillRouting, "project-status-audit");
 mustContain(skillRouting, "codex-thread-orchestrator");
 mustContain(skillRunPlanTemplate, "## Objective");
+mustContain(skillRunPlanTemplate, "## Goal Anchor");
+mustContain(skillRunPlanTemplate, "## Goal Delta");
 mustContain(skillRunPlanTemplate, "## Resume Checkpoint");
 for (const key of ["should_trigger", "should_not_trigger", "near_neighbors"]) {
   if (!Array.isArray(skillTriggerCases[key]) || skillTriggerCases[key].length === 0) {
@@ -246,6 +256,7 @@ checkRunStateRules();
 checkReturnEnvelopeRules();
 checkDynamicGenerationRules();
 await checkCatalogRules(workflows);
+await checkSkillRegistryRules();
 checkSafeWriteAndVerifierRules();
 await checkNativeRuntimeRules();
 checkHelperHelpCommands();
@@ -570,6 +581,7 @@ async function checkRunPlanRules() {
   const markdown = renderRunPlanMarkdown(plan);
   for (const needle of [
     "## Scope",
+    "## Goal Anchor",
     "## Exclusions",
     "## Workers",
     "## Verifier",
@@ -578,6 +590,8 @@ async function checkRunPlanRules() {
     "## Stop Rules",
     "## Evidence",
     "## Resume Checkpoint",
+    "## Goal Delta",
+    "goal_delta:",
     ".cwf/runs/check/",
   ]) {
     mustContain(markdown, needle);
@@ -822,6 +836,45 @@ async function checkCatalogRules(workflows) {
   } finally {
     await rm(projectRoot, { recursive: true, force: true });
   }
+}
+
+async function checkSkillRegistryRules() {
+  const skills = await listSkills({ root: root.pathname });
+  const cwfSkill = skills.find((item) => item.name === "codex-workflows");
+  if (!cwfSkill || cwfSkill.sunny_skill_type !== "library" || cwfSkill.version !== packageJson.version) {
+    throw new Error("skill registry must list codex-workflows with library type and package version");
+  }
+
+  const entries = await listReadableEntries("codex-workflows", { root: root.pathname });
+  for (const expected of ["codex-workflows/SKILL.md", "codex-workflows/references", "codex-workflows/templates", "codex-workflows/evals"]) {
+    if (!entries.some((entry) => entry.path === expected)) throw new Error(`skill registry missing ${expected}`);
+  }
+
+  const skillText = await readSkillContent("codex-workflows", { root: root.pathname });
+  mustContain(skillText, "Codex Workflows");
+  const routingText = await readSkillContent("codex-workflows/references/routing.md", { root: root.pathname });
+  mustContain(routingText, "Parent Runtime Router");
+
+  const validation = await validateSkillRegistry({ root: root.pathname, skill: "codex-workflows" });
+  if (!validation.ok) throw new Error(`skill registry validation failed: ${JSON.stringify(validation)}`);
+
+  await assertRejectsAsync(
+    () => readSkillContent("codex-workflows/scripts/check_skill_install.py", { root: root.pathname }),
+    "skill registry must refuse scripts/",
+  );
+  await assertRejectsAsync(
+    () => readSkillContent("codex-workflows/../codex-workflows/SKILL.md", { root: root.pathname }),
+    "skill registry must refuse dot-segment paths",
+  );
+
+  const help = execFileSync(process.execPath, [join(root.pathname, "scripts/cwf-skills.mjs"), "--help"], {
+    cwd: root.pathname,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  mustContain(help, "list [skill[/path]]");
+  mustContain(help, "read <skill[/path]>");
+  mustContain(help, "validate [skill]");
 }
 
 function checkSafeWriteAndVerifierRules() {
@@ -1129,6 +1182,7 @@ function checkHelperHelpCommands() {
     ["scripts/cwf-safe-write.mjs", "Usage:"],
     ["scripts/cwf-generate-workflow.mjs", "Usage:"],
     ["scripts/cwf-catalog.mjs", "Usage:"],
+    ["scripts/cwf-skills.mjs", "Usage:"],
   ];
 
   for (const [script, expected] of helpers) {

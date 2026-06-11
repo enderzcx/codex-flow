@@ -28,10 +28,12 @@ CWF is an execution backend, not the default entry point. Before selecting CWF, 
 
 If CWF is selected without a valid self-check, treat it as a contract violation and fall back to the smaller route. For durable run plans, fill the `CWF Self-Check` section in `templates/run-plan.md` before spawning workers.
 
+When a task is in `/goal` / Goal Mode, says `目标模式`, asks to "run until complete", or is likely to need more than one CWF episode, Goal Mode is the outer supervisor and CWF is the inner bounded execution engine. The coordinator must attach a Goal Anchor before the first CWF run and make each run return `goal_delta`.
+
 ## Core Contract
 
 ```text
-Goal
+Goal Anchor when needed
   -> choose or draft workflow.js
   -> scope and draft bounded run plan
   -> spawn native Codex subagents
@@ -39,8 +41,23 @@ Goal
   -> wait or run in background
   -> adapt if needed
   -> verify
+  -> emit goal_delta when goal-anchored
   -> answer in this same conversation
 ```
+
+## Agent-readable Skill Registry
+
+For this repository, `scripts/cwf-skills.mjs` is the current-version skill registry entrypoint. Use it when an agent or maintainer needs to discover the installed CWF skill surface before reading detailed SOP:
+
+```bash
+node scripts/cwf-skills.mjs list --format markdown
+node scripts/cwf-skills.mjs list codex-workflows --format markdown
+node scripts/cwf-skills.mjs read codex-workflows
+node scripts/cwf-skills.mjs read codex-workflows/references/routing.md
+node scripts/cwf-skills.mjs validate codex-workflows --format markdown
+```
+
+The registry exposes only agent-readable SOP content: `SKILL.md`, `references/`, `templates/`, and `evals/`. It deliberately refuses `scripts/`, assets, absolute paths, and dot-segment escapes. Treat it as discovery and documentation access, not as workflow execution.
 
 ## When To Use
 
@@ -57,6 +74,7 @@ Use this skill when at least one is true:
 - The task is heterogeneous and needs classify-and-act routing.
 - The task should stream items through ordered stages instead of waiting for one global barrier.
 - The user explicitly asks for a workflow, dynamic workflow, CWF, subagents, parallel agents, tournament, or loop.
+- The user explicitly asks for Goal Mode plus CWF, or a hard completion target that needs repeated bounded CWF episodes.
 - The task should be saved as a reusable `workflow.js` harness.
 
 Do not use this skill for:
@@ -117,7 +135,7 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 
 When a template is useful, read it and adapt it in the main session before spawning agents. If no template fits, draft a small workflow inline and optionally save it when the user asks.
 
-For non-trivial workflows, draft a bounded run plan before spawning workers. It should include scope, exclusions, phases, workers, verifier/challenger role, write scopes, quarantine path, budget, stop rule, evidence, and resume checkpoint. If a run id exists, the future persisted path is `.cwf/runs/RUN_ID/run-plan.md`.
+For non-trivial workflows, draft a bounded run plan before spawning workers. It should include scope, exclusions, phases, workers, verifier/challenger role, write scopes, quarantine path, budget, stop rule, evidence, resume checkpoint, and Goal Anchor / Goal Delta fields when the workflow is goal-anchored. If a run id exists, the future persisted path is `.cwf/runs/RUN_ID/run-plan.md`.
 
 Use `templates/run-plan.md` as the skeleton when the run plan needs a durable artifact.
 
@@ -206,7 +224,7 @@ For non-trivial saved workflows, define a budget before spawning agents:
 - when to pause for the user;
 - which pattern is expected to spend the most.
 
-If the user asked for `/goal` or a hard completion target, pair `loop-until-done` with that goal. Do not let an open-ended workflow run without a stop condition.
+If the user asked for `/goal` or a hard completion target, pair `loop-until-done` with that Goal Anchor. Do not let an open-ended workflow run without a stop condition. Do not claim the goal is complete from one CWF episode unless the Goal Anchor acceptance is met.
 
 ## Quarantine
 
@@ -250,6 +268,7 @@ Every workflow closeout must include:
 - which agents were spawned and why;
 - what changed, if anything;
 - verification evidence;
+- `goal_delta` when the run is under Goal Mode or a Goal Anchor;
 - remaining risks or stop condition;
 - a short human-readable summary.
 
@@ -263,7 +282,9 @@ Every CWF response should include the smallest useful subset of this contract:
 - `workflow`: chosen template or drafted `workflow.js` harness;
 - `why CWF`: why this task needs workflow orchestration instead of one normal Codex turn;
 - `run plan`: scope, exclusions, phases, workers, visibility, budget, stop rule, quarantine, verifier, evidence, and resume checkpoint;
+- `goal anchor`: goal id, acceptance, current slice, continue/stop/pause conditions when applicable;
 - `execution summary`: worker count, which workers ran, which were skipped, and why;
+- `goal_delta`: `run_id`, `completed`, `evidence_added`, `blockers`, `next_slice`, `next_cwf_run`, `continue_or_stop`, and `progress_artifact_update` when applicable;
 - `return path`: coordinator_synthesis or heartbeat_synthesis status;
 - `write boundary`: no writes, proposed patch only, or approved safe write gate;
 - `verification`: commands, artifacts, thread ids, screenshots, logs, or explicit not-verified reason;
@@ -277,3 +298,4 @@ If CWF is not appropriate, say so briefly and do the direct task or route to the
 - `templates/run-plan.md`: durable bounded run-plan skeleton.
 - `evals/trigger_cases.json`: route examples for install/routing audits.
 - `scripts/check_skill_install.py`: local install and package-shape smoke.
+- repo root `scripts/cwf-skills.mjs`: current-version `skills list/read/validate` registry for agent SOP.
