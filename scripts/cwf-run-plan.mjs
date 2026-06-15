@@ -130,6 +130,28 @@ export function renderRunPlanMarkdown(plan) {
   lines.push("- Record final synthesis in the originating Codex conversation.");
   lines.push("- Label evidence as local, fixture, dry-run, real-smoke, requires_approval, or blocked.");
 
+  lines.push("", "## Verified State Ownership");
+  lines.push("- Maker-owned fields: attempted / proposed / changed / needs_review");
+  lines.push("- Checker-owned fields: verified / passed / done / regression_locked");
+  if (verifierAgents.length > 0) {
+    lines.push(`- Checker: ${verifierAgents.map((agent) => agent.id).join(", ")}`);
+  } else {
+    lines.push("- Checker: coordinator-held deterministic test, replay command, external evidence, or human reviewer");
+  }
+  lines.push("- Verification receipt: required before any verified/passed/done claim");
+  lines.push(`- Atomic status artifact: ${runId ? `.cwf/runs/${runId}/state.json` : ".cwf/runs/RUN_ID/state.json"}`);
+  lines.push("- Rule: implementer/maker workers must not write verified state directly.");
+
+  lines.push("", "## Failure To Regression");
+  lines.push("- Failing input or trace: N/A unless this run repairs a recurring workflow, helper, route, connector, skill, or harness failure.");
+  lines.push("- Diagnosis:");
+  lines.push("- Fix or mitigation:");
+  lines.push("- Replay command or fixture:");
+  lines.push("- Regression artifact:");
+  lines.push("- Verified by:");
+  lines.push("- Sensitive data handling:");
+  lines.push("- Skip reason:");
+
   lines.push("", "## Resume Checkpoint");
   lines.push(`- ${resumeCheckpoint}`);
 
@@ -139,6 +161,8 @@ export function renderRunPlanMarkdown(plan) {
   lines.push(`  run_id: ${runId || ""}`);
   lines.push("  completed:");
   lines.push("  evidence_added:");
+  lines.push("  verified_by:");
+  lines.push("  regression_added:");
   lines.push("  blockers:");
   lines.push("  next_slice:");
   lines.push("  next_cwf_run:");

@@ -78,6 +78,29 @@ If no trigger boundary is met, stop and use the smaller route instead of CWF.
 - Evidence required:
 - Commands or artifacts:
 
+## Verified State Ownership
+
+- Maker-owned fields: attempted / proposed / changed / needs_review
+- Checker-owned fields: verified / passed / done / regression_locked
+- Checker: test / verifier agent / human reviewer / external system
+- Verification receipt:
+- Atomic status artifact:
+
+Rule: implementer/maker workers must not write `verified`, `passed`, `done`, or `regression_locked` into state. The coordinator may promote those fields only from checker/test/replay/human-review evidence.
+
+## Failure To Regression
+
+Required when this run fixes a recurring workflow, helper, route, connector, skill, or harness failure. Use `N/A` only when no reusable failing input or safe regression artifact exists.
+
+- Failing input or trace:
+- Diagnosis:
+- Fix or mitigation:
+- Replay command or fixture:
+- Regression artifact:
+- Verified by:
+- Sensitive data handling:
+- Skip reason:
+
 ## Write Gate
 
 - Write mode: none / proposed patch / approved safe write
@@ -108,6 +131,8 @@ goal_delta:
   run_id:
   completed:
   evidence_added:
+  verified_by:
+  regression_added:
   blockers:
   next_slice:
   next_cwf_run:
@@ -120,6 +145,8 @@ goal_delta:
 ```text
 这次 CWF 做了什么：
 证据在哪：
+谁验证了：
+是否新增回归夹具：
 目标推进了什么：
 还没做什么：
 下一步：

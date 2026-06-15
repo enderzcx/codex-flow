@@ -8,7 +8,8 @@ import { parseArgs, printHelp, readJsonFile, wantsHelp } from "./lib/cli.mjs";
 export function buildReturnEnvelope(state, options = {}) {
   const runDir = options.runDir ?? `.cwf/runs/${state.run_id}`;
   const verifier = evaluateVerifierGate(state.verifier_evaluations ?? []);
-  const completionStatus = deriveCompletionStatus(state, verifier);
+  const closeoutGate = evaluateCloseoutGate(state, verifier);
+  const completionStatus = deriveCompletionStatus(state, verifier, closeoutGate);
   const deferredItems = [
     ...(state.deferred_items ?? []),
     ...(options.deferredItems ?? []),
@@ -39,11 +40,64 @@ export function buildReturnEnvelope(state, options = {}) {
     desktop_thread_ids: collectWorkerIds(state, "desktop_thread_id"),
     verifier_status: verifier.status,
     verifier: verifier,
+    closeout_gate: closeoutGate,
+    verified_state: state.verified_state ?? {
+      maker_owned: [],
+      checker_owned: [],
+      verification_receipt: "",
+      status: "pending",
+    },
+    failure_to_regression: state.failure_to_regression ?? {
+      required: false,
+      regression_artifact: "",
+      verified_by: "",
+      skip_reason: "",
+    },
     deferred_items: deferredItems,
     completion_status: completionStatus,
     run_status: state.status ?? "planned",
     updated_at: state.updated_at ?? new Date().toISOString(),
   };
+}
+
+export function evaluateCloseoutGate(state, verifier = evaluateVerifierGate(state.verifier_evaluations ?? [])) {
+  if (state.status !== "completed" || !verifier.final_pass) {
+    return { status: "not_applicable", issues: [] };
+  }
+
+  const issues = [];
+  const verifiedState = state.verified_state ?? {};
+  const checkerOwned = Array.isArray(verifiedState.checker_owned) ? verifiedState.checker_owned.filter(Boolean) : [];
+  const verificationReceipt = String(verifiedState.verification_receipt ?? "").trim();
+  const verifiedStatus = String(verifiedState.status ?? "pending");
+  if (
+    verifiedStatus === "pending" ||
+    verifiedStatus === "needs_review" ||
+    (checkerOwned.length === 0 && !verificationReceipt)
+  ) {
+    issues.push({
+      id: "verified-state-missing",
+      status: "pending-verified-state",
+      reason: "Completed runs need checker-owned state or a verification receipt before they can claim done.",
+    });
+  }
+
+  const regression = state.failure_to_regression ?? {};
+  if (
+    regression.required === true &&
+    !String(regression.regression_artifact ?? "").trim() &&
+    !String(regression.skip_reason ?? "").trim()
+  ) {
+    issues.push({
+      id: "regression-lock-missing",
+      status: "pending-regression-lock",
+      reason: "Recurring-failure repairs need a regression artifact or an explicit skip reason before closeout.",
+    });
+  }
+
+  if (issues.length === 0) return { status: "pass", issues: [] };
+  if (issues.length === 1) return { status: issues[0].status, issues };
+  return { status: "pending-closeout-gate", issues };
 }
 
 function collectWorkerIds(state, key) {
@@ -58,9 +112,12 @@ export async function writeReturnEnvelope(runDir, state, options = {}) {
   return { path: outputPath, envelope };
 }
 
-function deriveCompletionStatus(state, verifier) {
-  if (state.status === "completed" && verifier.final_pass) return "completed";
+function deriveCompletionStatus(state, verifier, closeoutGate = evaluateCloseoutGate(state, verifier)) {
+  if (state.status === "completed" && verifier.final_pass && closeoutGate.status === "pass") return "completed";
   if (state.status === "completed" && verifier.status === "pending") return "pending-verification";
+  if (state.status === "completed" && closeoutGate.status !== "not_applicable" && closeoutGate.status !== "pass") {
+    return closeoutGate.status;
+  }
   if (verifier.status === "blocked") return "blocked";
   if (verifier.status === "needs-waiver") return "needs-waiver";
   if (state.status === "cancelled") return "cancelled";

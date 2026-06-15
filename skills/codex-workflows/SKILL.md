@@ -40,7 +40,8 @@ Goal Anchor when needed
   -> optionally promote important workers to Desktop threads
   -> wait or run in background
   -> adapt if needed
-  -> verify
+  -> verify with checker-owned state
+  -> preserve recurring failures as regression artifacts when applicable
   -> emit goal_delta when goal-anchored
   -> answer in this same conversation
 ```
@@ -110,6 +111,8 @@ When routing is ambiguous, read `references/routing.md` and prefer the narrower 
 12. Wait for worker results only when needed for the next critical-path step.
 13. Summarize results back in the current conversation.
 14. For long runs, prefer background + heartbeat instead of making the main conversation wait.
+15. Treat maker and verifier state separately: workers can report attempted/proposed/changed, but only a verifier, test, replay, or human review may mark verified/passed/done.
+16. When a workflow, helper, route, connector, or harness failure is likely to recur, preserve the failing input or trace and add a regression artifact, fixture, eval, or explicit skip reason before calling the repair complete.
 
 If native subagent tools are unavailable, stop and say the workflow cannot run natively in this host. Do not silently fall back to an external runner.
 
@@ -129,6 +132,8 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 - `run_experience`
 - `write_scopes` for workflow-level write boundaries, or per-agent `write_scope` for worker ownership
 - `verification`
+- `verified_state`
+- `failure_to_regression`
 - `stop_conditions`
 - `quarantine_rules`
 - `failure_policy`
@@ -268,6 +273,8 @@ Every workflow closeout must include:
 - which agents were spawned and why;
 - what changed, if anything;
 - verification evidence;
+- who owns verified state, and which evidence allowed any `verified` / `passed` / `done` claim;
+- regression artifact or skip reason when the run fixed a recurring workflow, helper, route, connector, or harness failure;
 - `goal_delta` when the run is under Goal Mode or a Goal Anchor;
 - remaining risks or stop condition;
 - a short human-readable summary.
@@ -285,6 +292,8 @@ Every CWF response should include the smallest useful subset of this contract:
 - `goal anchor`: goal id, acceptance, current slice, continue/stop/pause conditions when applicable;
 - `execution summary`: worker count, which workers ran, which were skipped, and why;
 - `goal_delta`: `run_id`, `completed`, `evidence_added`, `blockers`, `next_slice`, `next_cwf_run`, `continue_or_stop`, and `progress_artifact_update` when applicable;
+- `verified state`: maker-owned attempted/proposed state versus checker-owned verified/passed/done state;
+- `failure-to-regression`: failing input or trace, replay command, regression artifact, or explicit skip reason when applicable;
 - `return path`: coordinator_synthesis or heartbeat_synthesis status;
 - `write boundary`: no writes, proposed patch only, or approved safe write gate;
 - `verification`: commands, artifacts, thread ids, screenshots, logs, or explicit not-verified reason;

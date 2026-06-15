@@ -147,6 +147,8 @@ mustContain(skill, "sunny_skill_type: library");
 mustContain(skill, "Agent-readable Skill Registry");
 mustContain(skill, "Goal Anchor");
 mustContain(skill, "goal_delta");
+mustContain(skill, "checker-owned");
+mustContain(skill, "failure-to-regression");
 mustContain(skill, "Output Contract");
 mustContain(skill, "references/routing.md");
 mustContain(skillRouting, "goal-writer");
@@ -157,6 +159,8 @@ mustContain(skillRunPlanTemplate, "## Objective");
 mustContain(skillRunPlanTemplate, "## Goal Anchor");
 mustContain(skillRunPlanTemplate, "## Goal Delta");
 mustContain(skillRunPlanTemplate, "## Resume Checkpoint");
+mustContain(skillRunPlanTemplate, "## Verified State Ownership");
+mustContain(skillRunPlanTemplate, "## Failure To Regression");
 for (const key of ["should_trigger", "should_not_trigger", "near_neighbors"]) {
   if (!Array.isArray(skillTriggerCases[key]) || skillTriggerCases[key].length === 0) {
     throw new Error(`skills/codex-workflows/evals/trigger_cases.json missing ${key}`);
@@ -589,9 +593,13 @@ async function checkRunPlanRules() {
     "## Budget",
     "## Stop Rules",
     "## Evidence",
+    "## Verified State Ownership",
+    "## Failure To Regression",
     "## Resume Checkpoint",
     "## Goal Delta",
     "goal_delta:",
+    "verified_by:",
+    "regression_added:",
     ".cwf/runs/check/",
   ]) {
     mustContain(markdown, needle);
@@ -718,6 +726,18 @@ function checkReturnEnvelopeRules() {
     status: "completed",
     updated_at: "2026-06-08T00:00:00.000Z",
     verifier_evaluations: [{ status: "advisory", summary: "follow-up optional" }],
+    verified_state: {
+      maker_owned: ["changed"],
+      checker_owned: ["npm run check"],
+      verification_receipt: "npm run check passed",
+      status: "verified",
+    },
+    failure_to_regression: {
+      required: false,
+      regression_artifact: "",
+      verified_by: "",
+      skip_reason: "",
+    },
     deferred_items: [{ id: "desktop-thread-execution-preflight", status: "requires_approval" }],
   };
   const envelope = buildReturnEnvelope(state);
@@ -735,6 +755,9 @@ function checkReturnEnvelopeRules() {
     "sdk_thread_ids",
     "desktop_thread_ids",
     "verifier_status",
+    "closeout_gate",
+    "verified_state",
+    "failure_to_regression",
     "deferred_items",
     "completion_status",
   ]) {
@@ -752,6 +775,9 @@ function checkReturnEnvelopeRules() {
   if (!envelope.deferred_items.some((item) => item.status === "requires_approval")) {
     throw new Error("return envelope must preserve deferred approval items");
   }
+  if (envelope.completion_status !== "completed" || envelope.closeout_gate.status !== "pass") {
+    throw new Error("return envelope must require closeout gate pass before completed status");
+  }
 
   const idsEnvelope = buildReturnEnvelope({
     ...state,
@@ -767,6 +793,37 @@ function checkReturnEnvelopeRules() {
   const heartbeatEnvelope = buildReturnEnvelope({ ...state, return_mode: "heartbeat_synthesis" });
   if (heartbeatEnvelope.return_mode !== "heartbeat_synthesis") {
     throw new Error("return envelope must preserve state return_mode when no override is provided");
+  }
+
+  const missingVerifiedEnvelope = buildReturnEnvelope({
+    ...state,
+    verified_state: {
+      maker_owned: ["changed"],
+      checker_owned: [],
+      verification_receipt: "",
+      status: "pending",
+    },
+  });
+  if (missingVerifiedEnvelope.completion_status !== "pending-verified-state") {
+    throw new Error("return envelope must not complete without checker-owned verified state");
+  }
+
+  const missingRegressionEnvelope = buildReturnEnvelope({
+    ...state,
+    failure_to_regression: {
+      required: true,
+      failing_input_or_trace: "sanitized trace id fixture",
+      diagnosis: "fixture recurring helper failure",
+      fix_or_mitigation: "fixture patch",
+      replay_command_or_fixture: "npm run check",
+      regression_artifact: "",
+      verified_by: "npm run check",
+      sensitive_data_handling: "sanitized",
+      skip_reason: "",
+    },
+  });
+  if (missingRegressionEnvelope.completion_status !== "pending-regression-lock") {
+    throw new Error("return envelope must not complete required regression loop without artifact or skip reason");
   }
 }
 

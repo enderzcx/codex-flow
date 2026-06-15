@@ -62,6 +62,9 @@ Async runs should record these fields in `.cwf/runs/RUN_ID/return-envelope.json`
 - `heartbeat_status`: `not_requested`, `fixture`, `scheduled`, `scheduled-not-returned`, `delivered`, `failed`, or `unavailable`;
 - `sdk_thread_ids`: SDK worker ids when known;
 - `desktop_thread_ids`: visible Desktop worker thread ids when created;
+- `closeout_gate`: whether completed status can stand or must be downgraded pending checker-owned verification or regression lock;
+- `verified_state`: maker-owned versus checker-owned state and the verification receipt;
+- `failure_to_regression`: recurring-failure receipt, including regression artifact or skip reason when required;
 - `final_summary_path`;
 - `evidence_path`;
 - `deferred_items`.
