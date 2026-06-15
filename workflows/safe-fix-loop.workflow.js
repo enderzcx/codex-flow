@@ -12,10 +12,10 @@ export default {
   },
   run_experience: {
     preview: "Show diagnosis agents, proposed write scope, implementer visibility, verification commands, budget, and stop conditions.",
-    status: "Report diagnosis / fix / verify phase, changed files if any, last verification result, and budget pressure.",
+    status: "Report diagnosis / fix / verify phase, changed files if any, checker-owned verification result, regression artifact status, and budget pressure.",
     cancel: "Stop further fixes, keep current diff evidence, and say whether the target is safe to keep or should be reverted by the user.",
     resume: "Continue from the last verification result; if the diff state changed, rediagnose before writing.",
-    final_output: "Return changed files, verification evidence, remaining risks, and whether the acceptance criteria passed.",
+    final_output: "Return changed files, checker-owned verification evidence, regression artifact or skip reason, remaining risks, and whether the acceptance criteria passed.",
   },
   phases: [
     {
@@ -47,7 +47,7 @@ export default {
     },
     {
       id: "verify",
-      coordinator: "Run the narrowest meaningful verification. If it fails, spawn one debugger or stop with a concrete blocker.",
+      coordinator: "Run the narrowest meaningful verification with checker-owned state. If it fails, spawn one debugger or stop with a concrete blocker. When the failure is likely to recur, preserve the failing input and add a regression artifact or explicit skip reason.",
     },
   ],
   write_rules: [
@@ -60,6 +60,8 @@ export default {
   verification: [
     "Run git apply --check or an equivalent dry-run before applying any patch.",
     "Run the declared targeted verification command after applying the patch.",
+    "Only the verifier, deterministic test, replay command, or human reviewer may mark verified/passed/done; the implementer may only mark attempted/proposed/changed.",
+    "If the fix addresses a recurring failure, route confusion, helper bug, connector drift, or harness issue, replay the failing input and add a regression test, fixture, eval case, trigger case, helper smoke, or documented replay command.",
     "Record changed files, rollback command, and remaining risks before final synthesis.",
   ],
   stop_conditions: [

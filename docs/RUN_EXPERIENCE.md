@@ -129,7 +129,7 @@ node scripts/cwf-run-state.mjs status --run-id demo
 node scripts/cwf-run-state.mjs resume-plan --run-id demo
 ```
 
-The return envelope records `final_destination`, `return_mode`, `final_summary_path`, `evidence_path`, `verifier_status`, deferred items, and completion status. `return_mode=coordinator_synthesis` is the proven default. Platform automatic callback remains deferred until a real platform smoke proves it.
+The return envelope records `final_destination`, `return_mode`, `final_summary_path`, `evidence_path`, `verifier_status`, `closeout_gate`, `verified_state`, `failure_to_regression`, deferred items, and completion status. A completed run is downgraded to pending closeout when checker-owned verified state is missing or a required regression artifact has neither artifact nor skip reason. `return_mode=coordinator_synthesis` is the proven default. Platform automatic callback remains deferred until a real platform smoke proves it.
 
 For async runs, also record `runtime_mode`, adapter status, `sdk_thread_ids`, and `desktop_thread_ids` when known. `return_mode=heartbeat_synthesis` means the background run completed, a follow-up in the originating conversation read the local result, and the coordinator observed the expected marker reply before recording delivery. It is not the same as platform automatic callback.
 

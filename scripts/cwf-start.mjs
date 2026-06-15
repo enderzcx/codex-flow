@@ -61,6 +61,23 @@ export async function startRun(options = {}) {
     })),
     verification_evidence: [],
     verifier_evaluations: [],
+    verified_state: {
+      maker_owned: [],
+      checker_owned: [],
+      verification_receipt: "",
+      status: "pending",
+    },
+    failure_to_regression: {
+      required: false,
+      failing_input_or_trace: "",
+      diagnosis: "",
+      fix_or_mitigation: "",
+      replay_command_or_fixture: "",
+      regression_artifact: "",
+      verified_by: "",
+      sensitive_data_handling: "",
+      skip_reason: "",
+    },
     adapter_status: {
       native_subagent: "pending",
       sdk_background_worker: "pending",
@@ -148,8 +165,10 @@ async function writeWorkerPackets(runDir, state, preview) {
       "",
       "## Return Contract",
       "- Write or report a normalized worker result with status, summary, evidence, and runtime ids.",
+      "- Maker workers may report attempted/proposed/changed, but must not mark verified/passed/done.",
       "- Do not apply writes directly; patch proposals must return to the coordinator safe-write gate.",
       "- Label fixture, local, real-smoke, unavailable, deferred, and requires_approval honestly.",
+      "- If you diagnose a recurring harness/helper/route/connector failure, preserve the failing input or a sanitized replay pointer for the coordinator.",
       "",
     ];
     await writeFile(join(runDir, worker.worker_packet_path), lines.join("\n"), "utf8");

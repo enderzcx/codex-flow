@@ -27,6 +27,8 @@ then returns the result to the same conversation by foreground, background, or h
 12. Async without drift: long workflows may use SDK/background/heartbeat adapters, but the coordinator contract and safety gates stay the same.
 13. Controller-first state: `cwf-start.mjs` creates preview, run-plan, state, return-envelope, final, worker-packets, and worker-results slots before any worker dispatch.
 14. Adapter honesty: native subagent, SDK, Desktop-thread, and heartbeat helpers must write `fixture`, `real-smoke`, `requires_approval`, `unavailable`, or `deferred` evidence labels instead of upgrading claims silently.
+15. Checker-owned verification: maker workers may write attempted/proposed/changed state, but `verified`, `passed`, `done`, and `regression_locked` belong to a verifier, deterministic test, replay, or human reviewer.
+16. Failure to regression: recurring workflow, helper, route, connector, skill, or harness failures should preserve the failing input or trace and leave behind a regression artifact or explicit skip reason.
 
 ## Failure Modes
 
@@ -49,6 +51,8 @@ A non-trivial run plan should name:
 - exact scope and exclusions;
 - phases and workers;
 - verifier or challenger role;
+- verified-state owner;
+- failure-to-regression receipt when applicable;
 - write scopes;
 - untrusted input route;
 - token budget and stop rule;
@@ -94,6 +98,30 @@ Run experience is part of the core contract:
 - mirror return status in `.cwf/runs/RUN_ID/return-envelope.json`.
 
 The proven return path is coordinator synthesis in the originating conversation. Heartbeat synthesis is allowed only after a real heartbeat reply with the expected marker is observed in the originating thread; `heartbeat-scheduled` and `heartbeat-scheduled-not-returned` are not delivery proof. Platform automatic callback is not claimed until a future Codex platform API and real smoke prove it.
+
+## Verified State
+
+CWF treats verification state as a separate ownership boundary:
+
+- maker workers can write `attempted`, `proposed`, `changed`, and `needs_review`;
+- verifier workers, deterministic tests, replay commands, external evidence, or human reviewers can write `verified`, `passed`, `done`, and `regression_locked`;
+- the coordinator may synthesize verified state only by pointing at the verifier receipt.
+
+Persistent run artifacts should avoid mixing maker narrative with checker-owned truth. If a status file or `goal_delta` will be read by a future run, write verified state after the verifier receipt exists and keep partial writes from looking authoritative.
+
+## Failure To Regression
+
+When a CWF run repairs a repeated failure or a harness-level issue, the repair is not complete until the failing input is replayed or preserved as a future check when feasible:
+
+```text
+failing input / trace
+  -> diagnosis
+  -> fix or mitigation
+  -> replay
+  -> regression artifact
+```
+
+Valid regression artifacts include a test, fixture, eval case, route trigger case, helper smoke, documented replay command, or sanitized error-pattern entry. If the input contains secrets, customer data, or private chat, sanitize or hash it before storing. If no safe artifact exists, record the skip reason in the run plan and closeout.
 
 ## Budget
 
