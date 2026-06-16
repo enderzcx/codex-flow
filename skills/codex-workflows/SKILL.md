@@ -3,14 +3,14 @@ name: codex-workflows
 description: Use when the user asks Codex to run a dynamic workflow, CWF, workflow.js harness, native subagent orchestration, repo audit/fix/review with multiple agents, adversarial verification, tournament evaluation, safe fix loop, or reusable workflow template. Not for trivial edits, ordinary single-agent coding, ordinary single-pass diff review, project status audits, PRD/SPEC planning, /goal prompt writing, generic thread orchestration, background reminders, or external model routing.
 metadata:
   short-description: Codex-native bounded dynamic workflow skill
-sunny_skill_type: library
+skill_package_type: library
 ---
 
 # Codex Workflows
 
 Codex Workflows is a native Codex bounded dynamic workflow skill.
 
-Sunny skill class: `library`. This skill is public/reusable, ships workflow templates and helper checks, and has route-confusion risk with planning, goal-writing, project-status, and thread-orchestration skills.
+Skill package type: `library`. This skill is public/reusable, ships workflow templates and helper checks, and has route-confusion risk with planning, goal-writing, project-status, and thread-orchestration skills.
 
 The main session is the coordinator. Workflow JavaScript files are harness specs for Codex to read, adapt, and execute with native subagents. Do not execute these files with Node.
 
@@ -18,13 +18,9 @@ The goal is not to spawn many agents for its own sake. The goal is to move compl
 
 ## Parent Routing Contract
 
-Ender Work Contract (EWC) is the parent runtime router for Ender's local use of this skill:
+If your Codex environment defines a parent work contract or routing policy, apply that policy before selecting CWF.
 
-- canonical: `/Users/sunny/Work/CC/OPC/ENDER_WORK_CONTRACT.md`
-- routing matrix: `/Users/sunny/Work/CC/OPC/work-contract/ROUTING_MATRIX.md`
-- work-contract template: `/Users/sunny/Work/CC/OPC/work-contract/templates/work-contract.md`
-
-CWF is an execution backend, not the default entry point. Before selecting CWF, the coordinator must satisfy EWC's CWF Trigger Boundary and document the CWF Self-Check: which boundary is met and why direct, skill-only, or triad/thread is insufficient.
+CWF is an execution backend, not the default entry point. Before selecting CWF, the coordinator must satisfy a CWF Trigger Boundary and document the CWF Self-Check: which boundary is met and why direct, skill-only, or thread-only execution is insufficient.
 
 If CWF is selected without a valid self-check, treat it as a contract violation and fall back to the smaller route. For durable run plans, fill the `CWF Self-Check` section in `templates/run-plan.md` before spawning workers.
 
@@ -62,7 +58,7 @@ The registry exposes only agent-readable SOP content: `SKILL.md`, `references/`,
 
 ## When To Use
 
-First apply the EWC Execution Backend Router. Use this skill only after the task passes the EWC CWF Trigger Boundary.
+First apply any parent work contract or local routing policy. Use this skill only after the task passes the CWF Trigger Boundary.
 
 Use this skill when at least one is true:
 
@@ -144,7 +140,7 @@ For non-trivial workflows, draft a bounded run plan before spawning workers. It 
 
 Use `templates/run-plan.md` as the skeleton when the run plan needs a durable artifact.
 
-The run plan's `CWF Self-Check` section is required before spawning workers. If it is missing or cannot name an EWC CWF Trigger Boundary, do not run CWF.
+The run plan's `CWF Self-Check` section is required before spawning workers. If it is missing or cannot name a CWF Trigger Boundary, do not run CWF.
 
 ## External Review Receipts
 
@@ -158,7 +154,7 @@ Never let an external review receipt:
 
 - write files or mutate repo state;
 - mark `verified`, `passed`, `done`, `regression_locked`, or Stage transition state;
-- replace local tests, Reasonix final review, checker-owned verification, or Ender approval;
+- replace local tests, external final review, checker-owned verification, or operator approval;
 - carry secrets, credentials, customer data, raw production logs, or unapproved confidential payloads.
 
 Minimum CWF mapping:

@@ -91,8 +91,8 @@ const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
 mustContain(readme, "英文版：[README.en.md]");
-mustContain(readme, "Codex 原生、有边界的动态工作流");
-mustContain(readme, "不是独立 agent 平台");
+mustContain(readme, "Codex 原生、有边界的 workflow skill");
+mustContain(readme, "不是托管式工作流服务");
 mustContain(readme, "run plan");
 mustContain(readme, "cwf-run-plan.mjs");
 mustContain(readme, "desktop-thread");
@@ -101,13 +101,13 @@ mustContain(readme, "SDK 后台 worker");
 mustContain(readme, "cwf-start.mjs");
 mustContain(readme, "cwf-worker-sdk.mjs");
 mustContain(readme, "cwf-worker-desktop-thread.mjs");
-mustContain(readme, "Sunny-style `library` skill");
+mustContain(readme, "library-style Codex skill package");
 mustContain(readme, "cwf-skills.mjs");
 mustContain(readme, "check_skill_install.py --check-install");
 mustContain(readme, "evals/trigger_cases.json");
 mustContain(readmeEn, "Chinese: [README.md]");
-mustContain(readmeEn, "not a standalone agent platform");
-mustContain(readmeEn, "bounded dynamic workflow");
+mustContain(readmeEn, "not a hosted workflow service");
+mustContain(readmeEn, "Codex-native bounded workflow skill");
 mustContain(readmeEn, "run plan");
 mustContain(readmeEn, "cwf-run-plan.mjs");
 mustContain(readmeEn, "desktop-thread");
@@ -116,18 +116,18 @@ mustContain(readmeEn, "SDK background workers");
 mustContain(readmeEn, "cwf-start.mjs");
 mustContain(readmeEn, "cwf-worker-sdk.mjs");
 mustContain(readmeEn, "cwf-worker-desktop-thread.mjs");
-mustContain(readmeEn, "Sunny-style library skill package");
+mustContain(readmeEn, "library-style Codex skill package");
 mustContain(readmeEn, "cwf-skills.mjs");
 mustContain(readmeEn, "check_skill_install.py --check-install");
 mustContain(readmeEn, "evals/trigger_cases.json");
-mustContain(zh, "Codex 原生、有边界的动态工作流");
-mustContain(zh, "有边界的动态工作流");
+mustContain(zh, "Codex 原生、有边界的 workflow skill");
+mustContain(zh, "不是托管式工作流服务");
 mustContain(zh, "左侧线程");
 mustContain(zh, "background+heartbeat");
 mustContain(zh, "SDK 后台 worker");
 mustContain(zh, "cwf-start.mjs");
 mustContain(zh, "cwf-worker-sdk.mjs");
-mustContain(zh, "Sunny-style `library` skill");
+mustContain(zh, "library-style Codex skill package");
 mustContain(zh, "cwf-skills.mjs");
 mustContain(zh, "check_skill_install.py --check-install");
 mustContain(skill, "bounded dynamic workflow");
@@ -145,7 +145,7 @@ mustContain(skill, "heartbeat_synthesis");
 mustContain(skill, "cwf-start.mjs");
 mustContain(skill, "cwf-worker-sdk.mjs");
 mustContain(skill, "cwf-worker-desktop-thread.mjs");
-mustContain(skill, "sunny_skill_type: library");
+mustContain(skill, "skill_package_type: library");
 mustContain(skill, "Agent-readable Skill Registry");
 mustContain(skill, "Goal Anchor");
 mustContain(skill, "goal_delta");
@@ -944,7 +944,7 @@ async function checkCatalogRules(workflows) {
 async function checkSkillRegistryRules() {
   const skills = await listSkills({ root: root.pathname });
   const cwfSkill = skills.find((item) => item.name === "codex-workflows");
-  if (!cwfSkill || cwfSkill.sunny_skill_type !== "library" || cwfSkill.version !== packageJson.version) {
+  if (!cwfSkill || cwfSkill.skill_package_type !== "library" || cwfSkill.version !== packageJson.version) {
     throw new Error("skill registry must list codex-workflows with library type and package version");
   }
 
@@ -1059,7 +1059,7 @@ function checkSafeWriteAndVerifierRules() {
   if (needsWaiver.final_pass || needsWaiver.status !== "needs-waiver") {
     throw new Error("unwaived verifier finding must require waiver");
   }
-  const waived = evaluateVerifierGate([{ status: "needs-waiver", summary: "known risk", waiver: { text: "accepted for fixture", owner: "Ender" } }]);
+  const waived = evaluateVerifierGate([{ status: "needs-waiver", summary: "known risk", waiver: { text: "accepted for fixture", owner: "operator" } }]);
   if (!waived.final_pass) throw new Error("waived verifier finding with text and owner should allow pass");
   const advisory = evaluateVerifierGate([{ status: "advisory", summary: "optional follow-up" }]);
   if (!advisory.final_pass || advisory.advisories.length !== 1) {

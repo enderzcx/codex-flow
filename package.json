@@ -1,7 +1,7 @@
 {
   "name": "codex-workflows",
   "version": "0.1.0",
-  "description": "Native dynamic workflow skill and workflow.js harness templates for Codex.",
+  "description": "Codex skill with reusable workflow templates and local helpers for scoped, verifiable run plans.",
   "type": "module",
   "files": [
     "README.md",

@@ -27,7 +27,7 @@ Required when this CWF run is part of `/goal` / Goal Mode, `目标模式`, "完�
 
 ## CWF Self-Check
 
-- EWC CWF Trigger Boundary met:
+- CWF Trigger Boundary met:
 - Why direct is insufficient:
 - Why skill-only is insufficient:
 - Why triad/thread is insufficient or not enough:

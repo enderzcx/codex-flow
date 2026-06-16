@@ -27,7 +27,7 @@ export async function listSkills(options = {}) {
       name: metadata.name || name,
       directory: name,
       description: metadata.description || "",
-      sunny_skill_type: metadata.sunny_skill_type || "",
+      skill_package_type: metadata.skill_package_type || "",
       version,
       path: `skills/${name}/SKILL.md`,
     });
@@ -81,8 +81,9 @@ export async function validateSkillRegistry(options = {}) {
     const metadata = parseSkillMetadata(text);
     if (!metadata.name) problems.push("SKILL.md frontmatter missing name");
     if (!metadata.description) problems.push("SKILL.md frontmatter missing description");
-    if (!metadata.sunny_skill_type) problems.push("SKILL.md missing sunny_skill_type");
-    if (metadata.sunny_skill_type === "library") {
+    const skillPackageType = metadata.skill_package_type || "";
+    if (!skillPackageType) problems.push("SKILL.md missing skill_package_type");
+    if (skillPackageType === "library") {
       for (const required of ["references/routing.md", "evals/trigger_cases.json"]) {
         if (!(await safeStat(join(skillDir, required)))?.isFile()) problems.push(`library skill missing ${required}`);
       }
@@ -199,7 +200,7 @@ function renderMarkdown(items) {
     return [
       "| name | type | version | description |",
       "| --- | --- | --- | --- |",
-      ...items.map((item) => `| ${item.name} | ${item.sunny_skill_type || "-"} | ${item.version || "-"} | ${escapeCell(item.description)} |`),
+      ...items.map((item) => `| ${item.name} | ${item.skill_package_type || "-"} | ${item.version || "-"} | ${escapeCell(item.description)} |`),
       "",
     ].join("\n");
   }

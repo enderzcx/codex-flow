@@ -93,7 +93,7 @@ export async function startRun(options = {}) {
       {
         id: "desktop-thread-real-smoke",
         status: "requires_approval",
-        reason: "Visible Codex Desktop threads are created only after Ender approves the exact smoke.",
+        reason: "Visible Codex Desktop threads are created only after operator approval for the exact smoke.",
       },
     ],
     cancel: null,

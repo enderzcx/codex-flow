@@ -82,7 +82,7 @@
     },
     {
       "text": "用 CWF 做这个普通实现，但没有说明为什么 direct / skill-only 不够。",
-      "expected_route": "direct or narrower skill until the EWC CWF Self-Check names a valid trigger boundary",
+      "expected_route": "direct or narrower skill until the CWF Self-Check names a valid trigger boundary",
       "reason": "CWF is an execution backend and requires an auditable self-check before spawning workers."
     }
   ]

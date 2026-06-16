@@ -19,7 +19,7 @@ Do not use it for:
 - ordinary implementation;
 - small diffs or deterministic test failures;
 - code execution or repo mutation;
-- replacing local tests, CI, Reasonix final review, or checker-owned verification;
+- replacing local tests, CI, external final review, or checker-owned verification;
 - secret-bearing or unapproved confidential payloads.
 
 ## Readiness

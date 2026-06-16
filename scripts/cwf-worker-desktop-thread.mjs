@@ -36,10 +36,10 @@ export async function recordDesktopThreadWorker(options = {}) {
       evidence_level: "requires_approval",
       marker: options.marker ?? "CWF_DESKTOP_THREAD_SMOKE_PENDING",
       desktop_thread_id: "",
-      summary: "Visible Desktop-thread real-smoke is gated on Ender approving the exact smoke.",
+      summary: "Visible Desktop-thread real-smoke is gated on operator approval for the exact smoke.",
     });
   } else if (mode === "record-real-smoke") {
-    if (!options.approved) throw new Error("record-real-smoke requires --approved after Ender approves the exact visible Desktop-thread smoke");
+    if (!options.approved) throw new Error("record-real-smoke requires --approved after operator approval for the exact visible Desktop-thread smoke");
     result = desktopResult({
       runId,
       workerId,
@@ -164,7 +164,7 @@ Options:
   --run-id <id>          Existing CWF run id.
   --worker <id>          Worker id to update.
   --mode <failure-fixture|requires-approval|record-real-smoke>
-  --approved             Required for record-real-smoke after Ender GO.
+  --approved             Required for record-real-smoke after operator approval.
   --desktop-thread-id <id>
   --marker <text>
   --summary <text>

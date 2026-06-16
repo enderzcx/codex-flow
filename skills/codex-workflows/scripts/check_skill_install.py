@@ -31,7 +31,7 @@ def check_skill_dir(skill_dir: Path) -> int:
 
     skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     required_text = [
-        "sunny_skill_type: library",
+        "skill_package_type: library",
         "Output Contract",
         "bounded dynamic workflow",
         "background+heartbeat",

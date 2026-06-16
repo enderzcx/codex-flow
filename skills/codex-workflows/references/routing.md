@@ -4,15 +4,11 @@ Use this reference when a prompt could belong to CWF or a nearby skill.
 
 ## Parent Runtime Router
 
-For Ender's local workflow, Ender Work Contract (EWC) is the parent runtime router:
-
-- `/Users/sunny/Work/CC/OPC/ENDER_WORK_CONTRACT.md`
-- `/Users/sunny/Work/CC/OPC/work-contract/ROUTING_MATRIX.md`
-- `/Users/sunny/Work/CC/OPC/work-contract/templates/work-contract.md`
+If your Codex environment defines a parent work contract or routing policy, apply that policy before selecting CWF.
 
 CWF is an execution backend, not a default task entry point. Before selecting CWF, the coordinator must fill a CWF Self-Check:
 
-- which EWC CWF Trigger Boundary is met;
+- which CWF Trigger Boundary is met;
 - why direct, skill-only, or triad/thread is insufficient.
 
 If the self-check cannot name a trigger, CWF must not be used. If CWF is selected without a valid self-check, reviewers should flag a contract violation.
@@ -60,7 +56,7 @@ Prefer these skills when the user asks for their narrower job:
 | "debug why this failed" | `hunt` | Root-cause debugging starts direct unless the user asks for workflow fan-out. |
 | "review this diff" | review skill | Single diff review usually does not need dynamic workflow overhead. |
 | "run CWF review on this diff" | `code-review.workflow.js` | Use CWF when the review needs multiple independent reviewer contexts and findings-first synthesis. |
-| "write copy / UI wording" | Kimi / writing skill | CWF does not route external creative models. |
+| "write copy / UI wording" | writing or copy skill | CWF does not route external creative models. |
 | "ask an external model or review tool for a second opinion" | direct tool or task-specific skill | External model routing is outside CWF; CWF may only preserve an approved review receipt. |
 
 ## Skip Cases
