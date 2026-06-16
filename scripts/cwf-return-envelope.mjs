@@ -47,6 +47,7 @@ export function buildReturnEnvelope(state, options = {}) {
       verification_receipt: "",
       status: "pending",
     },
+    external_oracle_receipts: normalizeExternalOracleReceipts(state.external_oracle_receipts),
     failure_to_regression: state.failure_to_regression ?? {
       required: false,
       regression_artifact: "",
@@ -102,6 +103,27 @@ export function evaluateCloseoutGate(state, verifier = evaluateVerifierGate(stat
 
 function collectWorkerIds(state, key) {
   return [...new Set((state.workers ?? []).map((worker) => worker[key]).filter(Boolean))];
+}
+
+function normalizeExternalOracleReceipts(receipts) {
+  if (!Array.isArray(receipts)) return [];
+  return receipts.map((receipt) => ({
+    surface: receipt.surface ?? "",
+    trigger: receipt.trigger ?? "",
+    readiness_receipt: receipt.readiness_receipt ?? "",
+    input_summary: receipt.input_summary ?? "",
+    prompt_hash: receipt.prompt_hash ?? "",
+    transcript_ref: receipt.transcript_ref ?? "",
+    verdict: receipt.verdict ?? "",
+    confidence: receipt.confidence ?? "",
+    findings: Array.isArray(receipt.findings) ? receipt.findings : [],
+    accepted_findings: receipt.accepted_findings ?? [],
+    rejected_findings: receipt.rejected_findings ?? [],
+    needs_checker_verification: receipt.needs_checker_verification ?? [],
+    goal_delta_proposed: receipt.goal_delta_proposed ?? [],
+    failure_to_regression_candidates: receipt.failure_to_regression_candidates ?? [],
+    verified_state_impact: receipt.verified_state_impact ?? "none_until_checker_accepts",
+  }));
 }
 
 export async function writeReturnEnvelope(runDir, state, options = {}) {

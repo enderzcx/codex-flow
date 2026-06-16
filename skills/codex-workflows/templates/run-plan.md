@@ -78,6 +78,29 @@ If no trigger boundary is met, stop and use the smaller route instead of CWF.
 - Evidence required:
 - Commands or artifacts:
 
+## External Oracle Receipts
+
+Use `N/A` unless EWC approved an external oracle surface before this CWF episode. Oracle output is advisory evidence only and cannot own verified state.
+
+```yaml
+external_oracle_receipts:
+  - surface:
+    trigger:
+    readiness_receipt:
+    input_summary:
+    prompt_hash:
+    transcript_ref:
+    verdict:
+    confidence:
+    findings:
+    accepted_findings:
+    rejected_findings:
+    needs_checker_verification:
+    goal_delta_proposed:
+    failure_to_regression_candidates:
+    verified_state_impact: none_until_checker_accepts
+```
+
 ## Verified State Ownership
 
 - Maker-owned fields: attempted / proposed / changed / needs_review

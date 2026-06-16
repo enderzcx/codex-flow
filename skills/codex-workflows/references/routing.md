@@ -61,6 +61,7 @@ Prefer these skills when the user asks for their narrower job:
 | "review this diff" | review skill | Single diff review usually does not need dynamic workflow overhead. |
 | "run CWF review on this diff" | `code-review.workflow.js` | Use CWF when the review needs multiple independent reviewer contexts and findings-first synthesis. |
 | "write copy / UI wording" | Kimi / writing skill | CWF does not route external creative models. |
+| "ask ChatGPT Pro / Reasonix / Kimi for a second opinion" | EWC collaborator / oracle routing | External model routing is outside CWF; CWF may only preserve an approved oracle receipt. |
 
 ## Skip Cases
 
@@ -72,6 +73,7 @@ Do not trigger CWF for:
 - a request for a reminder, automation, or recurring monitor;
 - a public article or X post draft with no workflow execution;
 - docs-only planning where the user did not ask for a workflow;
+- external model routing, including ChatGPT Pro / Reasonix / Kimi calls as workers;
 - any task where workflow overhead is bigger than the work.
 
 ## Ambiguous Prompts

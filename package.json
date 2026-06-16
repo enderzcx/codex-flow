@@ -8,6 +8,7 @@
     "README.en.md",
     "README.zh-CN.md",
     "docs/CORE.md",
+    "docs/EXTERNAL_ORACLE_SURFACES.md",
     "docs/RUN_EXPERIENCE.md",
     "docs/WORKFLOW_JS.md",
     "docs/CWF_ASYNC_RUNTIME.md",

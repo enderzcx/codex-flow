@@ -23,6 +23,7 @@ const requiredFiles = [
   "README.en.md",
   "README.zh-CN.md",
   "docs/CORE.md",
+  "docs/EXTERNAL_ORACLE_SURFACES.md",
   "docs/CWF_MVP_EVIDENCE.md",
   "docs/CWF_ASYNC_RUNTIME.md",
   "docs/CWF_CLAUDE_COMPARISON.md",
@@ -75,6 +76,7 @@ const readmeEn = await readText("README.en.md");
 const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
 const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
+const oracleSurfaces = await readText("docs/EXTERNAL_ORACLE_SURFACES.md");
 const asyncRuntime = await readText("docs/CWF_ASYNC_RUNTIME.md");
 const comparison = await readText("docs/CWF_CLAUDE_COMPARISON.md");
 const fullNativeRuntimePlan = await readText("docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md");
@@ -150,6 +152,8 @@ mustContain(skill, "goal_delta");
 mustContain(skill, "checker-owned");
 mustContain(skill, "failure-to-regression");
 mustContain(skill, "Output Contract");
+mustContain(skill, "External Oracle Receipts");
+mustContain(skill, "oracle.chatgpt_ui_pro.plan_review.v1");
 mustContain(skill, "references/routing.md");
 mustContain(skillRouting, "goal-writer");
 mustContain(skillRouting, "delivery-planner");
@@ -161,6 +165,16 @@ mustContain(skillRunPlanTemplate, "## Goal Delta");
 mustContain(skillRunPlanTemplate, "## Resume Checkpoint");
 mustContain(skillRunPlanTemplate, "## Verified State Ownership");
 mustContain(skillRunPlanTemplate, "## Failure To Regression");
+mustContain(skillRunPlanTemplate, "## External Oracle Receipts");
+mustContain(skillRunPlanTemplate, "prompt_hash");
+mustContain(skillRunPlanTemplate, "failure_to_regression_candidates");
+mustContain(skillRunPlanTemplate, "none_until_checker_accepts");
+mustContain(skillRouting, "External model routing is outside CWF");
+mustContain(skillRouting, "ChatGPT Pro / Reasonix / Kimi calls as workers");
+mustContain(oracleSurfaces, "ChatGPT UI Pro Oracle Surface");
+mustContain(oracleSurfaces, "oracle.chatgpt_ui_pro.plan_review.v1");
+mustContain(oracleSurfaces, "Receipt Schema");
+mustContain(oracleSurfaces, "none_until_checker_accepts");
 for (const key of ["should_trigger", "should_not_trigger", "near_neighbors"]) {
   if (!Array.isArray(skillTriggerCases[key]) || skillTriggerCases[key].length === 0) {
     throw new Error(`skills/codex-workflows/evals/trigger_cases.json missing ${key}`);
@@ -290,6 +304,7 @@ function checkPackageRules() {
     "README.en.md",
     "README.zh-CN.md",
     "docs/CORE.md",
+    "docs/EXTERNAL_ORACLE_SURFACES.md",
     "docs/RUN_EXPERIENCE.md",
     "docs/WORKFLOW_JS.md",
     "docs/CWF_ASYNC_RUNTIME.md",
@@ -310,7 +325,7 @@ function checkPackageRules() {
     stdio: ["ignore", "pipe", "pipe"],
   });
   const packed = JSON.parse(packOutput)[0]?.files?.map((item) => item.path) ?? [];
-  for (const required of ["docs/CORE.md", "docs/RUN_EXPERIENCE.md", "docs/WORKFLOW_JS.md"]) {
+  for (const required of ["docs/CORE.md", "docs/EXTERNAL_ORACLE_SURFACES.md", "docs/RUN_EXPERIENCE.md", "docs/WORKFLOW_JS.md"]) {
     if (!packed.includes(required)) throw new Error(`npm pack missing public doc ${required}`);
   }
   for (const path of packed) {
@@ -757,6 +772,7 @@ function checkReturnEnvelopeRules() {
     "verifier_status",
     "closeout_gate",
     "verified_state",
+    "external_oracle_receipts",
     "failure_to_regression",
     "deferred_items",
     "completion_status",
@@ -771,6 +787,9 @@ function checkReturnEnvelopeRules() {
   }
   if (envelope.platform_callback.status !== "deferred") {
     throw new Error("return envelope must defer platform callback unless proven");
+  }
+  if (!Array.isArray(envelope.external_oracle_receipts)) {
+    throw new Error("return envelope must expose external oracle receipts");
   }
   if (!envelope.deferred_items.some((item) => item.status === "requires_approval")) {
     throw new Error("return envelope must preserve deferred approval items");
@@ -793,6 +812,33 @@ function checkReturnEnvelopeRules() {
   const heartbeatEnvelope = buildReturnEnvelope({ ...state, return_mode: "heartbeat_synthesis" });
   if (heartbeatEnvelope.return_mode !== "heartbeat_synthesis") {
     throw new Error("return envelope must preserve state return_mode when no override is provided");
+  }
+
+  const oracleEnvelope = buildReturnEnvelope({
+    ...state,
+    external_oracle_receipts: [
+      {
+        surface: "oracle.chatgpt_ui_pro.plan_review.v1",
+        trigger: "stage_gate",
+        prompt_hash: "sha256:fixture",
+        verdict: "HOLD",
+        findings: [{ id: "PRO-001", severity: "blocker", claim: "fixture" }],
+        accepted_findings: ["frontmatter GO conflicts with body HOLD"],
+        needs_checker_verification: ["baseline failures"],
+        failure_to_regression_candidates: ["baseline failure fixture"],
+      },
+    ],
+  });
+  const oracleReceipt = oracleEnvelope.external_oracle_receipts[0];
+  if (
+    oracleReceipt.surface !== "oracle.chatgpt_ui_pro.plan_review.v1" ||
+    oracleReceipt.prompt_hash !== "sha256:fixture" ||
+    oracleReceipt.findings[0]?.id !== "PRO-001" ||
+    oracleReceipt.failure_to_regression_candidates[0] !== "baseline failure fixture" ||
+    oracleReceipt.verified_state_impact !== "none_until_checker_accepts" ||
+    oracleReceipt.needs_checker_verification[0] !== "baseline failures"
+  ) {
+    throw new Error("return envelope must normalize receipt-only external oracle findings");
   }
 
   const missingVerifiedEnvelope = buildReturnEnvelope({
