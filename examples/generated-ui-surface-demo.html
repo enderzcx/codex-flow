@@ -1,0 +1,709 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CWF Generated UI Surface Demo</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f7f7f4;
+        --panel: #ffffff;
+        --ink: #191b1f;
+        --muted: #666f7c;
+        --line: #d8dce2;
+        --blue: #2357d8;
+        --green: #087f5b;
+        --red: #b42318;
+        --amber: #b7791f;
+        --violet: #6941c6;
+        --shadow: 0 16px 45px rgba(24, 28, 35, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .shell {
+        min-height: 100vh;
+        display: grid;
+        grid-template-rows: auto 1fr;
+      }
+
+      header {
+        border-bottom: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(12px);
+      }
+
+      .topbar {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 0 auto;
+        min-height: 74px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .brand {
+        display: grid;
+        gap: 4px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.15;
+        letter-spacing: 0;
+      }
+
+      .subtitle {
+        margin: 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+      }
+
+      .segmented {
+        display: inline-grid;
+        grid-template-columns: 1fr 1fr;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+      }
+
+      .segmented button,
+      .control-btn {
+        min-height: 36px;
+        border: 0;
+        background: transparent;
+        color: var(--muted);
+        padding: 0 14px;
+        cursor: pointer;
+      }
+
+      .segmented button.active {
+        background: var(--ink);
+        color: #fff;
+      }
+
+      .control-btn {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fff;
+        color: var(--ink);
+      }
+
+      main {
+        width: min(1220px, calc(100vw - 32px));
+        margin: 24px auto 36px;
+        display: grid;
+        grid-template-columns: 300px minmax(0, 1fr);
+        gap: 18px;
+      }
+
+      aside,
+      .workspace {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+      }
+
+      aside {
+        align-self: start;
+        padding: 18px;
+        display: grid;
+        gap: 18px;
+      }
+
+      .section-title {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+
+      .facts {
+        display: grid;
+        gap: 10px;
+      }
+
+      .fact {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        display: grid;
+        gap: 6px;
+      }
+
+      .fact strong {
+        font-size: 13px;
+      }
+
+      .fact span {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .workspace {
+        overflow: hidden;
+        min-height: 680px;
+      }
+
+      .workspace-head {
+        min-height: 62px;
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+
+      .workspace-head h2 {
+        margin: 0;
+        font-size: 18px;
+      }
+
+      .workspace-head p {
+        margin: 4px 0 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .badge-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        border-radius: 999px;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid currentColor;
+      }
+
+      .badge.blue {
+        color: var(--blue);
+        background: #eef3ff;
+      }
+
+      .badge.green {
+        color: var(--green);
+        background: #e8f7ef;
+      }
+
+      .badge.red {
+        color: var(--red);
+        background: #fff0ee;
+      }
+
+      .badge.amber {
+        color: var(--amber);
+        background: #fff7e6;
+      }
+
+      .view {
+        display: none;
+        padding: 18px;
+      }
+
+      .view.active {
+        display: block;
+      }
+
+      .dashboard {
+        display: grid;
+        gap: 16px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+        min-height: 104px;
+        display: grid;
+        align-content: space-between;
+      }
+
+      .metric span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .metric strong {
+        font-size: 28px;
+        letter-spacing: 0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+      }
+
+      .panel h3 {
+        margin: 0 0 12px;
+        font-size: 15px;
+      }
+
+      .finding-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .finding {
+        border-left: 4px solid var(--line);
+        padding: 10px 12px;
+        background: #fafafa;
+        border-radius: 0 8px 8px 0;
+      }
+
+      .finding.blocker {
+        border-color: var(--red);
+      }
+
+      .finding.warning {
+        border-color: var(--amber);
+      }
+
+      .finding.ok {
+        border-color: var(--green);
+      }
+
+      .finding strong {
+        display: block;
+        font-size: 13px;
+      }
+
+      .finding span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .timeline {
+        display: grid;
+        gap: 12px;
+        position: relative;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 82px 1fr;
+        gap: 10px;
+      }
+
+      .step time {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .step div {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px;
+        font-size: 13px;
+      }
+
+      .spec-view {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 270px;
+        gap: 16px;
+      }
+
+      pre {
+        margin: 0;
+        overflow: auto;
+        max-height: 360px;
+        background: #111318;
+        color: #e6e9ef;
+        border-radius: 8px;
+        padding: 14px;
+        font-size: 12px;
+        line-height: 1.55;
+      }
+
+      .stream-surface {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        min-height: 554px;
+        padding: 18px;
+        background: #fff;
+      }
+
+      .stream-surface h3,
+      .stream-surface h4 {
+        margin: 0 0 10px;
+      }
+
+      .stream-surface p {
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      .stream-surface table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+
+      .stream-surface th,
+      .stream-surface td {
+        border-bottom: 1px solid var(--line);
+        padding: 10px;
+        text-align: left;
+      }
+
+      .stream-surface th {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .callout {
+        margin: 14px 0;
+        border: 1px solid #bdd7ff;
+        background: #eef6ff;
+        border-radius: 8px;
+        padding: 12px;
+        color: #16345f;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+
+      .caret {
+        display: inline-block;
+        width: 8px;
+        height: 16px;
+        margin-left: 2px;
+        background: var(--ink);
+        vertical-align: text-bottom;
+        animation: blink 0.9s steps(1) infinite;
+      }
+
+      @keyframes blink {
+        50% {
+          opacity: 0.2;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .topbar,
+        main {
+          width: min(100vw - 24px, 760px);
+        }
+
+        .topbar,
+        .workspace-head {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        main,
+        .grid,
+        .spec-view {
+          grid-template-columns: 1fr;
+        }
+
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 520px) {
+        .metrics {
+          grid-template-columns: 1fr;
+        }
+
+        .segmented {
+          width: 100%;
+        }
+
+        .segmented button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header>
+        <div class="topbar">
+          <div class="brand">
+            <h1>CWF Generated UI Surface Demo</h1>
+            <p class="subtitle">The same workflow result as a constrained UI spec and a read-only HTML stream.</p>
+          </div>
+          <div class="toolbar">
+            <div class="segmented" aria-label="View switcher">
+              <button id="uiSpecTab" class="active" type="button">UI spec</button>
+              <button id="htmlStreamTab" type="button">HTML stream</button>
+            </div>
+            <button id="replayStream" class="control-btn" type="button">Replay stream</button>
+          </div>
+        </div>
+      </header>
+
+      <main>
+        <aside>
+          <section>
+            <p class="section-title">Why this matters</p>
+            <div class="facts">
+              <div class="fact">
+                <strong>Markdown summary</strong>
+                <span>Fast, universal, but dense when a workflow has many findings and evidence links.</span>
+              </div>
+              <div class="fact">
+                <strong>UI spec surface</strong>
+                <span>Best for durable dashboards. The agent can only use the declared components and actions.</span>
+              </div>
+              <div class="fact">
+                <strong>HTML stream surface</strong>
+                <span>Best for rich read-only reports that should appear progressively while the model streams.</span>
+              </div>
+            </div>
+          </section>
+          <section>
+            <p class="section-title">Contract</p>
+            <div class="badge-row">
+              <span class="badge blue">renderable_output</span>
+              <span class="badge green">checker-owned state</span>
+              <span class="badge amber">visual smoke</span>
+            </div>
+          </section>
+        </aside>
+
+        <section class="workspace">
+          <div class="workspace-head">
+            <div>
+              <h2 id="viewTitle">Schema-first workflow dashboard</h2>
+              <p id="viewSubtitle">A structured spec renders known components only.</p>
+            </div>
+            <div class="badge-row">
+              <span class="badge red">1 blocker</span>
+              <span class="badge amber">2 warnings</span>
+              <span class="badge green">3 verified</span>
+            </div>
+          </div>
+
+          <div id="uiSpecView" class="view active">
+            <div class="dashboard">
+              <div class="metrics">
+                <div class="metric">
+                  <span>Workflow</span>
+                  <strong>G2</strong>
+                  <span>review + verification</span>
+                </div>
+                <div class="metric">
+                  <span>Workers</span>
+                  <strong>4</strong>
+                  <span>2 explorers, 1 verifier, 1 writer</span>
+                </div>
+                <div class="metric">
+                  <span>Evidence</span>
+                  <strong>7</strong>
+                  <span>tests, screenshots, receipts</span>
+                </div>
+                <div class="metric">
+                  <span>Closeout</span>
+                  <strong>HOLD</strong>
+                  <span>blocked until fixture lands</span>
+                </div>
+              </div>
+
+              <div class="grid">
+                <section class="panel">
+                  <h3>Findings</h3>
+                  <div class="finding-list">
+                    <div class="finding blocker">
+                      <strong>Blocker: generated report claims pass before verifier evidence</strong>
+                      <span>UI can show attempted/proposed state, but pass/done must remain checker-owned.</span>
+                    </div>
+                    <div class="finding warning">
+                      <strong>Warning: HTML stream is read-only</strong>
+                      <span>Use it for rich reports, not action buttons or trusted product forms.</span>
+                    </div>
+                    <div class="finding ok">
+                      <strong>Verified: screenshot smoke exists</strong>
+                      <span>Desktop and mobile layouts render without overlap or blank regions.</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="panel">
+                  <h3>Evidence Timeline</h3>
+                  <div class="timeline">
+                    <div class="step"><time>09:10</time><div>Run plan created with renderable_output.type = ui_spec.</div></div>
+                    <div class="step"><time>09:13</time><div>Worker packets generated; untrusted source text quarantined.</div></div>
+                    <div class="step"><time>09:18</time><div>Verifier rejected one pass claim and kept closeout on HOLD.</div></div>
+                    <div class="step"><time>09:24</time><div>Visual smoke captured after the fixture was updated.</div></div>
+                  </div>
+                </section>
+              </div>
+
+              <div class="spec-view">
+                <section class="panel">
+                  <h3>Generated UI spec artifact</h3>
+                  <pre id="specOutput"></pre>
+                </section>
+                <section class="panel">
+                  <h3>Allowed catalog</h3>
+                  <div class="finding-list">
+                    <div class="finding ok"><strong>Metric</strong><span>label, value, caption</span></div>
+                    <div class="finding ok"><strong>FindingList</strong><span>severity, title, evidence</span></div>
+                    <div class="finding ok"><strong>Timeline</strong><span>time, title, artifact</span></div>
+                    <div class="finding warning"><strong>ActionButton</strong><span>disabled until approval boundary exists</span></div>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>
+
+          <div id="htmlStreamView" class="view">
+            <div class="stream-surface" id="streamOutput" aria-live="polite"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const spec = {
+        renderable_output: {
+          type: "ui_spec",
+          purpose: "CWF closeout dashboard",
+          renderer: "catalog-constrained React renderer",
+          actions_allowed: false,
+          verified_state_impact: "none_until_checker_accepts"
+        },
+        catalog: ["Metric", "FindingList", "Timeline", "EvidenceLink"],
+        findings: [
+          { severity: "blocker", title: "Pass claim before verifier evidence" },
+          { severity: "warning", title: "HTML stream must stay read-only" },
+          { severity: "ok", title: "Visual smoke captured" }
+        ]
+      };
+
+      const streamHtml = `
+        <h3>Streaming CWF Review Report</h3>
+        <p>This is the same result rendered as a rich read-only report. It feels closer to a live briefing than a static markdown block.</p>
+        <div class="callout"><strong>Boundary:</strong> HTML stream output can improve readability, but it cannot own verified state or trigger actions.</div>
+        <table>
+          <thead><tr><th>Surface</th><th>Best for</th><th>Do not use for</th></tr></thead>
+          <tbody>
+            <tr><td>ui_spec</td><td>Interactive dashboards, product UI, forms</td><td>Arbitrary HTML or unapproved actions</td></tr>
+            <tr><td>html_stream</td><td>Read-only reports, comparison tables, streaming summaries</td><td>Trusted business state or mutation</td></tr>
+          </tbody>
+        </table>
+        <h4>Closeout</h4>
+        <p>Status remains <strong>HOLD</strong> until checker-owned evidence accepts the blocker. The UI is presentation; verification still comes from tests, verifier agents, human review, or external systems.</p>
+      `;
+
+      const uiSpecTab = document.getElementById("uiSpecTab");
+      const htmlStreamTab = document.getElementById("htmlStreamTab");
+      const replayStream = document.getElementById("replayStream");
+      const uiSpecView = document.getElementById("uiSpecView");
+      const htmlStreamView = document.getElementById("htmlStreamView");
+      const viewTitle = document.getElementById("viewTitle");
+      const viewSubtitle = document.getElementById("viewSubtitle");
+      const specOutput = document.getElementById("specOutput");
+      const streamOutput = document.getElementById("streamOutput");
+
+      specOutput.textContent = JSON.stringify(spec, null, 2);
+
+      function setMode(mode) {
+        const stream = mode === "stream";
+        uiSpecTab.classList.toggle("active", !stream);
+        htmlStreamTab.classList.toggle("active", stream);
+        uiSpecView.classList.toggle("active", !stream);
+        htmlStreamView.classList.toggle("active", stream);
+        viewTitle.textContent = stream ? "HTML-first streaming report" : "Schema-first workflow dashboard";
+        viewSubtitle.textContent = stream
+          ? "Semantic HTML appears progressively, then remains read-only."
+          : "A structured spec renders known components only.";
+        if (stream) playStream();
+      }
+
+      function sanitizeDemoHtml(html) {
+        const template = document.createElement("template");
+        template.innerHTML = html;
+        template.content.querySelectorAll("script, iframe, object, embed, form").forEach((node) => node.remove());
+        template.content.querySelectorAll("*").forEach((node) => {
+          for (const attr of [...node.attributes]) {
+            if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+          }
+        });
+        return template.innerHTML;
+      }
+
+      let timer = 0;
+      function playStream() {
+        clearInterval(timer);
+        streamOutput.innerHTML = "";
+        const safe = sanitizeDemoHtml(streamHtml.trim());
+        let i = 0;
+        timer = setInterval(() => {
+          i += 16;
+          const partial = safe.slice(0, i);
+          streamOutput.innerHTML = partial + '<span class="caret"></span>';
+          if (i >= safe.length) {
+            clearInterval(timer);
+            streamOutput.innerHTML = safe;
+          }
+        }, 24);
+      }
+
+      uiSpecTab.addEventListener("click", () => setMode("spec"));
+      htmlStreamTab.addEventListener("click", () => setMode("stream"));
+      replayStream.addEventListener("click", playStream);
+    </script>
+  </body>
+</html>

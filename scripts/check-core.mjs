@@ -24,6 +24,7 @@ const requiredFiles = [
   "README.zh-CN.md",
   "docs/CORE.md",
   "docs/EXTERNAL_REVIEW_RECEIPTS.md",
+  "docs/GENERATED_UI_SURFACES.md",
   "docs/CWF_MVP_EVIDENCE.md",
   "docs/CWF_ASYNC_RUNTIME.md",
   "docs/CWF_CLAUDE_COMPARISON.md",
@@ -34,6 +35,7 @@ const requiredFiles = [
   "docs/evidence/CWF_FULL_NATIVE_RUNTIME_REAL_SMOKE_20260609.md",
   "docs/RUN_EXPERIENCE.md",
   "docs/WORKFLOW_JS.md",
+  "examples/generated-ui-surface-demo.html",
   "skills/codex-workflows/SKILL.md",
   "skills/codex-workflows/evals/trigger_cases.json",
   "skills/codex-workflows/references/routing.md",
@@ -77,6 +79,7 @@ const zh = await readText("README.zh-CN.md");
 const skill = await readText("skills/codex-workflows/SKILL.md");
 const evidence = await readText("docs/CWF_MVP_EVIDENCE.md");
 const externalReviewReceipts = await readText("docs/EXTERNAL_REVIEW_RECEIPTS.md");
+const generatedUiSurfaces = await readText("docs/GENERATED_UI_SURFACES.md");
 const asyncRuntime = await readText("docs/CWF_ASYNC_RUNTIME.md");
 const comparison = await readText("docs/CWF_CLAUDE_COMPARISON.md");
 const fullNativeRuntimePlan = await readText("docs/CWF_FULL_NATIVE_RUNTIME_PLAN.md");
@@ -87,6 +90,7 @@ const fullNativeRealEvidence = await readText("docs/evidence/CWF_FULL_NATIVE_RUN
 const skillRouting = await readText("skills/codex-workflows/references/routing.md");
 const skillRunPlanTemplate = await readText("skills/codex-workflows/templates/run-plan.md");
 const skillTriggerCases = JSON.parse(await readText("skills/codex-workflows/evals/trigger_cases.json"));
+const generatedUiDemo = await readText("examples/generated-ui-surface-demo.html");
 const gitignore = await readText(".gitignore");
 const packageJson = JSON.parse(await readText("package.json"));
 
@@ -102,6 +106,10 @@ mustContain(readme, "cwf-start.mjs");
 mustContain(readme, "cwf-worker-sdk.mjs");
 mustContain(readme, "cwf-worker-desktop-thread.mjs");
 mustContain(readme, "library-style Codex skill package");
+mustContain(readme, "generated UI surfaces");
+mustContain(readme, "renderable_output");
+mustContain(readme, "ui_spec");
+mustContain(readme, "html_stream");
 mustContain(readme, "cwf-skills.mjs");
 mustContain(readme, "check_skill_install.py --check-install");
 mustContain(readme, "evals/trigger_cases.json");
@@ -117,6 +125,10 @@ mustContain(readmeEn, "cwf-start.mjs");
 mustContain(readmeEn, "cwf-worker-sdk.mjs");
 mustContain(readmeEn, "cwf-worker-desktop-thread.mjs");
 mustContain(readmeEn, "library-style Codex skill package");
+mustContain(readmeEn, "Generated UI surfaces");
+mustContain(readmeEn, "renderable_output");
+mustContain(readmeEn, "ui_spec");
+mustContain(readmeEn, "html_stream");
 mustContain(readmeEn, "cwf-skills.mjs");
 mustContain(readmeEn, "check_skill_install.py --check-install");
 mustContain(readmeEn, "evals/trigger_cases.json");
@@ -128,6 +140,10 @@ mustContain(zh, "SDK 后台 worker");
 mustContain(zh, "cwf-start.mjs");
 mustContain(zh, "cwf-worker-sdk.mjs");
 mustContain(zh, "library-style Codex skill package");
+mustContain(zh, "generated UI surfaces");
+mustContain(zh, "renderable_output");
+mustContain(zh, "ui_spec");
+mustContain(zh, "html_stream");
 mustContain(zh, "cwf-skills.mjs");
 mustContain(zh, "check_skill_install.py --check-install");
 mustContain(skill, "bounded dynamic workflow");
@@ -154,6 +170,10 @@ mustContain(skill, "failure-to-regression");
 mustContain(skill, "Output Contract");
 mustContain(skill, "External Review Receipts");
 mustContain(skill, "external_review_receipts");
+mustContain(skill, "renderable_output");
+mustContain(skill, "ui_spec");
+mustContain(skill, "html_stream");
+mustContain(skill, "docs/GENERATED_UI_SURFACES.md");
 mustContain(skill, "references/routing.md");
 mustContain(skillRouting, "goal-writer");
 mustContain(skillRouting, "delivery-planner");
@@ -166,6 +186,10 @@ mustContain(skillRunPlanTemplate, "## Resume Checkpoint");
 mustContain(skillRunPlanTemplate, "## Verified State Ownership");
 mustContain(skillRunPlanTemplate, "## Failure To Regression");
 mustContain(skillRunPlanTemplate, "## External Review Receipts");
+mustContain(skillRunPlanTemplate, "## Renderable Output");
+mustContain(skillRunPlanTemplate, "renderable_output");
+mustContain(skillRunPlanTemplate, "ui_spec");
+mustContain(skillRunPlanTemplate, "html_stream");
 mustContain(skillRunPlanTemplate, "prompt_hash");
 mustContain(skillRunPlanTemplate, "failure_to_regression_candidates");
 mustContain(skillRunPlanTemplate, "none_until_checker_accepts");
@@ -175,6 +199,16 @@ mustContain(externalReviewReceipts, "External Review Receipts");
 mustContain(externalReviewReceipts, "external_review_receipts");
 mustContain(externalReviewReceipts, "Receipt Schema");
 mustContain(externalReviewReceipts, "none_until_checker_accepts");
+mustContain(generatedUiSurfaces, "Generated UI Surfaces");
+mustContain(generatedUiSurfaces, "renderable_output");
+mustContain(generatedUiSurfaces, "ui_spec");
+mustContain(generatedUiSurfaces, "html_stream");
+mustContain(generatedUiSurfaces, "none_until_checker_accepts");
+mustContain(generatedUiDemo, "CWF Generated UI Surface Demo");
+mustContain(generatedUiDemo, "renderable_output");
+mustContain(generatedUiDemo, "sanitizeDemoHtml");
+mustContain(generatedUiDemo, "ui_spec");
+mustContain(generatedUiDemo, "html_stream");
 for (const key of ["should_trigger", "should_not_trigger", "near_neighbors"]) {
   if (!Array.isArray(skillTriggerCases[key]) || skillTriggerCases[key].length === 0) {
     throw new Error(`skills/codex-workflows/evals/trigger_cases.json missing ${key}`);
@@ -305,10 +339,12 @@ function checkPackageRules() {
     "README.zh-CN.md",
     "docs/CORE.md",
     "docs/EXTERNAL_REVIEW_RECEIPTS.md",
+    "docs/GENERATED_UI_SURFACES.md",
     "docs/RUN_EXPERIENCE.md",
     "docs/WORKFLOW_JS.md",
     "docs/CWF_ASYNC_RUNTIME.md",
     "docs/CWF_CLAUDE_COMPARISON.md",
+    "examples/generated-ui-surface-demo.html",
     "skills/",
     "workflows/",
     "scripts/",
@@ -325,7 +361,7 @@ function checkPackageRules() {
     stdio: ["ignore", "pipe", "pipe"],
   });
   const packed = JSON.parse(packOutput)[0]?.files?.map((item) => item.path) ?? [];
-  for (const required of ["docs/CORE.md", "docs/EXTERNAL_REVIEW_RECEIPTS.md", "docs/RUN_EXPERIENCE.md", "docs/WORKFLOW_JS.md"]) {
+  for (const required of ["docs/CORE.md", "docs/EXTERNAL_REVIEW_RECEIPTS.md", "docs/GENERATED_UI_SURFACES.md", "docs/RUN_EXPERIENCE.md", "docs/WORKFLOW_JS.md", "examples/generated-ui-surface-demo.html"]) {
     if (!packed.includes(required)) throw new Error(`npm pack missing public doc ${required}`);
   }
   for (const path of packed) {

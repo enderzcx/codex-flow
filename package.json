@@ -1,7 +1,7 @@
 {
   "name": "codex-workflows",
   "version": "0.1.0",
-  "description": "Codex skill with reusable workflow templates and local helpers for scoped, verifiable run plans.",
+  "description": "Codex skill with reusable workflow templates, generated UI surface contracts, and local helpers for scoped, verifiable run plans.",
   "type": "module",
   "files": [
     "README.md",
@@ -9,10 +9,12 @@
     "README.zh-CN.md",
     "docs/CORE.md",
     "docs/EXTERNAL_REVIEW_RECEIPTS.md",
+    "docs/GENERATED_UI_SURFACES.md",
     "docs/RUN_EXPERIENCE.md",
     "docs/WORKFLOW_JS.md",
     "docs/CWF_ASYNC_RUNTIME.md",
     "docs/CWF_CLAUDE_COMPARISON.md",
+    "examples/generated-ui-surface-demo.html",
     "skills/",
     "workflows/",
     "scripts/"

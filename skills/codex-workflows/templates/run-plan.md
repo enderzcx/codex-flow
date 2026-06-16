@@ -101,6 +101,31 @@ external_review_receipts:
     verified_state_impact: none_until_checker_accepts
 ```
 
+## Renderable Output
+
+Use `N/A` unless this CWF run will produce a generated UI surface in addition to markdown/evidence.
+
+```yaml
+renderable_output:
+  type: none | ui_spec | html_stream
+  purpose:
+  audience:
+  artifact_path:
+  data_sources:
+  renderer:
+  safety_boundary:
+  actions_allowed:
+  validation:
+  visual_smoke:
+  verified_state_impact: none_until_checker_accepts
+```
+
+Rules:
+
+- `ui_spec` is for schema-first dashboards, panels, forms, or action surfaces. It must name the component/action catalog and validator.
+- `html_stream` is for sanitized read-only reports. It must not execute actions, submit forms, mutate repo state, or own verified state.
+- Both forms need a plain-language fallback summary and evidence references for any status they display.
+
 ## Verified State Ownership
 
 - Maker-owned fields: attempted / proposed / changed / needs_review

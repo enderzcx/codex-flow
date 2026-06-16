@@ -39,6 +39,7 @@ Goal Anchor when needed
   -> verify with checker-owned state
   -> preserve recurring failures as regression artifacts when applicable
   -> emit goal_delta when goal-anchored
+  -> optionally attach renderable_output for generated UI surfaces
   -> answer in this same conversation
 ```
 
@@ -133,6 +134,7 @@ They are readable JavaScript specs, not executable Node scripts. They may use pl
 - `stop_conditions`
 - `quarantine_rules`
 - `failure_policy`
+- `renderable_output` for optional UI spec or HTML stream artifacts
 
 When a template is useful, read it and adapt it in the main session before spawning agents. If no template fits, draft a small workflow inline and optionally save it when the user asks.
 
@@ -311,6 +313,7 @@ Every workflow closeout must include:
 - who owns verified state, and which evidence allowed any `verified` / `passed` / `done` claim;
 - regression artifact or skip reason when the run fixed a recurring workflow, helper, route, connector, or harness failure;
 - `goal_delta` when the run is under Goal Mode or a Goal Anchor;
+- `renderable_output` when the run produced a UI spec or read-only HTML stream artifact;
 - remaining risks or stop condition;
 - a short human-readable summary.
 
@@ -330,6 +333,7 @@ Every CWF response should include the smallest useful subset of this contract:
 - `verified state`: maker-owned attempted/proposed state versus checker-owned verified/passed/done state;
 - `external_review_receipts`: receipt-only advisory findings, their disposition, and any proposed `goal_delta`;
 - `failure-to-regression`: failing input or trace, replay command, regression artifact, or explicit skip reason when applicable;
+- `renderable_output`: optional `none`, `ui_spec`, or `html_stream` artifact path, renderer assumptions, validation, visual-smoke evidence, and verified-state boundary;
 - `return path`: coordinator_synthesis or heartbeat_synthesis status;
 - `write boundary`: no writes, proposed patch only, or approved safe write gate;
 - `verification`: commands, artifacts, thread ids, screenshots, logs, or explicit not-verified reason;
@@ -342,6 +346,7 @@ If CWF is not appropriate, say so briefly and do the direct task or route to the
 - `references/routing.md`: trigger/exclusion boundaries against nearby skills.
 - `templates/run-plan.md`: durable bounded run-plan skeleton.
 - repo root `docs/EXTERNAL_REVIEW_RECEIPTS.md`: receipt-only external review contract.
+- repo root `docs/GENERATED_UI_SURFACES.md`: optional renderable output contract.
 - `evals/trigger_cases.json`: route examples for install/routing audits.
 - `scripts/check_skill_install.py`: local install and package-shape smoke.
 - repo root `scripts/cwf-skills.mjs`: current-version `skills list/read/validate` registry for agent SOP.

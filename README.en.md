@@ -50,6 +50,7 @@ Avoid CWF for:
 | Run helpers | `cwf-run-preview.mjs`, `cwf-run-plan.mjs`, `cwf-start.mjs`, `cwf-run-state.mjs` |
 | Worker evidence helpers | `cwf-worker-sdk.mjs`, `cwf-worker-desktop-thread.mjs`, `cwf-native-subagent.mjs` |
 | Safety helpers | `cwf-safe-write.mjs`, `cwf-return-envelope.mjs`, `cwf-return-heartbeat.mjs` |
+| Generated UI surfaces | optional `ui_spec` or `html_stream` artifacts for dashboards, review panels, and rich read-only reports |
 | Skill package | library-style Codex skill package: `SKILL.md`, `references/`, `templates/run-plan.md`, `evals/trigger_cases.json`, `scripts/check_skill_install.py` |
 | Skill registry helper | `cwf-skills.mjs` for list/read/validate over the current skill SOP |
 
@@ -103,6 +104,8 @@ node scripts/cwf-worker-desktop-thread.mjs --run-id demo --worker visible-fixtur
 **Result synthesis**: the final synthesis must return to the originating CWF conversation. `heartbeat_synthesis` only counts after a real marker reply appears in that conversation; creating an automation is not enough.
 
 **Workflow files**: `workflow.js` is a workflow harness/spec, not a script to execute directly. CWF does not run unknown JavaScript as arbitrary code.
+
+**Generated UI surfaces**: CWF may also produce `renderable_output` so complex results can be viewed as dashboards, tables, review panels, or streaming reports. Interactive or product-like UI should use a schema-first `ui_spec` with declared components and actions. One-shot read-only reports may use `html_stream`, but they must be sanitized and cannot own verified state. See [examples/generated-ui-surface-demo.html](examples/generated-ui-surface-demo.html) for the demo and [docs/GENERATED_UI_SURFACES.md](docs/GENERATED_UI_SURFACES.md) for the contract.
 
 ## Safety Contract
 
@@ -180,6 +183,8 @@ See [docs/CWF_CLAUDE_COMPARISON.md](docs/CWF_CLAUDE_COMPARISON.md) for the fulle
 - [docs/WORKFLOW_JS.md](docs/WORKFLOW_JS.md): `workflow.js` contract
 - [docs/CWF_ASYNC_RUNTIME.md](docs/CWF_ASYNC_RUNTIME.md): foreground / background / heartbeat contract
 - [docs/EXTERNAL_REVIEW_RECEIPTS.md](docs/EXTERNAL_REVIEW_RECEIPTS.md): external review receipt contract
+- [docs/GENERATED_UI_SURFACES.md](docs/GENERATED_UI_SURFACES.md): generated UI surface contract
+- [examples/generated-ui-surface-demo.html](examples/generated-ui-surface-demo.html): dependency-free demo
 
 ## Check
 
