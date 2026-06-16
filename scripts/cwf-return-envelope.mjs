@@ -47,7 +47,7 @@ export function buildReturnEnvelope(state, options = {}) {
       verification_receipt: "",
       status: "pending",
     },
-    external_oracle_receipts: normalizeExternalOracleReceipts(state.external_oracle_receipts),
+    external_review_receipts: normalizeExternalReviewReceipts(state.external_review_receipts),
     failure_to_regression: state.failure_to_regression ?? {
       required: false,
       regression_artifact: "",
@@ -105,7 +105,7 @@ function collectWorkerIds(state, key) {
   return [...new Set((state.workers ?? []).map((worker) => worker[key]).filter(Boolean))];
 }
 
-function normalizeExternalOracleReceipts(receipts) {
+function normalizeExternalReviewReceipts(receipts) {
   if (!Array.isArray(receipts)) return [];
   return receipts.map((receipt) => ({
     surface: receipt.surface ?? "",

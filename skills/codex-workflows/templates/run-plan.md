@@ -78,12 +78,12 @@ If no trigger boundary is met, stop and use the smaller route instead of CWF.
 - Evidence required:
 - Commands or artifacts:
 
-## External Oracle Receipts
+## External Review Receipts
 
-Use `N/A` unless EWC approved an external oracle surface before this CWF episode. Oracle output is advisory evidence only and cannot own verified state.
+Use `N/A` unless the task contract approved an external advisory review before this CWF episode. External review output is advisory evidence only and cannot own verified state.
 
 ```yaml
-external_oracle_receipts:
+external_review_receipts:
   - surface:
     trigger:
     readiness_receipt:

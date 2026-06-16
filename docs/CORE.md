@@ -29,7 +29,7 @@ then returns the result to the same conversation by foreground, background, or h
 14. Adapter honesty: native subagent, SDK, Desktop-thread, and heartbeat helpers must write `fixture`, `real-smoke`, `requires_approval`, `unavailable`, or `deferred` evidence labels instead of upgrading claims silently.
 15. Checker-owned verification: maker workers may write attempted/proposed/changed state, but `verified`, `passed`, `done`, and `regression_locked` belong to a verifier, deterministic test, replay, or human reviewer.
 16. Failure to regression: recurring workflow, helper, route, connector, skill, or harness failures should preserve the failing input or trace and leave behind a regression artifact or explicit skip reason.
-17. Receipt-only oracles: EWC-approved external oracle reviews may be preserved as `external_oracle_receipts[]`, but they are advisory evidence and never CWF workers, executors, or verified-state owners.
+17. Receipt-only reviews: external advisory reviews may be preserved as `external_review_receipts[]`, but they are advisory evidence and never CWF workers, executors, or verified-state owners.
 
 ## Failure Modes
 
@@ -156,6 +156,6 @@ The following are not part of the core product:
 
 Optional SDK/background/heartbeat adapters are allowed only when they preserve the bounded native contract. They must not execute `workflow.js` as unrestricted Node code or become the main product surface. Desktop-thread and SDK workers may propose patches, but real apply must return through the coordinator safe-write gate.
 
-External oracle surfaces such as ChatGPT UI Pro are allowed only as receipt-only review evidence under EWC readiness gates. They do not reintroduce non-Codex model routing.
+External advisors and review tools are allowed only as receipt-only evidence under the task's normal approval and data-boundary gates. They do not reintroduce non-Codex model routing.
 
 They may return later as optional adapters, but not as the main experience.

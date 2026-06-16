@@ -71,7 +71,7 @@ preview -> approve-write -> path policy -> git apply --check -> verification -> 
 
 SDK worker 或 `desktop-thread` worker 可以提出 patch，但真正应用必须回到主会话的安全写入门禁。
 
-EWC 批准的外部 oracle（例如 ChatGPT UI Pro）只能作为 `external_oracle_receipts[]` 进入 run plan / return envelope。它可以提出风险、blocker 和 `goal_delta` 建议，但不能作为 CWF worker、不能写文件、不能替代测试或 checker-owned verified state。详见 [docs/EXTERNAL_ORACLE_SURFACES.md](docs/EXTERNAL_ORACLE_SURFACES.md)。
+外部顾问或审查工具只能作为 `external_review_receipts[]` 进入 run plan / return envelope。它们可以提出风险、blocker 和 `goal_delta` 建议，但不能作为 CWF worker、不能写文件、不能替代测试或 checker-owned verified state。详见 [docs/EXTERNAL_REVIEW_RECEIPTS.md](docs/EXTERNAL_REVIEW_RECEIPTS.md)。
 
 ## 快速开始
 

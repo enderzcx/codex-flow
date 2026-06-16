@@ -71,7 +71,7 @@ preview -> approve-write -> path policy -> git apply --check -> verification -> 
 
 SDK workers and `desktop-thread` workers may propose patches, but real apply goes back through the coordinator's safe write gate.
 
-EWC-approved external oracles such as ChatGPT UI Pro can enter a run plan or return envelope only as `external_oracle_receipts[]`. They may propose risks, blockers, and `goal_delta` changes, but they are not CWF workers, cannot write files, and cannot replace tests or checker-owned verified state. See [docs/EXTERNAL_ORACLE_SURFACES.md](docs/EXTERNAL_ORACLE_SURFACES.md).
+External advisors or review tools can enter a run plan or return envelope only as `external_review_receipts[]`. They may propose risks, blockers, and `goal_delta` changes, but they are not CWF workers, cannot write files, and cannot replace tests or checker-owned verified state. See [docs/EXTERNAL_REVIEW_RECEIPTS.md](docs/EXTERNAL_REVIEW_RECEIPTS.md).
 
 ## Quick Start
 

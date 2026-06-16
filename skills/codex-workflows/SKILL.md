@@ -146,15 +146,15 @@ Use `templates/run-plan.md` as the skeleton when the run plan needs a durable ar
 
 The run plan's `CWF Self-Check` section is required before spawning workers. If it is missing or cannot name an EWC CWF Trigger Boundary, do not run CWF.
 
-## External Oracle Receipts
+## External Review Receipts
 
-CWF is not external model routing. Do not use CWF to dispatch ChatGPT UI Pro, Kimi, Reasonix, or any other model as a worker/executor.
+CWF is not external model routing. Do not use CWF to dispatch an external advisor, model, or review tool as a worker/executor.
 
-When EWC has already approved an external oracle surface such as `oracle.chatgpt_ui_pro.plan_review.v1`, a CWF run may reference the oracle result as a receipt-only review checkpoint. The coordinator owns the UI/model call outside CWF worker dispatch, then maps the result into the run plan and return envelope.
+When a task contract has already approved an external advisory review, a CWF run may reference that result as a receipt-only review checkpoint. The coordinator owns the external call outside CWF worker dispatch, then maps the result into the run plan and return envelope.
 
-Use external oracle receipts only for high-value advisory review: long-document architecture review, cross-document state contradiction detection, Stage/phase gate risk review, release blocker discovery, or Goal/CWF delta proposals.
+Use external review receipts only for high-value advisory review: long-document architecture review, cross-document state contradiction detection, phase-gate risk review, release blocker discovery, or Goal/CWF delta proposals.
 
-Never let an oracle receipt:
+Never let an external review receipt:
 
 - write files or mutate repo state;
 - mark `verified`, `passed`, `done`, `regression_locked`, or Stage transition state;
@@ -164,8 +164,8 @@ Never let an oracle receipt:
 Minimum CWF mapping:
 
 ```yaml
-external_oracle_receipts:
-  - surface: oracle.chatgpt_ui_pro.plan_review.v1
+external_review_receipts:
+  - surface:
     trigger:
     readiness_receipt:
     input_summary:
@@ -311,7 +311,7 @@ Every workflow closeout must include:
 - which agents were spawned and why;
 - what changed, if anything;
 - verification evidence;
-- external oracle receipts and accepted/rejected/needs-check disposition when an EWC-approved oracle was used;
+- external review receipts and accepted/rejected/needs-check disposition when an approved external advisory review was used;
 - who owns verified state, and which evidence allowed any `verified` / `passed` / `done` claim;
 - regression artifact or skip reason when the run fixed a recurring workflow, helper, route, connector, or harness failure;
 - `goal_delta` when the run is under Goal Mode or a Goal Anchor;
@@ -332,7 +332,7 @@ Every CWF response should include the smallest useful subset of this contract:
 - `execution summary`: worker count, which workers ran, which were skipped, and why;
 - `goal_delta`: `run_id`, `completed`, `evidence_added`, `blockers`, `next_slice`, `next_cwf_run`, `continue_or_stop`, and `progress_artifact_update` when applicable;
 - `verified state`: maker-owned attempted/proposed state versus checker-owned verified/passed/done state;
-- `external_oracle_receipts`: receipt-only advisory findings, their disposition, and any proposed `goal_delta`;
+- `external_review_receipts`: receipt-only advisory findings, their disposition, and any proposed `goal_delta`;
 - `failure-to-regression`: failing input or trace, replay command, regression artifact, or explicit skip reason when applicable;
 - `return path`: coordinator_synthesis or heartbeat_synthesis status;
 - `write boundary`: no writes, proposed patch only, or approved safe write gate;
@@ -345,7 +345,7 @@ If CWF is not appropriate, say so briefly and do the direct task or route to the
 
 - `references/routing.md`: trigger/exclusion boundaries against nearby skills.
 - `templates/run-plan.md`: durable bounded run-plan skeleton.
-- repo root `docs/EXTERNAL_ORACLE_SURFACES.md`: receipt-only external oracle contract, including ChatGPT UI Pro.
+- repo root `docs/EXTERNAL_REVIEW_RECEIPTS.md`: receipt-only external review contract.
 - `evals/trigger_cases.json`: route examples for install/routing audits.
 - `scripts/check_skill_install.py`: local install and package-shape smoke.
 - repo root `scripts/cwf-skills.mjs`: current-version `skills list/read/validate` registry for agent SOP.
